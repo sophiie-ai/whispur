@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sophiie-ai/whispur/compare/v0.3.0...v0.4.0) (2026-04-12)
+
+
+### Features
+
+* fix ElevenLabs 400 + add provider request log ([a3de65d](https://github.com/sophiie-ai/whispur/commit/a3de65dc2a4ee4c0aa4c99bbafceffff504a412f))
+
 ## [0.3.0](https://github.com/sophiie-ai/whispur/compare/v0.2.0...v0.3.0) (2026-04-12)
 
 
