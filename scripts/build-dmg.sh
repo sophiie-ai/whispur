@@ -132,6 +132,9 @@ hdiutil convert "$TEMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
 rm -f "$TEMP_DMG"
 rm -rf "$STAGING"
 
+echo "==> Signing DMG"
+codesign --force --sign "$IDENTITY" --timestamp "$DMG_PATH"
+
 echo ""
 echo "==> DMG created at: $DMG_PATH"
 echo "    Size: $(du -h "$DMG_PATH" | cut -f1)"
