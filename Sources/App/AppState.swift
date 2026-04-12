@@ -25,6 +25,7 @@ final class AppState: ObservableObject {
     let recorder: AudioRecorder
     let hotkeyManager: HotkeyManager
     let historyStore: PipelineHistoryStore
+    let providerRequestLog: ProviderRequestLog
     let keychain: KeychainManager
     let registry: ProviderRegistry
     let overlayManager: OverlayPanelManager
@@ -45,7 +46,9 @@ final class AppState: ObservableObject {
         _toggleShortcut = Published(initialValue: sanitizedToggleShortcut)
 
         let keychain = KeychainManager.shared
-        let registry = ProviderRegistry(keychain: keychain)
+        let providerRequestLog = ProviderRequestLog()
+        let httpClient = ProviderHTTPClient(requestLog: providerRequestLog)
+        let registry = ProviderRegistry(keychain: keychain, httpClient: httpClient)
         let recorder = AudioRecorder()
         let historyStore = PipelineHistoryStore()
         let pipeline = DictationPipeline(
@@ -65,6 +68,7 @@ final class AppState: ObservableObject {
         self.sparkleUpdater = sparkleUpdater
         self.hotkeyManager = hotkeyManager
         self.overlayManager = overlayManager
+        self.providerRequestLog = providerRequestLog
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut

@@ -5,17 +5,20 @@ struct OpenAISTT: STTProvider {
     static let providerID: STTProviderID = .openai
 
     private let apiKey: String
+    private let httpClient: ProviderHTTPClient
     private let baseURL: String
     private let model: String
     private let timeoutSeconds: TimeInterval
 
     init(
         apiKey: String,
+        httpClient: ProviderHTTPClient,
         baseURL: String = "https://api.openai.com/v1",
         model: String = "whisper-1",
         timeoutSeconds: TimeInterval = 30
     ) {
         self.apiKey = apiKey
+        self.httpClient = httpClient
         self.baseURL = baseURL
         self.model = model
         self.timeoutSeconds = timeoutSeconds
@@ -39,15 +42,40 @@ struct OpenAISTT: STTProvider {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let httpResponse = response as! HTTPURLResponse
+        do {
+            let response = try await httpClient.send(
+                request,
+                providerID: Self.providerID.rawValue,
+                kind: .stt,
+                requestBodySummary: """
+                multipart form-data
+                file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
+                model: \(model)
+                response_format: text
+                """
+            )
 
-        guard httpResponse.statusCode == 200 else {
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw STTError.apiError(provider: .openai, message: message, statusCode: httpResponse.statusCode)
+            guard (200 ... 299).contains(response.response.statusCode) else {
+                throw STTError.apiError(
+                    provider: .openai,
+                    message: response.errorMessage ?? "The provider rejected the transcription request.",
+                    statusCode: response.response.statusCode
+                )
+            }
+
+            let text = String(data: response.data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return text
+        } catch let error as STTError {
+            throw error
+        } catch let error as URLError where error.code == .timedOut {
+            throw STTError.timeout(provider: .openai)
+        } catch {
+            throw STTError.apiError(
+                provider: .openai,
+                message: ProviderHTTPClient.transportErrorMessage(for: error),
+                statusCode: nil
+            )
         }
-
-        let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text
     }
 }

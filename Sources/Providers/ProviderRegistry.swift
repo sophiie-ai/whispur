@@ -6,9 +6,14 @@ import Foundation
 /// the appropriate provider. Returns nil if required keys are missing.
 final class ProviderRegistry {
     private let keychain: KeychainManager
+    private let httpClient: ProviderHTTPClient
 
-    init(keychain: KeychainManager = .shared) {
+    init(
+        keychain: KeychainManager = .shared,
+        httpClient: ProviderHTTPClient
+    ) {
         self.keychain = keychain
+        self.httpClient = httpClient
     }
 
     // MARK: - STT
@@ -17,13 +22,13 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
-            return OpenAISTT(apiKey: key)
+            return OpenAISTT(apiKey: key, httpClient: httpClient)
         case .deepgram:
             guard let key = keychain.get(.deepgramAPIKey) else { return nil }
-            return DeepgramSTT(apiKey: key)
+            return DeepgramSTT(apiKey: key, httpClient: httpClient)
         case .elevenlabs:
             guard let key = keychain.get(.elevenlabsAPIKey) else { return nil }
-            return ElevenLabsSTT(apiKey: key)
+            return ElevenLabsSTT(apiKey: key, httpClient: httpClient)
         case .bedrock:
             // TODO: Implement Bedrock STT with AWS SDK
             return nil
@@ -43,13 +48,13 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
-            return OpenAILLM(apiKey: key)
+            return OpenAILLM(apiKey: key, httpClient: httpClient)
         case .anthropic:
             guard let key = keychain.get(.anthropicAPIKey) else { return nil }
-            return AnthropicLLM(apiKey: key)
+            return AnthropicLLM(apiKey: key, httpClient: httpClient)
         case .groq:
             guard let key = keychain.get(.groqAPIKey) else { return nil }
-            return GroqLLM(apiKey: key)
+            return GroqLLM(apiKey: key, httpClient: httpClient)
         case .bedrock:
             // TODO: Implement Bedrock LLM with AWS SDK
             return nil

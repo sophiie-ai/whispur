@@ -6,6 +6,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case providers = "Providers"
     case prompts = "Prompts"
     case activity = "Activity"
+    case requests = "Requests"
 
     var id: String { rawValue }
 
@@ -21,6 +22,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "text.bubble.fill"
         case .activity:
             return "clock.arrow.circlepath"
+        case .requests:
+            return "network"
         }
     }
 
@@ -36,6 +39,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "Cleanup instructions and vocabulary"
         case .activity:
             return "Recent transcripts and pipeline output"
+        case .requests:
+            return "Provider API calls, errors, and timings"
         }
     }
 }

@@ -57,7 +57,7 @@ struct PreferenceBadge: View {
     let title: String
     let tone: Tone
 
-    enum Tone {
+    enum Tone: Equatable {
         case neutral
         case good
         case warning

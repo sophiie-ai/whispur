@@ -85,6 +85,8 @@ struct SettingsView: View {
             PromptsSettingsView(appState: appState)
         case .activity:
             RunLogView(appState: appState)
+        case .requests:
+            RequestsSettingsView(appState: appState)
         }
     }
 

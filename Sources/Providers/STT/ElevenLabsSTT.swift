@@ -5,15 +5,18 @@ struct ElevenLabsSTT: STTProvider {
     static let providerID: STTProviderID = .elevenlabs
 
     private let apiKey: String
+    private let httpClient: ProviderHTTPClient
     private let model: String
     private let timeoutSeconds: TimeInterval
 
     init(
         apiKey: String,
-        model: String = "scribe_v1",
+        httpClient: ProviderHTTPClient,
+        model: String = "scribe_v2",
         timeoutSeconds: TimeInterval = 30
     ) {
         self.apiKey = apiKey
+        self.httpClient = httpClient
         self.model = model
         self.timeoutSeconds = timeoutSeconds
     }
@@ -30,21 +33,46 @@ struct ElevenLabsSTT: STTProvider {
 
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
-        body.appendMultipart(boundary: boundary, name: "audio", filename: "audio.wav", mimeType: "audio/wav", data: audioData)
+        body.appendMultipart(boundary: boundary, name: "file", filename: fileURL.lastPathComponent, mimeType: "audio/wav", data: audioData)
         body.appendMultipart(boundary: boundary, name: "model_id", value: model)
+        body.appendMultipart(boundary: boundary, name: "file_format", value: "pcm_s16le_16")
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let httpResponse = response as! HTTPURLResponse
+        do {
+            let response = try await httpClient.send(
+                request,
+                providerID: Self.providerID.rawValue,
+                kind: .stt,
+                requestBodySummary: """
+                multipart form-data
+                file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
+                model_id: \(model)
+                file_format: pcm_s16le_16
+                """
+            )
 
-        guard httpResponse.statusCode == 200 else {
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw STTError.apiError(provider: .elevenlabs, message: message, statusCode: httpResponse.statusCode)
+            guard (200 ... 299).contains(response.response.statusCode) else {
+                throw STTError.apiError(
+                    provider: .elevenlabs,
+                    message: response.errorMessage ?? "The provider rejected the transcription request.",
+                    statusCode: response.response.statusCode
+                )
+            }
+
+            let json = try JSONSerialization.jsonObject(with: response.data) as? [String: Any]
+            let text = json?["text"] as? String ?? ""
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch let error as STTError {
+            throw error
+        } catch let error as URLError where error.code == .timedOut {
+            throw STTError.timeout(provider: .elevenlabs)
+        } catch {
+            throw STTError.apiError(
+                provider: .elevenlabs,
+                message: ProviderHTTPClient.transportErrorMessage(for: error),
+                statusCode: nil
+            )
         }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let text = json?["text"] as? String ?? ""
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
