@@ -241,6 +241,11 @@ struct MenuBarView: View {
                 openSettings(tab: .general)
             }
 
+            Button("Check for Updates…") {
+                appState.sparkleUpdater.checkForUpdates()
+            }
+            .disabled(!appState.sparkleUpdater.canCheckForUpdates)
+
             Spacer()
 
             Button("Quit") {

@@ -6,6 +6,11 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
 settings:
   base:
     SWIFT_VERSION: "5.10"
@@ -19,12 +24,14 @@ targets:
       - Sources
     resources:
       - Resources
+    dependencies:
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.sophiie.whispur
         PRODUCT_NAME: Whispur
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "0.1.0" # x-release-please-version
+        CURRENT_PROJECT_VERSION: "100"
         CODE_SIGN_ENTITLEMENTS: Whispur.entitlements
         ENABLE_HARDENED_RUNTIME: true
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
@@ -36,11 +43,14 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSUIElement: true
+        LSApplicationCategoryType: public.app-category.productivity
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         NSMicrophoneUsageDescription: "Whispur needs microphone access to transcribe your speech."
         NSSpeechRecognitionUsageDescription: "Whispur uses speech recognition for on-device transcription."
         NSAccessibilityUsageDescription: "Whispur needs accessibility access to detect your current app context and paste transcribed text."
         NSPrincipalClass: NSApplication
+        SUFeedURL: https://whispur.app/appcast.xml
+        SUPublicEDKey: c4knNUUEnIKOq4/QeFU9yts+swIKnXQetWKjZnkZ2eg=
 
   WhispurTests:
     type: bundle.unit-test

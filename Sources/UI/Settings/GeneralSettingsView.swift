@@ -151,7 +151,7 @@ struct GeneralSettingsView: View {
         ) {
             VStack(alignment: .leading, spacing: 10) {
                 DetailRow("Version") {
-                    Text("v0.1.0")
+                    Text(AppVersion.description)
                         .foregroundStyle(.secondary)
                 }
 

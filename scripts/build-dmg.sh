@@ -15,6 +15,64 @@ ENTITLEMENTS="$ROOT/Whispur.entitlements"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
 APP_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
 DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+PROJECT_FILE="$ROOT/$APP_NAME.xcodeproj"
+
+marketing_version_from_project() {
+    sed -n 's/.*MARKETING_VERSION: "\([^"]*\)".*/\1/p' "$ROOT/project.yml" | head -1
+}
+
+version_to_build_number() {
+    local version="$1"
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$version"
+    echo $((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+}
+
+sparkle_version_dir() {
+    local framework_path="$1"
+    local current_link="$framework_path/Versions/Current"
+
+    if [ -L "$current_link" ]; then
+        echo "$framework_path/Versions/$(readlink "$current_link")"
+        return
+    fi
+
+    find "$framework_path/Versions" -maxdepth 1 -mindepth 1 -type d | head -1
+}
+
+sign_sparkle_framework() {
+    local framework_path="$1"
+    local version_dir
+
+    [ -d "$framework_path" ] || return 0
+    version_dir="$(sparkle_version_dir "$framework_path")"
+    [ -n "$version_dir" ] || return 0
+
+    echo "==> Re-signing Sparkle framework internals"
+
+    for binary in Downloader Installer; do
+        local path="$version_dir/XPCServices/$binary.xpc/Contents/MacOS/$binary"
+        [ -f "$path" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$path"
+    done
+
+    local updater_binary="$version_dir/Updater.app/Contents/MacOS/Updater"
+    [ -f "$updater_binary" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$updater_binary"
+
+    local autoupdate_binary="$version_dir/Autoupdate"
+    [ -f "$autoupdate_binary" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$autoupdate_binary"
+
+    for xpc in Downloader.xpc Installer.xpc; do
+        local bundle="$version_dir/XPCServices/$xpc"
+        [ -d "$bundle" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$bundle"
+    done
+
+    local updater_app="$version_dir/Updater.app"
+    [ -d "$updater_app" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$updater_app"
+    codesign --force --sign "$IDENTITY" --timestamp --options runtime "$framework_path"
+}
+
+MARKETING_VERSION="${MARKETING_VERSION:-$(marketing_version_from_project)}"
+CURRENT_PROJECT_VERSION="${CURRENT_PROJECT_VERSION:-$(version_to_build_number "$MARKETING_VERSION")}"
 
 echo "==> Cleaning build directory"
 rm -rf "$BUILD_DIR"
@@ -24,8 +82,14 @@ echo "==> Generating Xcode project"
 cd "$ROOT"
 xcodegen generate
 
+if ! command -v create-dmg >/dev/null 2>&1; then
+    echo "ERROR: create-dmg is required. Install it with: brew install create-dmg"
+    exit 1
+fi
+
 echo "==> Archiving release build"
 xcodebuild \
+    -project "$PROJECT_FILE" \
     -scheme "$SCHEME" \
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
@@ -35,12 +99,17 @@ xcodebuild \
     CODE_SIGN_IDENTITY="$IDENTITY" \
     CODE_SIGN_ENTITLEMENTS="$ENTITLEMENTS" \
     ENABLE_HARDENED_RUNTIME=YES \
+    CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+    MARKETING_VERSION="$MARKETING_VERSION" \
     OTHER_CODE_SIGN_FLAGS="--timestamp"
 
 if [ ! -d "$APP_PATH" ]; then
     echo "ERROR: App not found at $APP_PATH"
     exit 1
 fi
+
+SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+sign_sparkle_framework "$SPARKLE_FW"
 
 echo "==> Re-signing app with Developer ID + hardened runtime"
 codesign --force --sign "$IDENTITY" \
@@ -54,83 +123,20 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 echo "==> Creating DMG"
 rm -f "$DMG_PATH"
+create-dmg \
+    --volname "Install Whispur" \
+    --window-pos 200 120 \
+    --window-size 540 380 \
+    --icon-size 128 \
+    --icon "Whispur.app" 150 190 \
+    --hide-extension "Whispur.app" \
+    --app-drop-link 390 190 \
+    --text-size 13 \
+    --no-internet-enable \
+    "$DMG_PATH" \
+    "$APP_PATH" || true
 
-VOL_NAME="Install Whispur"
-VOL_PATH="/Volumes/$VOL_NAME"
-TEMP_DMG="$BUILD_DIR/Whispur-temp.dmg"
-
-if [ -d "$VOL_PATH" ]; then
-    hdiutil detach "$VOL_PATH" -force 2>/dev/null || true
-    sleep 1
-fi
-
-STAGING="$BUILD_DIR/dmg-staging"
-rm -rf "$STAGING"
-mkdir -p "$STAGING"
-cp -a "$APP_PATH" "$STAGING/"
-ln -s /Applications "$STAGING/Applications"
-
-hdiutil create -srcfolder "$STAGING" \
-    -volname "$VOL_NAME" \
-    -fs HFS+ \
-    -fsargs "-c c=64,a=16,e=16" \
-    -format UDRW \
-    -size 100m \
-    "$TEMP_DMG"
-
-MOUNT_OUTPUT=$(hdiutil attach "$TEMP_DMG" -readwrite -noverify -noautoopen)
-DEVICE=$(echo "$MOUNT_OUTPUT" | tail -1 | awk '{print $1}')
-echo "    Mounted at $VOL_PATH (device: $DEVICE)"
-
-SetFile -a E "$VOL_PATH/Whispur.app" 2>/dev/null || true
-mdutil -i off "$VOL_PATH" 2>/dev/null || true
-
-echo "    Configuring Finder window"
-osascript <<APPLESCRIPT
-tell application "Finder"
-    tell disk "$VOL_NAME"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {200, 120, 740, 500}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 128
-        set text size of viewOptions to 13
-        set position of item "Whispur.app" of container window to {150, 190}
-        set position of item "Applications" of container window to {390, 190}
-        try
-            set position of item ".fseventsd" of container window to {900, 900}
-        end try
-        try
-            set position of item ".DS_Store" of container window to {900, 900}
-        end try
-        try
-            set position of item ".Trashes" of container window to {900, 900}
-        end try
-        close
-        open
-        update without registering applications
-        delay 2
-        close
-    end tell
-end tell
-APPLESCRIPT
-
-sync
-sleep 1
-
-chflags hidden "$VOL_PATH/.fseventsd" 2>/dev/null || true
-SetFile -a V "$VOL_PATH/.fseventsd" 2>/dev/null || true
-rm -rf "$VOL_PATH/.fseventsd"
-
-hdiutil detach "$DEVICE"
-sleep 1
-
-hdiutil convert "$TEMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
-rm -f "$TEMP_DMG"
-rm -rf "$STAGING"
+[ -f "$DMG_PATH" ] || { echo "ERROR: DMG not created"; exit 1; }
 
 echo "==> Signing DMG"
 codesign --force --sign "$IDENTITY" --timestamp "$DMG_PATH"
@@ -138,3 +144,5 @@ codesign --force --sign "$IDENTITY" --timestamp "$DMG_PATH"
 echo ""
 echo "==> DMG created at: $DMG_PATH"
 echo "    Size: $(du -h "$DMG_PATH" | cut -f1)"
+echo "    Marketing version: $MARKETING_VERSION"
+echo "    Build number: $CURRENT_PROJECT_VERSION"

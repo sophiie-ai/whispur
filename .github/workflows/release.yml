@@ -1,0 +1,245 @@
+name: Build, Sign, Notarize & Publish
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      tag_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install tools
+        run: brew install xcodegen create-dmg
+
+      - name: Import Code Signing Certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+      - name: Compute build number
+        id: buildnum
+        run: |
+          VERSION="${{ inputs.version }}"
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          BUILD=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+          echo "build_number=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Build number: $BUILD"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive
+        env:
+          BUILD_NUMBER: ${{ steps.buildnum.outputs.build_number }}
+        run: |
+          xcodebuild \
+            -project Whispur.xcodeproj \
+            -scheme Whispur \
+            -configuration Release \
+            -archivePath build/Whispur.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=U2KP726DRL \
+            CODE_SIGN_IDENTITY="Developer ID Application: Sophiie AI Pty Ltd (U2KP726DRL)" \
+            CODE_SIGN_ENTITLEMENTS=Whispur.entitlements \
+            ENABLE_HARDENED_RUNTIME=YES \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            MARKETING_VERSION="${{ inputs.version }}" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp"
+
+      - name: Re-sign app bundle
+        run: |
+          IDENTITY="Developer ID Application: Sophiie AI Pty Ltd (U2KP726DRL)"
+          APP="build/Whispur.xcarchive/Products/Applications/Whispur.app"
+          FRAMEWORK="build/Whispur.xcarchive/Products/Applications/Whispur.app/Contents/Frameworks/Sparkle.framework"
+
+          sparkle_version_dir() {
+            local current="$1/Versions/Current"
+            if [ -L "$current" ]; then
+              echo "$1/Versions/$(readlink "$current")"
+              return
+            fi
+            find "$1/Versions" -maxdepth 1 -mindepth 1 -type d | head -1
+          }
+
+          if [ -d "$FRAMEWORK" ]; then
+            VERSION_DIR=$(sparkle_version_dir "$FRAMEWORK")
+
+            for BIN in Downloader Installer; do
+              PATH_TO_SIGN="$VERSION_DIR/XPCServices/$BIN.xpc/Contents/MacOS/$BIN"
+              [ -f "$PATH_TO_SIGN" ] && codesign --force --sign "$IDENTITY" --timestamp --options runtime "$PATH_TO_SIGN"
+            done
+
+            [ -f "$VERSION_DIR/Updater.app/Contents/MacOS/Updater" ] && \
+              codesign --force --sign "$IDENTITY" --timestamp --options runtime "$VERSION_DIR/Updater.app/Contents/MacOS/Updater"
+            [ -f "$VERSION_DIR/Autoupdate" ] && \
+              codesign --force --sign "$IDENTITY" --timestamp --options runtime "$VERSION_DIR/Autoupdate"
+
+            for XPC in Downloader.xpc Installer.xpc; do
+              [ -d "$VERSION_DIR/XPCServices/$XPC" ] && \
+                codesign --force --sign "$IDENTITY" --timestamp --options runtime "$VERSION_DIR/XPCServices/$XPC"
+            done
+
+            [ -d "$VERSION_DIR/Updater.app" ] && \
+              codesign --force --sign "$IDENTITY" --timestamp --options runtime "$VERSION_DIR/Updater.app"
+            codesign --force --sign "$IDENTITY" --timestamp --options runtime "$FRAMEWORK"
+          fi
+
+          codesign --force --sign "$IDENTITY" \
+            --timestamp \
+            --options runtime \
+            --entitlements Whispur.entitlements \
+            "$APP"
+          codesign --verify --deep --strict "$APP"
+
+      - name: Create DMG
+        run: |
+          APP="build/Whispur.xcarchive/Products/Applications/Whispur.app"
+          create-dmg \
+            --volname "Install Whispur" \
+            --window-pos 200 120 \
+            --window-size 540 380 \
+            --icon-size 128 \
+            --icon "Whispur.app" 150 190 \
+            --hide-extension "Whispur.app" \
+            --app-drop-link 390 190 \
+            --text-size 13 \
+            --no-internet-enable \
+            build/Whispur.dmg \
+            "$APP" || true
+
+          [ -f build/Whispur.dmg ] || { echo "ERROR: DMG not created"; exit 1; }
+          codesign --force --sign "Developer ID Application: Sophiie AI Pty Ltd (U2KP726DRL)" --timestamp build/Whispur.dmg
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        run: |
+          xcrun notarytool submit build/Whispur.dmg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id U2KP726DRL \
+            --wait
+          xcrun stapler staple build/Whispur.dmg
+
+      - name: Sign DMG for Sparkle
+        id: sparkle
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          SIGN_UPDATE=$(find ~/Library/Developer/Xcode/DerivedData \
+            -name sign_update -path "*/Sparkle/bin/*" 2>/dev/null | head -1)
+
+          [ -n "$SIGN_UPDATE" ] || { echo "ERROR: sign_update not found"; exit 1; }
+
+          SPARKLE_OUTPUT=$("$SIGN_UPDATE" build/Whispur.dmg -f <(echo "$SPARKLE_PRIVATE_KEY"))
+          echo "$SPARKLE_OUTPUT"
+
+          SIGNATURE=$(echo "$SPARKLE_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          DMG_LENGTH=$(stat -f%z build/Whispur.dmg)
+
+          echo "signature=$SIGNATURE" >> "$GITHUB_OUTPUT"
+          echo "dmg_length=$DMG_LENGTH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.tag_name }}" build/Whispur.dmg \
+            --repo ${{ github.repository }} \
+            --clobber
+
+      - name: Update appcast.xml
+        env:
+          BUILD_NUMBER: ${{ steps.buildnum.outputs.build_number }}
+          SIGNATURE: ${{ steps.sparkle.outputs.signature }}
+          DMG_LENGTH: ${{ steps.sparkle.outputs.dmg_length }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="${{ inputs.tag_name }}"
+          REPO="${{ github.repository }}"
+          PUB_DATE=$(date -R)
+
+          python3 <<PYEOF
+          import re
+
+          with open("public/appcast.xml", "r", encoding="utf-8") as handle:
+              appcast = handle.read()
+
+          new_item = """    <item>
+      <title>Version $VERSION</title>
+      <sparkle:version>$BUILD_NUMBER</sparkle:version>
+      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>$PUB_DATE</pubDate>
+      <enclosure
+        url="https://github.com/$REPO/releases/download/$TAG/Whispur.dmg"
+        length="$DMG_LENGTH"
+        type="application/octet-stream"
+        sparkle:edSignature="$SIGNATURE" />
+    </item>"""
+
+          appcast = re.sub(
+              r"(<language>en</language>\\n).*?(  </channel>)",
+              r"\\1" + new_item + r"\\n\\2",
+              appcast,
+              flags=re.DOTALL,
+          )
+
+          with open("public/appcast.xml", "w", encoding="utf-8") as handle:
+              handle.write(appcast)
+          PYEOF
+
+      - name: Commit appcast update
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git remote set-url origin git@github.com:${{ github.repository }}.git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git config core.sshCommand "ssh -i ~/.ssh/deploy_key"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/appcast.xml
+          git commit -m "chore: update appcast for ${{ inputs.tag_name }}" || exit 0
+          git push origin HEAD:main
+
+          rm -f ~/.ssh/deploy_key

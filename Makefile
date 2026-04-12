@@ -23,14 +23,13 @@ run: all
 	open "$(APP_PATH)"
 
 # Create DMG for distribution
-dmg: all
-	@rm -f $(DMG_NAME)
-	@mkdir -p $(BUILD_DIR)/dmg
-	@cp -R "$(APP_PATH)" $(BUILD_DIR)/dmg/
-	@ln -sf /Applications $(BUILD_DIR)/dmg/Applications
-	hdiutil create -volname "$(APP_NAME)" -srcfolder $(BUILD_DIR)/dmg \
-		-ov -format UDZO "$(DMG_NAME)"
-	@rm -rf $(BUILD_DIR)/dmg
+dmg:
+	./scripts/build-dmg.sh
+
+build-number:
+	@VERSION=$$(sed -n 's/.*MARKETING_VERSION: "\([^"]*\)".*/\1/p' project.yml | head -1); \
+	IFS='.' read -r major minor patch <<< "$$VERSION"; \
+	echo $$((10#$$major * 10000 + 10#$$minor * 100 + 10#$$patch))
 
 # Clean build artifacts
 clean:

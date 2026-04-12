@@ -18,6 +18,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
@@ -30,5 +32,9 @@
 	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Whispur uses speech recognition for on-device transcription.</string>
+	<key>SUFeedURL</key>
+	<string>https://whispur.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>c4knNUUEnIKOq4/QeFU9yts+swIKnXQetWKjZnkZ2eg=</string>
 </dict>
 </plist>

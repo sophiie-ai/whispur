@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     @AppStorage("customVocabulary") var customVocabulary: String = ""
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
+    @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
 
     @Published var holdShortcut: ShortcutBinding
     @Published var toggleShortcut: ShortcutBinding?
@@ -27,6 +28,7 @@ final class AppState: ObservableObject {
     let keychain: KeychainManager
     let registry: ProviderRegistry
     let overlayManager: OverlayPanelManager
+    let sparkleUpdater: SparkleUpdater
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionTimer: Timer?
@@ -51,6 +53,7 @@ final class AppState: ObservableObject {
             registry: registry,
             historyStore: historyStore
         )
+        let sparkleUpdater = SparkleUpdater()
         let hotkeyManager = HotkeyManager()
         let overlayManager = OverlayPanelManager()
 
@@ -59,6 +62,7 @@ final class AppState: ObservableObject {
         self.recorder = recorder
         self.historyStore = historyStore
         self.pipeline = pipeline
+        self.sparkleUpdater = sparkleUpdater
         self.hotkeyManager = hotkeyManager
         self.overlayManager = overlayManager
 
@@ -75,6 +79,7 @@ final class AppState: ObservableObject {
         }
         syncPipelineConfig()
         refreshPermissionSnapshot()
+        sparkleUpdater.checkForUpdatesInBackground()
     }
 
     var isSelectedSTTConfigured: Bool {
@@ -241,6 +246,10 @@ final class AppState: ObservableObject {
 
     func openAccessibilitySettings() {
         openSystemSettingsPane("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    }
+
+    func markOnboardingCompleted() {
+        onboardingCompleted = true
     }
 
     func setHoldShortcut(_ binding: ShortcutBinding) {
