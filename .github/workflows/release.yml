@@ -202,17 +202,17 @@ jobs:
               appcast = handle.read()
 
           new_item = """    <item>
-      <title>Version $VERSION</title>
-      <sparkle:version>$BUILD_NUMBER</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <pubDate>$PUB_DATE</pubDate>
-      <enclosure
-        url="https://github.com/$REPO/releases/download/$TAG/Whispur.dmg"
-        length="$DMG_LENGTH"
-        type="application/octet-stream"
-        sparkle:edSignature="$SIGNATURE" />
-    </item>"""
+                <title>Version $VERSION</title>
+                <sparkle:version>$BUILD_NUMBER</sparkle:version>
+                <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <pubDate>$PUB_DATE</pubDate>
+                <enclosure
+                  url="https://github.com/$REPO/releases/download/$TAG/Whispur.dmg"
+                  length="$DMG_LENGTH"
+                  type="application/octet-stream"
+                  sparkle:edSignature="$SIGNATURE" />
+              </item>"""
 
           appcast = re.sub(
               r"(<language>en</language>\\n).*?(  </channel>)",
