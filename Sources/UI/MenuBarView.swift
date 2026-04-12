@@ -237,6 +237,10 @@ struct MenuBarView: View {
 
     private var footerButtons: some View {
         HStack {
+            Button("About") {
+                openAbout()
+            }
+
             Button("Settings") {
                 openSettings(tab: .general)
             }
@@ -289,6 +293,11 @@ struct MenuBarView: View {
     private func openSettings(tab: SettingsTab) {
         selectedTabRaw = tab.rawValue
         openWindow(id: "settings")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func openAbout() {
+        openWindow(id: "about")
         NSApp.activate(ignoringOtherApps: true)
     }
 

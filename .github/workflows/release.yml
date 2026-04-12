@@ -129,8 +129,11 @@ jobs:
       - name: Create DMG
         run: |
           APP="build/Whispur.xcarchive/Products/Applications/Whispur.app"
+          VOLUME_ICON="Resources/VolumeIcon.icns"
+          [ -f "$VOLUME_ICON" ] || { echo "ERROR: Volume icon not found at $VOLUME_ICON"; exit 1; }
           create-dmg \
             --volname "Install Whispur" \
+            --volicon "$VOLUME_ICON" \
             --window-pos 200 120 \
             --window-size 540 380 \
             --icon-size 128 \

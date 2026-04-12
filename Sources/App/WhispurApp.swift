@@ -22,6 +22,12 @@ struct WhispurApp: App {
         }
         .defaultSize(width: 980, height: 680)
         .windowResizability(.contentSize)
+
+        Window("About Whispur", id: "about") {
+            AboutView()
+        }
+        .defaultSize(width: 360, height: 360)
+        .windowResizability(.contentSize)
     }
 }
 
@@ -39,19 +45,14 @@ private struct MenuBarStatusIcon: View {
             case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
                 SpinningMenuBarIcon()
             case .idle:
-                Image(systemName: "mic")
-                    .symbolRenderingMode(.hierarchical)
+                MenuBarGlyphIcon()
             case .requestingMicrophonePermission, .starting:
-                Image(systemName: "mic.badge.clock")
-                    .symbolRenderingMode(.hierarchical)
+                MenuBarGlyphIcon(tint: .secondary)
+                    .opacity(0.86)
             case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.green)
+                MenuBarGlyphIcon(tint: .green)
             case .error:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.orange)
+                MenuBarGlyphIcon(tint: .orange)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .whispurOpenSettings)) { notification in
@@ -64,13 +65,26 @@ private struct MenuBarStatusIcon: View {
     }
 }
 
+private struct MenuBarGlyphIcon: View {
+    var tint: Color = .primary
+
+    var body: some View {
+        Image("MenuBarGlyph")
+            .renderingMode(.template)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 16, height: 16)
+            .foregroundStyle(tint)
+            .accessibilityLabel("Whispur")
+    }
+}
+
 private struct PulsingMenuBarIcon: View {
     @State private var isAnimating = false
 
     var body: some View {
-        Image(systemName: "record.circle.fill")
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(.red, Color.red.opacity(0.38))
+        MenuBarGlyphIcon(tint: .red)
             .scaleEffect(isAnimating ? 1.04 : 0.92)
             .opacity(isAnimating ? 1 : 0.72)
             .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isAnimating)
@@ -84,9 +98,7 @@ private struct SpinningMenuBarIcon: View {
     @State private var isAnimating = false
 
     var body: some View {
-        Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(.blue, Color.blue.opacity(0.28))
+        MenuBarGlyphIcon(tint: .blue)
             .rotationEffect(.degrees(isAnimating ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isAnimating)
             .onAppear {

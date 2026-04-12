@@ -1,119 +1,110 @@
 # Whispur
 
-Open-source macOS dictation tool with multi-provider STT and LLM-powered transcription cleanup. Bring your own API keys.
+Whispur is a macOS menu-bar dictation app that turns speech into polished text and drops it straight back into the app you are already using.
 
-Use a hold shortcut to speak, or an optional toggle shortcut to start and stop recording. Whispur then transcribes, cleans up, and pastes text into your active app.
+Hold a shortcut to talk, or use an optional toggle shortcut for hands-free capture. Whispur records, transcribes, optionally cleans up the transcript with an LLM, and pastes the result where your cursor is.
 
-## How It Works
+## Screenshots
 
-```
-Shortcut → Record audio → STT transcription → LLM cleanup → Paste text
-```
+Screenshots will live in [`docs/screenshots`](docs/screenshots/). A placeholder capture script is available at [`scripts/generate-screenshots.sh`](scripts/generate-screenshots.sh) until the final product shots are added.
 
-Raw speech-to-text output is noisy — filler words, missed punctuation, misheard terms. Whispur pipes the raw transcript through an LLM that cleans it up: fixes errors, adds punctuation, handles self-corrections, and preserves technical terms. You get polished text pasted directly where your cursor is.
+## Features
 
-## Supported Providers
-
-### Speech-to-Text
-| Provider | Model | Notes |
-|----------|-------|-------|
-| OpenAI | Whisper | Most widely used |
-| Deepgram | Nova 3 | Fast, accurate |
-| ElevenLabs | Scribe v1 | Multi-language |
-| AWS Bedrock | Various | Enterprise AWS integration |
-| Apple | On-device | Free, offline, lower accuracy |
-
-### LLM Cleanup
-| Provider | Model | Notes |
-|----------|-------|-------|
-| Anthropic | Claude Sonnet | High quality cleanup |
-| OpenAI | GPT-4o-mini | Fast, cheap |
-| Groq | Llama 3.3 70B | Very fast inference |
-| AWS Bedrock | Various | Enterprise AWS integration |
-
-Mix and match — use Deepgram for STT and Claude for cleanup, or OpenAI for both, or Groq for everything. Your keys, your choice.
-
-## Requirements
-
-- macOS 14 (Sonoma) or later
-- Microphone access
-- Accessibility permission (for pasting text)
-- At least one STT provider API key (or use Apple on-device)
+- Lives in the macOS menu bar instead of taking over your desktop
+- Hold-to-talk and toggle dictation modes
+- Multi-provider speech-to-text with local Apple dictation support
+- Optional transcript cleanup with provider-selectable LLMs
+- Paste-back into the active app with clipboard preservation
+- Custom vocabulary and cleanup prompts for better technical dictation
+- Local-first default path when you stick with Apple on-device transcription
+- Sparkle-based auto-updates for signed releases
 
 ## Install
 
-### From Source
+### DMG download
+
+Download the latest signed DMG from [GitHub Releases](https://github.com/sophiie-ai/whispur/releases).
+
+### Homebrew cask
+
+Homebrew installation is planned but not published yet.
+
+### Build from source
 
 ```bash
-# Clone
 git clone https://github.com/sophiie-ai/whispur.git
 cd whispur
-
-# Generate Xcode project (requires xcodegen)
-brew install xcodegen
-make generate
-
-# Build
+brew install xcodegen create-dmg
 make all
-
-# Run
 make run
 ```
 
-### From DMG
-
-Download the latest release from [Releases](https://github.com/sophiie-ai/whispur/releases).
-
 ## Setup
 
-1. Launch Whispur — it lives in your menu bar
-2. Open Settings (click menu bar icon → Settings)
-3. Start with the **Setup** tab, then go to **Providers**
-4. Enter your API keys for at least one STT provider
-5. Enter an API key for at least one LLM provider
-6. Select your preferred providers from the dropdowns
-7. Grant microphone and accessibility permissions when prompted
-8. Review your hold and toggle shortcuts in **General**
+1. Launch Whispur from Applications. It opens as a menu-bar app.
+2. Open `Settings` from the menu bar.
+3. Complete the setup checklist for microphone and Accessibility access.
+4. Choose your speech provider.
+5. Add API keys for any cloud providers you want to use.
+6. Optionally add an LLM provider for transcript cleanup.
+7. Review your hold and toggle shortcuts.
+8. Dictate into any focused text field.
 
 ## Usage
 
-- **Hold to talk**: Press and hold your hold shortcut to record, then release to transcribe and paste.
-- **Toggle**: Press your toggle shortcut once to start, then again to stop.
-- The cleaned text is pasted wherever your cursor is.
-- Check **Activity** in Settings to review raw vs. cleaned transcriptions.
+- Hold shortcut: Press and hold your configured shortcut to record, then release to transcribe and paste.
+- Toggle shortcut: Press once to start recording, press again to stop and process.
+- Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts.
+- Prompt tuning: Open `Settings` → `Prompts` to change cleanup behavior or add domain vocabulary.
 
-### Customization
+## Provider Matrix
 
-- **Custom prompts**: Modify the LLM cleanup behavior in Settings → Prompts
-- **Custom vocabulary**: Add terms that should be preserved exactly (product names, technical terms)
-- **Deep context**: Enable to capture your current app context for smarter cleanup
+### Speech-to-text
 
-## Architecture
+| Provider | Status | Notes |
+| --- | --- | --- |
+| Apple Speech Recognition | Available | On-device and local |
+| OpenAI Whisper | Available | Cloud STT via API key |
+| Deepgram | Available | Cloud STT via API key |
+| ElevenLabs Scribe | Available | Cloud STT via API key |
+| AWS Bedrock | Planned | Provider slot exists, implementation not shipped yet |
 
+### Transcript cleanup
+
+| Provider | Status | Notes |
+| --- | --- | --- |
+| Anthropic Claude | Available | High-quality cleanup |
+| OpenAI | Available | Fast cleanup path |
+| Groq | Available | OpenAI-compatible endpoint |
+| AWS Bedrock | Planned | Provider slot exists, implementation not shipped yet |
+
+## Privacy
+
+Audio stays local by default when you use the built-in Apple speech provider. If you switch to a cloud STT or LLM provider, the audio or transcript needed for that provider is sent only to the services you configure.
+
+Whispur stores API keys in the macOS Keychain.
+
+## Development
+
+```bash
+make generate
+make all
+make dmg
 ```
-Sources/
-├── App/          # SwiftUI app lifecycle, state management
-├── Audio/        # AVAudioEngine recording, normalization
-├── Providers/
-│   ├── STT/      # Speech-to-text provider protocol + implementations
-│   └── LLM/      # LLM provider protocol + implementations
-├── Pipeline/     # Orchestration: record → transcribe → clean → paste
-├── Input/        # Global hotkey (CGEventTap), text injection
-├── Security/     # Keychain API key storage
-└── UI/           # Menu bar, settings, recording overlay
-```
 
-### Adding a New Provider
+Key project areas:
 
-1. Create a new file in `Sources/Providers/STT/` or `Sources/Providers/LLM/`
-2. Implement the `STTProvider` or `LLMProvider` protocol
-3. Add a case to the provider ID enum
-4. Register in `ProviderRegistry.swift`
+- `Sources/App`: app lifecycle, menu-bar scenes, state
+- `Sources/Audio`: recording and normalization
+- `Sources/Providers`: STT and LLM integrations
+- `Sources/Pipeline`: dictation orchestration
+- `Sources/Input`: shortcuts and paste-back
+- `Sources/UI`: menu bar, onboarding, settings, about window
 
 ## Contributing
 
-Contributions welcome. Please open an issue first to discuss what you'd like to change.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+Whispur is released under the [MIT License](LICENSE).

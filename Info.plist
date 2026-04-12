@@ -6,12 +6,14 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Whispur</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Whispur</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,13 +27,17 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Whispur needs accessibility access to detect your current app context and paste transcribed text.</string>
+	<string>Whispur uses Accessibility access to detect the focused text field and paste your transcript back where you're typing.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Sophiie AI Pty Ltd. All rights reserved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Whispur needs microphone access to transcribe your speech.</string>
+	<string>Whispur uses your microphone only when you start dictation, so it can capture speech and turn it into text.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Whispur uses speech recognition for on-device transcription.</string>
+	<string>Whispur uses Apple's speech recognition when you choose the on-device Apple provider for local dictation.</string>
 	<key>SUFeedURL</key>
 	<string>https://whispur.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>

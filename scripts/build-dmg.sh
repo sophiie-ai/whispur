@@ -16,6 +16,7 @@ ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
 APP_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
 DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
 PROJECT_FILE="$ROOT/$APP_NAME.xcodeproj"
+VOLUME_ICON="$ROOT/Resources/VolumeIcon.icns"
 
 marketing_version_from_project() {
     sed -n 's/.*MARKETING_VERSION: "\([^"]*\)".*/\1/p' "$ROOT/project.yml" | head -1
@@ -108,6 +109,11 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
+if [ ! -f "$VOLUME_ICON" ]; then
+    echo "ERROR: Volume icon not found at $VOLUME_ICON"
+    exit 1
+fi
+
 SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 sign_sparkle_framework "$SPARKLE_FW"
 
@@ -125,6 +131,7 @@ echo "==> Creating DMG"
 rm -f "$DMG_PATH"
 create-dmg \
     --volname "Install Whispur" \
+    --volicon "$VOLUME_ICON" \
     --window-pos 200 120 \
     --window-size 540 380 \
     --icon-size 128 \
