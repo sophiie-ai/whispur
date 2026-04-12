@@ -1,0 +1,54 @@
+name: Whispur
+options:
+  bundleIdPrefix: ai.sophiie
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  Whispur:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+    resources:
+      - Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.sophiie.whispur
+        PRODUCT_NAME: Whispur
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_ENTITLEMENTS: Whispur.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        COMBINE_HIDPI_IMAGES: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSUIElement: true
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSMicrophoneUsageDescription: "Whispur needs microphone access to transcribe your speech."
+        NSSpeechRecognitionUsageDescription: "Whispur uses speech recognition for on-device transcription."
+        NSAccessibilityUsageDescription: "Whispur needs accessibility access to detect your current app context and paste transcribed text."
+        NSPrincipalClass: NSApplication
+
+  WhispurTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    dependencies:
+      - target: Whispur
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.sophiie.whispur.tests
