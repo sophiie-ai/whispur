@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.2](https://github.com/sophiie-ai/whispur/compare/v0.5.1...v0.5.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* harden HotkeyManager state access and slow accessibility polling ([31c96fd](https://github.com/sophiie-ai/whispur/commit/31c96fd7f1e5a4c8d2c44c68bcd7d7f30e31de3e))
+* log clipboard restore outcomes in TextInjector ([29f34a2](https://github.com/sophiie-ai/whispur/commit/29f34a2dfcd2c01759d61081c8bd945a28b93a72))
+* replace force-unwraps in provider endpoint URLs ([ae0831a](https://github.com/sophiie-ai/whispur/commit/ae0831afe63cf5e540321dc3ed9dc6b0bf492acc))
+* time out microphone permission requests after 30s ([1fdd694](https://github.com/sophiie-ai/whispur/commit/1fdd6942db0d2e84fc48e8014773a1b472199e5b))
+
 ## [0.5.1](https://github.com/sophiie-ai/whispur/compare/v0.5.0...v0.5.1) (2026-04-13)
 
 
