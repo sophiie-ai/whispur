@@ -28,7 +28,9 @@ struct OpenAILLM: LLMProvider {
     }
 
     func complete(request: LLMRequest) async throws -> LLMResponse {
-        let url = URL(string: "\(baseURL)/chat/completions")!
+        guard let url = URL(string: "\(baseURL)/chat/completions") else {
+            throw LLMError.apiError(provider: providerID, message: "Invalid endpoint URL.", statusCode: nil)
+        }
 
         let payload: [String: Any] = [
             "model": model,

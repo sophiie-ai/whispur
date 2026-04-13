@@ -25,7 +25,9 @@ struct OpenAISTT: STTProvider {
     }
 
     func transcribe(fileURL: URL) async throws -> String {
-        let url = URL(string: "\(baseURL)/audio/transcriptions")!
+        guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
+            throw STTError.apiError(provider: .openai, message: "Invalid endpoint URL.", statusCode: nil)
+        }
         let boundary = UUID().uuidString
 
         var request = URLRequest(url: url)

@@ -21,8 +21,12 @@ struct ElevenLabsSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
+    private static let endpointURL = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")
+
     func transcribe(fileURL: URL) async throws -> String {
-        let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!
+        guard let url = Self.endpointURL else {
+            throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
+        }
         let boundary = UUID().uuidString
 
         var request = URLRequest(url: url)
