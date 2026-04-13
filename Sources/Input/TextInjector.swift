@@ -42,8 +42,16 @@ enum TextInjector {
             try? await Task.sleep(for: .milliseconds(150))
             if pasteboard.changeCount == pasteChangeCount {
                 pasteboard.clearContents()
-                pasteboard.writeObjects(savedItems)
-                logger.debug("Clipboard restored")
+                let wrote = pasteboard.writeObjects(savedItems)
+                if wrote {
+                    logger.debug("Clipboard restored")
+                } else {
+                    logger.warning("Clipboard restore failed: writeObjects returned false")
+                }
+            } else {
+                // Something else wrote to the clipboard between paste and restore
+                // (likely the user or another app). Skip restore to avoid clobbering.
+                logger.info("Clipboard changed during paste — skipping restore to preserve new contents")
             }
         }
     }
