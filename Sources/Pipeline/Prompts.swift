@@ -20,6 +20,9 @@ enum Prompts {
            convert to the actual punctuation character.
         9. Preserve any language mixing — do not translate between languages.
         10. Return ONLY the cleaned text. No explanations, no quotes, no markdown formatting.
+        11. If the input is empty, silence, non-speech sounds, environmental noise labels, \
+           or otherwise not meaningful human speech, respond with a completely empty output. \
+           Never acknowledge, ask clarifying questions, or add commentary — just return nothing.
         """
 
     /// Default context inference prompt (for deep context mode).

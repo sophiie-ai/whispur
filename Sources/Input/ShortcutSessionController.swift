@@ -24,7 +24,7 @@ final class ShortcutSessionController {
                 activeMode = .hold
                 toggleStopArmed = false
                 return .start(.hold)
-            case .holdDeactivated, .toggleDeactivated:
+            case .holdDeactivated, .toggleDeactivated, .cancelRequested:
                 return nil
             }
         }
@@ -39,7 +39,7 @@ final class ShortcutSessionController {
             case .holdDeactivated:
                 reset()
                 return .stop
-            case .holdActivated, .toggleDeactivated:
+            case .holdActivated, .toggleDeactivated, .cancelRequested:
                 return nil
             }
 
@@ -52,7 +52,7 @@ final class ShortcutSessionController {
                 guard toggleStopArmed else { return nil }
                 reset()
                 return .stop
-            case .holdActivated, .holdDeactivated:
+            case .holdActivated, .holdDeactivated, .cancelRequested:
                 return nil
             }
 

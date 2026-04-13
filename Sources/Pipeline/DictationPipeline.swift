@@ -274,7 +274,12 @@ final class DictationPipeline: ObservableObject {
             var cleanedTranscript = normalizedRawTranscript
             var llmModel: String?
 
-            if let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
+            // Skip LLM cleanup for too-short transcripts — they're almost always noise
+            // and an LLM will hallucinate conversational replies instead of cleaning text.
+            let wordCount = normalizedRawTranscript.split { $0.isWhitespace }.count
+            let looksLikeSpeech = normalizedRawTranscript.count >= 8 && wordCount >= 2
+
+            if looksLikeSpeech, let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
                 phase = .cleaningTranscript
 
                 do {

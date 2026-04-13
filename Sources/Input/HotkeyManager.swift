@@ -20,11 +20,13 @@ final class HotkeyManager {
         case holdDeactivated
         case toggleActivated
         case toggleDeactivated
+        case cancelRequested
     }
 
     nonisolated(unsafe) var onEvent: ((Event) -> Void)?
     nonisolated(unsafe) var holdBinding: ShortcutBinding = .fnKey
     nonisolated(unsafe) var toggleBinding: ShortcutBinding? = nil
+    nonisolated(unsafe) var cancelWatchEnabled = false
 
     @Published private(set) var isAccessibilityGranted = false
     @Published private(set) var isMonitoring = false
@@ -230,6 +232,11 @@ final class HotkeyManager {
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
         pressedKeyCodes.insert(event.keyCode)
+        // Escape while recording → cancel (consume the event so the focused app doesn't see it).
+        if event.keyCode == 53, cancelWatchEnabled {
+            onEvent?(.cancelRequested)
+            return true
+        }
         evaluateBindings()
         return false
     }
