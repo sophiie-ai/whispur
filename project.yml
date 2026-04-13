@@ -67,3 +67,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.sophiie.whispur.tests
+        GENERATE_INFOPLIST_FILE: YES
