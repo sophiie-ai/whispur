@@ -33,11 +33,15 @@ final class HotkeyManager {
     @Published private(set) var eventCount = 0
     @Published private(set) var lastEventDescription = ""
 
-    // Tracked key state
-    private nonisolated(unsafe) var pressedModifierKeyCodes: Set<UInt16> = []
-    private nonisolated(unsafe) var pressedKeyCodes: Set<UInt16> = []
-    private nonisolated(unsafe) var holdActive = false
-    private nonisolated(unsafe) var toggleActive = false
+    // Tracked key state — protected by `stateLock` so concurrent reads from the
+    // CGEvent tap callback and NSEvent monitors can't tear the sets.
+    private struct SharedState {
+        var pressedModifierKeyCodes: Set<UInt16> = []
+        var pressedKeyCodes: Set<UInt16> = []
+        var holdActive = false
+        var toggleActive = false
+    }
+    private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
 
     private nonisolated(unsafe) var eventTap: CFMachPort?
     private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
@@ -50,11 +54,24 @@ final class HotkeyManager {
 
     func start() {
         checkAccessibilityAndInstall()
+        scheduleAccessibilityPollIfNeeded()
+    }
 
-        // Poll for accessibility changes every 2 seconds
-        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+    /// Poll for Accessibility permission changes only until it's granted and
+    /// the CGEvent tap is installed. Once monitoring is up, the timer stops —
+    /// nothing else flips the grant state at runtime in a way that matters here.
+    private func scheduleAccessibilityPollIfNeeded() {
+        guard accessibilityTimer == nil else { return }
+        guard eventTap == nil else { return }
+
+        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.checkAccessibilityAndInstall()
+                guard let self else { return }
+                self.checkAccessibilityAndInstall()
+                if self.eventTap != nil {
+                    self.accessibilityTimer?.invalidate()
+                    self.accessibilityTimer = nil
+                }
             }
         }
     }
@@ -64,16 +81,20 @@ final class HotkeyManager {
         accessibilityTimer = nil
         teardownEventTap()
         teardownLocalMonitors()
-        pressedModifierKeyCodes.removeAll()
-        pressedKeyCodes.removeAll()
-        holdActive = false
-        toggleActive = false
+        stateLock.withLock { state in
+            state.pressedModifierKeyCodes.removeAll()
+            state.pressedKeyCodes.removeAll()
+            state.holdActive = false
+            state.toggleActive = false
+        }
         isMonitoring = false
     }
 
     func requestAccessibility() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+        // Re-arm the poll so we notice the grant quickly once the user responds.
+        scheduleAccessibilityPollIfNeeded()
     }
 
     // MARK: - Setup
@@ -218,22 +239,28 @@ final class HotkeyManager {
         guard isKnown else { return false }
 
         // Toggle presence: if already pressed → now released, if not pressed → now pressed
-        if pressedModifierKeyCodes.contains(keyCode) {
-            pressedModifierKeyCodes.remove(keyCode)
-            logger.info("Modifier released: keyCode=\(keyCode)")
-        } else {
-            pressedModifierKeyCodes.insert(keyCode)
-            logger.info("Modifier pressed: keyCode=\(keyCode)")
+        let wasReleased = stateLock.withLock { state -> Bool in
+            if state.pressedModifierKeyCodes.contains(keyCode) {
+                state.pressedModifierKeyCodes.remove(keyCode)
+                return true
+            } else {
+                state.pressedModifierKeyCodes.insert(keyCode)
+                return false
+            }
         }
+        logger.info("Modifier \(wasReleased ? "released" : "pressed"): keyCode=\(keyCode)")
 
         evaluateBindings()
         return false
     }
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
-        pressedKeyCodes.insert(event.keyCode)
+        let keyCode = event.keyCode
+        stateLock.withLock { state in
+            _ = state.pressedKeyCodes.insert(keyCode)
+        }
         // Escape while recording → cancel (consume the event so the focused app doesn't see it).
-        if event.keyCode == 53, cancelWatchEnabled {
+        if keyCode == 53, cancelWatchEnabled {
             onEvent?(.cancelRequested)
             return true
         }
@@ -242,7 +269,10 @@ final class HotkeyManager {
     }
 
     private nonisolated func handleKeyUp(_ event: NSEvent) {
-        pressedKeyCodes.remove(event.keyCode)
+        let keyCode = event.keyCode
+        stateLock.withLock { state in
+            _ = state.pressedKeyCodes.remove(keyCode)
+        }
         evaluateBindings()
     }
 
@@ -250,60 +280,69 @@ final class HotkeyManager {
 
     /// Check all bindings against current key state and fire events.
     private nonisolated func evaluateBindings() {
-        let holdNowActive = bindingIsActive(holdBinding)
-        let toggleNowActive = toggleBinding.map { bindingIsActive($0) } ?? false
+        let transitions = stateLock.withLock { state -> [Event] in
+            let holdNowActive = Self.bindingIsActive(holdBinding, state: state)
+            let toggleNowActive = toggleBinding.map { Self.bindingIsActive($0, state: state) } ?? false
 
-        // Hold binding transitions
-        if holdNowActive && !holdActive {
-            holdActive = true
-            logger.info("Hold activated (Fn pressed)")
-            onEvent?(.holdActivated)
-        } else if !holdNowActive && holdActive {
-            holdActive = false
-            logger.info("Hold deactivated (Fn released)")
-            onEvent?(.holdDeactivated)
+            var events: [Event] = []
+
+            if holdNowActive && !state.holdActive {
+                state.holdActive = true
+                events.append(.holdActivated)
+            } else if !holdNowActive && state.holdActive {
+                state.holdActive = false
+                events.append(.holdDeactivated)
+            }
+
+            if toggleNowActive && !state.toggleActive {
+                state.toggleActive = true
+                events.append(.toggleActivated)
+            }
+            if !toggleNowActive && state.toggleActive {
+                state.toggleActive = false
+                events.append(.toggleDeactivated)
+            }
+
+            return events
         }
 
-        // Toggle binding transitions
-        if toggleNowActive && !toggleActive {
-            toggleActive = true
-            onEvent?(.toggleActivated)
-        }
-        if !toggleNowActive && toggleActive {
-            toggleActive = false
-            onEvent?(.toggleDeactivated)
+        for event in transitions {
+            switch event {
+            case .holdActivated: logger.info("Hold activated")
+            case .holdDeactivated: logger.info("Hold deactivated")
+            default: break
+            }
+            onEvent?(event)
         }
     }
 
-    /// Check if a binding matches the current pressed key state.
-    private nonisolated func bindingIsActive(_ binding: ShortcutBinding) -> Bool {
-        // Check if all required modifiers are pressed
-        let activeModifiers = currentModifiers()
+    /// Check if a binding matches the supplied pressed-key snapshot. Pure;
+    /// expected to be called from inside `stateLock.withLock`.
+    private nonisolated static func bindingIsActive(_ binding: ShortcutBinding, state: SharedState) -> Bool {
+        let activeModifiers = currentModifiers(state: state)
         guard activeModifiers.isSuperset(of: binding.modifiers) else {
             return false
         }
 
-        // For modifier-only bindings (like Fn), just checking modifiers is enough
         if binding.keyCode == nil {
             return true
         }
 
-        // For key + modifier bindings, also check the key
         if let keyCode = binding.keyCode {
-            return pressedKeyCodes.contains(keyCode)
+            return state.pressedKeyCodes.contains(keyCode)
         }
 
         return false
     }
 
-    /// Convert pressed modifier keyCodes to ShortcutModifiers.
-    private nonisolated func currentModifiers() -> ShortcutModifiers {
+    private nonisolated static func currentModifiers(state: SharedState) -> ShortcutModifiers {
         var mods = ShortcutModifiers()
-        if pressedModifierKeyCodes.contains(63) { mods.insert(.function) }
-        if pressedModifierKeyCodes.contains(55) || pressedModifierKeyCodes.contains(54) { mods.insert(.command) }
-        if pressedModifierKeyCodes.contains(56) || pressedModifierKeyCodes.contains(60) { mods.insert(.shift) }
-        if pressedModifierKeyCodes.contains(58) || pressedModifierKeyCodes.contains(61) { mods.insert(.option) }
-        if pressedModifierKeyCodes.contains(59) || pressedModifierKeyCodes.contains(62) { mods.insert(.control) }
+        let codes = state.pressedModifierKeyCodes
+        if codes.contains(63) { mods.insert(.function) }
+        if codes.contains(55) || codes.contains(54) { mods.insert(.command) }
+        if codes.contains(56) || codes.contains(60) { mods.insert(.shift) }
+        if codes.contains(58) || codes.contains(61) { mods.insert(.option) }
+        if codes.contains(59) || codes.contains(62) { mods.insert(.control) }
         return mods
     }
 }
