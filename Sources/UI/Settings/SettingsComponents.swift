@@ -80,6 +80,8 @@ struct PreferenceBadge: View {
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(tone.color.opacity(0.12), in: Capsule())

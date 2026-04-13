@@ -71,8 +71,11 @@ struct RequestsSettingsView: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: 14) {
-            DetailRow("Provider", detail: "Filter to one service or inspect everything.") {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            HStack(spacing: 8) {
+                Text("Provider")
+                    .font(.subheadline.weight(.medium))
+                    .fixedSize()
                 Picker("Provider", selection: $providerFilter) {
                     Text("All providers").tag("all")
                     ForEach(providerOptions, id: \.self) { providerID in
@@ -81,10 +84,13 @@ struct RequestsSettingsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 220)
+                .frame(minWidth: 160)
             }
 
-            DetailRow("Status", detail: "Separate successful responses from failures.") {
+            HStack(spacing: 8) {
+                Text("Status")
+                    .font(.subheadline.weight(.medium))
+                    .fixedSize()
                 Picker("Status", selection: $statusFilter) {
                     ForEach(ProviderRequestStatusFilter.allCases) { filter in
                         Text(filter.rawValue).tag(filter)
@@ -92,15 +98,19 @@ struct RequestsSettingsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 160)
+                .frame(minWidth: 140)
             }
+
+            Spacer(minLength: 0)
         }
     }
 
     private var contentArea: some View {
-        HStack(spacing: 18) {
+        HSplitView {
             listPane
+                .frame(minWidth: 260, idealWidth: 360)
             inspectorPane
+                .frame(minWidth: 300)
         }
         .frame(maxWidth: .infinity, minHeight: 460, alignment: .topLeading)
     }
@@ -148,11 +158,12 @@ struct RequestsSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let selectedEntry {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         PreferenceBadge(title: selectedEntry.providerID.providerDisplayName, tone: .neutral)
                         PreferenceBadge(title: selectedEntry.kind.rawValue, tone: .neutral)
                         PreferenceBadge(title: statusLabel(for: selectedEntry), tone: statusTone(for: selectedEntry))
                         PreferenceBadge(title: "\(selectedEntry.durationMS) ms", tone: .neutral)
+                        Spacer(minLength: 0)
                     }
 
                     detailBlock("When", selectedEntry.timestamp.formatted(date: .abbreviated, time: .standard))
@@ -238,15 +249,18 @@ private struct ProviderRequestRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(entry.providerID.providerDisplayName)
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 PreferenceBadge(title: entry.kind.rawValue, tone: .neutral)
                 PreferenceBadge(title: statusLabel, tone: statusTone)
 
-                Spacer()
+                Spacer(minLength: 6)
 
                 Text(entry.timestamp.formatted(date: .omitted, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize()
             }
 
             Text("\(entry.httpMethod) \(entry.endpointURL)")
@@ -295,6 +309,8 @@ private struct ProviderRequestDetailBlock: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(tone == .critical ? Color.red : Color.secondary)
 
             Text(value)
