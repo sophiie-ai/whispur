@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Whispur — Voice dictation for macOS</title>
+  <meta name="description" content="Whispur is an open-source macOS menu-bar app that turns your voice into text anywhere. Bring your own API keys. Privacy-first, free, native." />
+  <meta name="author" content="Sophiie AI" />
+  <meta name="theme-color" content="#0b2433" />
+  <link rel="canonical" href="https://whispur.app/" />
+
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:title" content="Whispur — Voice dictation for macOS" />
+  <meta property="og:description" content="Open-source macOS menu-bar app that turns your voice into text anywhere. Bring your own API keys. Privacy-first." />
+  <meta property="og:url" content="https://whispur.app/" />
+  <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Whispur — Voice dictation for macOS" />
+  <meta name="twitter:description" content="Open-source macOS menu-bar app that turns your voice into text anywhere. Bring your own API keys." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+
+  <link rel="preconnect" href="https://github.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin />
+
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #07141c;
+      --bg-2: #0c2230;
+      --fg: #e8f6fa;
+      --fg-muted: #9bb5c0;
+      --accent: #2ed1c3;
+      --accent-2: #5fb8ff;
+      --border: rgba(255,255,255,.08);
+      --card: rgba(255,255,255,.04);
+      --card-hover: rgba(255,255,255,.06);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6fbfc;
+        --bg-2: #eaf6f7;
+        --fg: #0a1c24;
+        --fg-muted: #4a6370;
+        --border: rgba(10,28,36,.1);
+        --card: rgba(10,28,36,.02);
+        --card-hover: rgba(10,28,36,.05);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .hero-bg::before {
+      content: "";
+      position: absolute;
+      top: -20%;
+      left: 50%;
+      width: 900px;
+      height: 900px;
+      transform: translateX(-50%);
+      background: radial-gradient(closest-side, rgba(46,209,195,.35), transparent 70%);
+      filter: blur(40px);
+    }
+    .hero-bg::after {
+      content: "";
+      position: absolute;
+      top: 10%;
+      left: 20%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(closest-side, rgba(95,184,255,.25), transparent 70%);
+      filter: blur(60px);
+    }
+    code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    a { color: inherit; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .75rem 1.25rem;
+      border-radius: 999px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #2ed1c3, #5fb8ff);
+      color: #041018;
+      box-shadow: 0 6px 24px rgba(46,209,195,.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(46,209,195,.45); }
+    .btn-ghost {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .btn-ghost:hover { background: var(--card-hover); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      transition: background .15s ease, border-color .15s ease;
+    }
+    .card:hover { background: var(--card-hover); border-color: rgba(46,209,195,.25); }
+    .eyebrow {
+      display: inline-block;
+      padding: .35rem .75rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      background: rgba(46,209,195,.12);
+      color: var(--accent);
+      border: 1px solid rgba(46,209,195,.25);
+    }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 720px) {
+      .grid-2 { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+      .grid-3 { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    }
+    details { border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.25rem; background: var(--card); }
+    details + details { margin-top: .75rem; }
+    details summary { cursor: pointer; font-weight: 600; list-style: none; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { color: var(--accent); }
+    .divider { height: 1px; background: var(--border); margin: 0; border: 0; }
+    .muted { color: var(--fg-muted); }
+    .kbd {
+      display: inline-block;
+      padding: .1rem .5rem;
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .85em;
+      background: var(--card);
+    }
+  </style>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Whispur",
+    "description": "Open-source macOS menu-bar app that turns your voice into text anywhere. Bring your own API keys.",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "macOS 14+",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "softwareVersion": "0.3.0",
+    "downloadUrl": "https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg",
+    "url": "https://whispur.app/",
+    "image": "https://whispur.app/icon.png",
+    "author": {
+      "@type": "Organization",
+      "name": "Sophiie AI",
+      "url": "https://sophiie.ai"
+    },
+    "license": "https://github.com/sophiie-ai/whispur/blob/main/LICENSE",
+    "sameAs": "https://github.com/sophiie-ai/whispur"
+  }
+  </script>
+</head>
+<body>
+  <div class="hero-bg" aria-hidden="true"></div>
+
+  <header class="container" style="padding-top: 1.5rem; padding-bottom: 1.5rem; display:flex; align-items:center; justify-content:space-between;">
+    <a href="/" aria-label="Whispur home" style="display:flex; align-items:center; gap:.6rem; text-decoration:none;">
+      <img src="/icon.png" alt="" width="32" height="32" style="border-radius: 8px;" />
+      <strong style="font-size: 1.1rem; letter-spacing: -.01em;">Whispur</strong>
+    </a>
+    <nav style="display:flex; gap:1.25rem; align-items:center;" aria-label="Primary">
+      <a href="#features" class="muted" style="text-decoration:none;">Features</a>
+      <a href="#providers" class="muted" style="text-decoration:none;">Providers</a>
+      <a href="#faq" class="muted" style="text-decoration:none;">FAQ</a>
+      <a href="https://github.com/sophiie-ai/whispur" class="btn btn-ghost" style="padding:.45rem 1rem;" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="container" style="padding-top: 4rem; padding-bottom: 6rem; text-align:center; position:relative;">
+      <span class="eyebrow">Now in public beta · v0.3.0</span>
+      <h1 style="font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 1.05; letter-spacing: -.03em; margin: 1.25rem 0 1rem;">
+        Voice to text,<br />
+        <span style="background: linear-gradient(135deg, #2ed1c3, #5fb8ff); -webkit-background-clip: text; background-clip: text; color: transparent;">anywhere on macOS.</span>
+      </h1>
+      <p class="muted" style="max-width: 620px; margin: 0 auto 2rem; font-size: 1.15rem;">
+        Hold a shortcut, speak, let go. Whispur transcribes and pastes into any app — with your choice of speech engine and optional AI cleanup. Open source. Bring your own keys.
+      </p>
+      <div style="display:flex; flex-wrap:wrap; gap:.75rem; justify-content:center;">
+        <a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download for macOS
+        </a>
+        <a href="https://github.com/sophiie-ai/whispur" class="btn btn-ghost" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.96 3.21 9.17 7.67 10.66.56.1.77-.24.77-.54 0-.27-.01-1.15-.02-2.09-3.12.68-3.78-1.33-3.78-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.68.08-.68 1.13.08 1.72 1.16 1.72 1.16 1 1.71 2.63 1.21 3.27.93.1-.73.39-1.21.71-1.49-2.49-.28-5.11-1.25-5.11-5.56 0-1.23.44-2.23 1.16-3.02-.12-.28-.5-1.43.11-2.98 0 0 .94-.3 3.08 1.15.89-.25 1.84-.37 2.8-.38.95.01 1.91.13 2.8.38 2.14-1.45 3.08-1.15 3.08-1.15.61 1.55.23 2.7.11 2.98.72.79 1.16 1.79 1.16 3.02 0 4.32-2.62 5.27-5.12 5.55.4.35.76 1.03.76 2.08 0 1.5-.01 2.71-.01 3.07 0 .3.2.65.78.54 4.45-1.49 7.66-5.7 7.66-10.66C23.25 5.48 18.27.5 12 .5z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <p class="muted" style="margin-top: 1.25rem; font-size: .95rem;">
+        Free · MIT · macOS 14+ · Apple Silicon &amp; Intel
+      </p>
+
+      <div style="margin-top: 4rem;">
+        <div style="margin: 0 auto; max-width: 960px; aspect-ratio: 16/10; border-radius: 20px; overflow: hidden; border: 1px solid var(--border); background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08)); display: grid; place-items: center; position: relative;">
+          <img src="/icon-512.png" alt="Whispur app icon" width="180" height="180" style="border-radius: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.4); opacity: .95;" />
+          <div style="position:absolute; bottom:1.25rem; left:0; right:0; text-align:center;" class="muted">Screenshots coming soon</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="container" style="padding: 4rem 1.5rem;">
+      <div style="text-align:center; margin-bottom: 3rem;">
+        <span class="eyebrow">Features</span>
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -.02em; margin: .75rem 0 0;">Built like a native Mac app</h2>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <h3 style="margin-top:0;">Global hotkey dictation</h3>
+          <p class="muted" style="margin:0;">Bind a hold-to-talk or toggle shortcut. Press <span class="kbd">Fn</span>, speak, let go — transcribed text lands wherever your cursor is.</p>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Multiple speech engines</h3>
+          <p class="muted" style="margin:0;">Apple on-device, OpenAI Whisper, Deepgram Nova, ElevenLabs Scribe. Swap providers per workflow.</p>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Optional AI cleanup</h3>
+          <p class="muted" style="margin:0;">Route the transcript through OpenAI, Anthropic, or Groq with your own prompt. Fix punctuation, tone, or format on the fly.</p>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Bring your own key</h3>
+          <p class="muted" style="margin:0;">No subscription, no middleman. Your API keys live in Keychain. Apple STT works free, on-device, out of the box.</p>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Privacy-first</h3>
+          <p class="muted" style="margin:0;">Audio stays local by default. Network calls only happen when you pick a cloud provider — and you can see every request.</p>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Always up to date</h3>
+          <p class="muted" style="margin:0;">Runs quietly in the menu bar. Signed, notarized, and auto-updates via Sparkle — no install friction.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="providers" class="container" style="padding: 4rem 1.5rem;">
+      <div style="text-align:center; margin-bottom: 3rem;">
+        <span class="eyebrow">Bring your own key</span>
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -.02em; margin: .75rem 0 .75rem;">Your choice of provider.</h2>
+        <p class="muted" style="max-width: 620px; margin: 0 auto;">Pick the engine that fits your workflow — on-device for privacy, cloud for accuracy. Keys are stored in macOS Keychain, never sent anywhere but to the provider you picked.</p>
+      </div>
+      <div class="grid-2">
+        <article class="card">
+          <h3 style="margin-top:0;">Speech to text</h3>
+          <ul class="muted" style="padding-left: 1.1rem; margin: .5rem 0 0;">
+            <li><strong style="color:var(--fg)">Apple</strong> — on-device, free, default</li>
+            <li><strong style="color:var(--fg)">OpenAI</strong> — Whisper &amp; gpt-4o-transcribe</li>
+            <li><strong style="color:var(--fg)">Deepgram</strong> — Nova-3 real-time</li>
+            <li><strong style="color:var(--fg)">ElevenLabs</strong> — Scribe v2</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 style="margin-top:0;">Optional LLM cleanup</h3>
+          <ul class="muted" style="padding-left: 1.1rem; margin: .5rem 0 0;">
+            <li><strong style="color:var(--fg)">OpenAI</strong> — GPT-4o &amp; GPT-4o-mini</li>
+            <li><strong style="color:var(--fg)">Anthropic</strong> — Claude Sonnet &amp; Haiku</li>
+            <li><strong style="color:var(--fg)">Groq</strong> — Llama &amp; Mixtral on LPUs</li>
+            <li><strong style="color:var(--fg)">Custom prompts</strong> — write your own</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="container" style="padding: 4rem 1.5rem;">
+      <div style="text-align:center; margin-bottom: 3rem;">
+        <span class="eyebrow">Install</span>
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -.02em; margin: .75rem 0 0;">Running in under a minute.</h2>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <div class="mono muted" style="font-size:.85rem; margin-bottom: .25rem;">01</div>
+          <h3 style="margin: 0 0 .5rem;">Download the DMG</h3>
+          <p class="muted" style="margin:0;">Signed and notarized by Apple. Double-click to open — no right-click workaround needed.</p>
+        </article>
+        <article class="card">
+          <div class="mono muted" style="font-size:.85rem; margin-bottom: .25rem;">02</div>
+          <h3 style="margin: 0 0 .5rem;">Drag to Applications</h3>
+          <p class="muted" style="margin:0;">Launch Whispur. A small icon appears in your menu bar — that's home.</p>
+        </article>
+        <article class="card">
+          <div class="mono muted" style="font-size:.85rem; margin-bottom: .25rem;">03</div>
+          <h3 style="margin: 0 0 .5rem;">Grant permissions</h3>
+          <p class="muted" style="margin:0;">Microphone for capture, Accessibility for the global shortcut and paste-back. Then hold your hotkey and talk.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="faq" class="container" style="padding: 4rem 1.5rem; max-width: 780px;">
+      <div style="text-align:center; margin-bottom: 3rem;">
+        <span class="eyebrow">FAQ</span>
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -.02em; margin: .75rem 0 0;">Good questions.</h2>
+      </div>
+      <details>
+        <summary>Is Whispur really free?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">Yes. The app is MIT-licensed and free forever. Apple speech-to-text works on-device with no account. Cloud providers bill you directly for their own usage — we never touch your keys or your audio.</p>
+      </details>
+      <details>
+        <summary>Do you see my audio or transcripts?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">No. Whispur has no backend. Audio is processed locally or sent directly to whichever provider you configure. Everything stays between your Mac and that provider.</p>
+      </details>
+      <details>
+        <summary>Which macOS versions are supported?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">macOS 14 (Sonoma) or later, Apple Silicon or Intel.</p>
+      </details>
+      <details>
+        <summary>Can I customize the shortcut?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">Yep. Both the hold-to-talk and toggle shortcuts are rebindable in Settings. Defaults use <span class="kbd">Fn</span> since it's rarely bound elsewhere.</p>
+      </details>
+      <details>
+        <summary>How does AI cleanup work?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">After transcription, Whispur can optionally run the text through an LLM with a prompt preset (fix punctuation, format as email, summarize, etc.) before pasting. Optional per preset.</p>
+      </details>
+      <details>
+        <summary>Where's the source?</summary>
+        <p class="muted" style="margin: .75rem 0 0;">On <a href="https://github.com/sophiie-ai/whispur" rel="noopener" style="color:var(--accent);">GitHub</a>. Issues and PRs welcome.</p>
+      </details>
+    </section>
+
+    <section class="container" style="padding: 4rem 1.5rem 6rem; text-align:center;">
+      <div class="card" style="padding: 3rem 2rem; background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08)); border-color: rgba(46,209,195,.2);">
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.25rem); letter-spacing: -.02em; margin: 0 0 .75rem;">Ready to stop typing?</h2>
+        <p class="muted" style="margin: 0 auto 1.5rem; max-width: 520px;">Download Whispur, grant two permissions, and dictate into anything in the next 60 seconds.</p>
+        <a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg" class="btn btn-primary">Download for macOS</a>
+      </div>
+    </section>
+  </main>
+
+  <hr class="divider" />
+
+  <footer class="container" style="padding: 2rem 1.5rem; display:flex; flex-wrap:wrap; gap:1rem; justify-content:space-between; align-items:center;">
+    <div style="display:flex; align-items:center; gap:.6rem;">
+      <img src="/icon.png" alt="" width="24" height="24" style="border-radius: 6px;" />
+      <span class="muted" style="font-size:.9rem;">© 2026 Sophiie AI Pty Ltd</span>
+    </div>
+    <nav style="display:flex; gap:1.25rem; font-size:.9rem;" aria-label="Footer">
+      <a href="https://github.com/sophiie-ai/whispur" class="muted" style="text-decoration:none;" rel="noopener">GitHub</a>
+      <a href="https://github.com/sophiie-ai/whispur/releases" class="muted" style="text-decoration:none;" rel="noopener">Releases</a>
+      <a href="/privacy" class="muted" style="text-decoration:none;">Privacy</a>
+    </nav>
+  </footer>
+</body>
+</html>
