@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum ProviderRequestStatusFilter: String, CaseIterable, Identifiable {
+enum ProviderRequestStatusFilter: String, CaseIterable, Identifiable {
     case all = "All statuses"
     case success = "2xx"
     case clientError = "4xx"
@@ -43,8 +43,20 @@ struct RequestsSettingsView: View {
                 icon: "network"
             ) {
                 VStack(alignment: .leading, spacing: 16) {
-                    headerRow
-                    filterRow
+                    RequestsHeaderRow(
+                        totalCount: appState.providerRequestLog.items.count,
+                        shownCount: filteredEntries.count,
+                        errorCount: errorCount,
+                        onClear: {
+                            appState.providerRequestLog.clear()
+                            selectedEntryID = nil
+                        }
+                    )
+                    RequestsFilterBar(
+                        providerOptions: providerOptions,
+                        providerFilter: $providerFilter,
+                        statusFilter: $statusFilter
+                    )
                     contentArea
                 }
             }
@@ -53,24 +65,80 @@ struct RequestsSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var headerRow: some View {
+    private var contentArea: some View {
+        HSplitView {
+            RequestsListPane(
+                filteredEntries: filteredEntries,
+                isLogEmpty: appState.providerRequestLog.items.isEmpty,
+                selectedEntryID: $selectedEntryID
+            )
+            .frame(minWidth: 260, idealWidth: 360)
+
+            RequestsInspectorPane(entry: selectedEntry)
+                .frame(minWidth: 300)
+        }
+        .frame(maxWidth: .infinity, minHeight: 460, alignment: .topLeading)
+    }
+
+    private var providerOptions: [String] {
+        Array(Set(appState.providerRequestLog.items.map(\.providerID))).sorted {
+            $0.providerDisplayName.localizedCaseInsensitiveCompare($1.providerDisplayName) == .orderedAscending
+        }
+    }
+
+    private var filteredEntries: [ProviderRequestLogEntry] {
+        appState.providerRequestLog.items.filter { entry in
+            let matchesProvider = providerFilter == "all" || entry.providerID == providerFilter
+            return matchesProvider && statusFilter.matches(entry)
+        }
+    }
+
+    private var selectedEntry: ProviderRequestLogEntry? {
+        if let selectedEntryID {
+            return filteredEntries.first(where: { $0.id == selectedEntryID })
+        }
+        return filteredEntries.first
+    }
+
+    private var errorCount: Int {
+        appState.providerRequestLog.items.filter { entry in
+            if let statusCode = entry.statusCode {
+                return !(200 ... 299).contains(statusCode)
+            }
+            return entry.errorMessage != nil
+        }.count
+    }
+}
+
+// MARK: - Subviews
+
+private struct RequestsHeaderRow: View {
+    let totalCount: Int
+    let shownCount: Int
+    let errorCount: Int
+    let onClear: () -> Void
+
+    var body: some View {
         HStack(spacing: 10) {
-            PreferenceBadge(title: "\(appState.providerRequestLog.items.count) saved", tone: .neutral)
-            PreferenceBadge(title: "\(filteredEntries.count) shown", tone: .neutral)
+            PreferenceBadge(title: "\(totalCount) saved", tone: .neutral)
+            PreferenceBadge(title: "\(shownCount) shown", tone: .neutral)
             PreferenceBadge(title: "\(errorCount) errors", tone: errorCount == 0 ? .good : .warning)
 
             Spacer()
 
-            Button("Clear Log") {
-                appState.providerRequestLog.clear()
-                selectedEntryID = nil
-            }
-            .buttonStyle(.bordered)
-            .disabled(appState.providerRequestLog.items.isEmpty)
+            Button("Clear Log", action: onClear)
+                .buttonStyle(.bordered)
+                .disabled(totalCount == 0)
         }
     }
+}
 
-    private var filterRow: some View {
+private struct RequestsFilterBar: View {
+    let providerOptions: [String]
+    @Binding var providerFilter: String
+    @Binding var statusFilter: ProviderRequestStatusFilter
+
+    var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             HStack(spacing: 8) {
                 Text("Provider")
@@ -104,25 +172,21 @@ struct RequestsSettingsView: View {
             Spacer(minLength: 0)
         }
     }
+}
 
-    private var contentArea: some View {
-        HSplitView {
-            listPane
-                .frame(minWidth: 260, idealWidth: 360)
-            inspectorPane
-                .frame(minWidth: 300)
-        }
-        .frame(maxWidth: .infinity, minHeight: 460, alignment: .topLeading)
-    }
+private struct RequestsListPane: View {
+    let filteredEntries: [ProviderRequestLogEntry]
+    let isLogEmpty: Bool
+    @Binding var selectedEntryID: ProviderRequestLogEntry.ID?
 
-    private var listPane: some View {
+    var body: some View {
         Group {
             if filteredEntries.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No Matching Requests")
                         .font(.headline)
 
-                    Text(appState.providerRequestLog.items.isEmpty
+                    Text(isLogEmpty
                         ? "Make a provider-backed request and it will appear here with status, duration, and the provider response."
                         : "Adjust the filters to show matching requests.")
                         .font(.subheadline)
@@ -139,12 +203,12 @@ struct RequestsSettingsView: View {
                 }
                 .listStyle(.plain)
                 .onAppear {
-                    if selectedEntry == nil {
+                    if selectedEntryID == nil {
                         selectedEntryID = filteredEntries.first?.id
                     }
                 }
                 .onChange(of: filteredEntries.map(\.id)) { _, _ in
-                    if selectedEntry == nil {
+                    if selectedEntryID == nil || !filteredEntries.contains(where: { $0.id == selectedEntryID }) {
                         selectedEntryID = filteredEntries.first?.id
                     }
                 }
@@ -153,26 +217,34 @@ struct RequestsSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+}
 
-    private var inspectorPane: some View {
+private struct RequestsInspectorPane: View {
+    let entry: ProviderRequestLogEntry?
+
+    var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if let selectedEntry {
+                if let entry {
                     HStack(spacing: 8) {
-                        PreferenceBadge(title: selectedEntry.providerID.providerDisplayName, tone: .neutral)
-                        PreferenceBadge(title: selectedEntry.kind.rawValue, tone: .neutral)
-                        PreferenceBadge(title: statusLabel(for: selectedEntry), tone: statusTone(for: selectedEntry))
-                        PreferenceBadge(title: "\(selectedEntry.durationMS) ms", tone: .neutral)
+                        PreferenceBadge(title: entry.providerID.providerDisplayName, tone: .neutral)
+                        PreferenceBadge(title: entry.kind.rawValue, tone: .neutral)
+                        PreferenceBadge(title: statusLabel(for: entry), tone: statusTone(for: entry))
+                        PreferenceBadge(title: "\(entry.durationMS) ms", tone: .neutral)
                         Spacer(minLength: 0)
                     }
 
-                    detailBlock("When", selectedEntry.timestamp.formatted(date: .abbreviated, time: .standard))
-                    detailBlock("Endpoint", selectedEntry.endpointURL)
-                    detailBlock("Request", selectedEntry.requestSummary)
-                    detailBlock("Response Preview", selectedEntry.responseBodyPreview.isEmpty ? "No response body." : selectedEntry.responseBodyPreview)
+                    ProviderRequestDetailBlock(title: "When", value: entry.timestamp.formatted(date: .abbreviated, time: .standard), tone: .neutral)
+                    ProviderRequestDetailBlock(title: "Endpoint", value: entry.endpointURL, tone: .neutral)
+                    ProviderRequestDetailBlock(title: "Request", value: entry.requestSummary, tone: .neutral)
+                    ProviderRequestDetailBlock(
+                        title: "Response Preview",
+                        value: entry.responseBodyPreview.isEmpty ? "No response body." : entry.responseBodyPreview,
+                        tone: .neutral
+                    )
 
-                    if let errorMessage = selectedEntry.errorMessage, !errorMessage.isEmpty {
-                        detailBlock("Error", errorMessage, tone: .critical)
+                    if let errorMessage = entry.errorMessage, !errorMessage.isEmpty {
+                        ProviderRequestDetailBlock(title: "Error", value: errorMessage, tone: .critical)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
@@ -192,35 +264,6 @@ struct RequestsSettingsView: View {
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var providerOptions: [String] {
-        Array(Set(appState.providerRequestLog.items.map(\.providerID))).sorted {
-            $0.providerDisplayName.localizedCaseInsensitiveCompare($1.providerDisplayName) == .orderedAscending
-        }
-    }
-
-    private var filteredEntries: [ProviderRequestLogEntry] {
-        appState.providerRequestLog.items.filter { entry in
-            let matchesProvider = providerFilter == "all" || entry.providerID == providerFilter
-            return matchesProvider && statusFilter.matches(entry)
-        }
-    }
-
-    private var selectedEntry: ProviderRequestLogEntry? {
-        if let selectedEntryID {
-            return filteredEntries.first(where: { $0.id == selectedEntryID })
-        }
-        return filteredEntries.first
-    }
-
-    private var errorCount: Int {
-        appState.providerRequestLog.items.filter { entry in
-            if let statusCode = entry.statusCode {
-                return !(200 ... 299).contains(statusCode)
-            }
-            return entry.errorMessage != nil
-        }.count
-    }
-
     private func statusLabel(for entry: ProviderRequestLogEntry) -> String {
         if let statusCode = entry.statusCode {
             return "\(statusCode)"
@@ -231,114 +274,9 @@ struct RequestsSettingsView: View {
     private func statusTone(for entry: ProviderRequestLogEntry) -> PreferenceBadge.Tone {
         guard let statusCode = entry.statusCode else { return .warning }
         switch statusCode {
-        case 200 ... 299:
-            return .good
-        case 400 ... 599:
-            return .critical
-        default:
-            return .warning
+        case 200 ... 299: return .good
+        case 400 ... 599: return .critical
+        default: return .warning
         }
-    }
-}
-
-private struct ProviderRequestRow: View {
-    let entry: ProviderRequestLogEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(entry.providerID.providerDisplayName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                PreferenceBadge(title: entry.kind.rawValue, tone: .neutral)
-                PreferenceBadge(title: statusLabel, tone: statusTone)
-
-                Spacer(minLength: 6)
-
-                Text(entry.timestamp.formatted(date: .omitted, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-            }
-
-            Text("\(entry.httpMethod) \(entry.endpointURL)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            Text(entry.errorMessage ?? responseSummary)
-                .font(.caption)
-                .lineLimit(2)
-        }
-        .padding(.vertical, 8)
-    }
-
-    private var statusLabel: String {
-        if let statusCode = entry.statusCode {
-            return "\(statusCode)"
-        }
-        return "Transport"
-    }
-
-    private var statusTone: PreferenceBadge.Tone {
-        guard let statusCode = entry.statusCode else { return .warning }
-        switch statusCode {
-        case 200 ... 299:
-            return .good
-        case 400 ... 599:
-            return .critical
-        default:
-            return .warning
-        }
-    }
-
-    private var responseSummary: String {
-        let text = entry.responseBodyPreview.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? "No response body." : text
-    }
-}
-
-private struct ProviderRequestDetailBlock: View {
-    let title: String
-    let value: String
-    let tone: PreferenceBadge.Tone
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .foregroundStyle(tone == .critical ? Color.red : Color.secondary)
-
-            Text(value)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-    }
-}
-
-private extension RequestsSettingsView {
-    func detailBlock(_ title: String, _ value: String, tone: PreferenceBadge.Tone = .neutral) -> some View {
-        ProviderRequestDetailBlock(title: title, value: value, tone: tone)
-    }
-}
-
-private extension String {
-    var providerDisplayName: String {
-        if let sttProvider = STTProviderID(rawValue: self) {
-            return sttProvider.displayName
-        }
-
-        if let llmProvider = LLMProviderID(rawValue: self) {
-            return llmProvider.displayName
-        }
-
-        return replacingOccurrences(of: "-", with: " ").capitalized
     }
 }
