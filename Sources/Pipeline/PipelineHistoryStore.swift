@@ -11,7 +11,7 @@ final class PipelineHistoryStore: ObservableObject {
     private let maxItems: Int
     private let fileURL: URL
 
-    init(maxItems: Int = 50) {
+    init(maxItems: Int = 25) {
         self.maxItems = maxItems
 
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

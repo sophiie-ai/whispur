@@ -207,9 +207,10 @@ final class ProviderHTTPClient {
     private static func responsePreview(from data: Data) -> String {
         guard !data.isEmpty else { return "" }
 
-        let prefix = data.prefix(2_048)
+        let limit = 512
+        let prefix = data.prefix(limit)
         var preview = String(decoding: prefix, as: UTF8.self)
-        if data.count > 2_048 {
+        if data.count > limit {
             preview += "\n... truncated ..."
         }
         return preview.trimmingCharacters(in: .whitespacesAndNewlines)

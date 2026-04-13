@@ -32,7 +32,7 @@ final class AppState: ObservableObject {
     let sparkleUpdater: SparkleUpdater
 
     private let shortcutSessionController = ShortcutSessionController()
-    private var permissionTimer: Timer?
+    private var permissionObservers: [NSObjectProtocol] = []
     private var phaseCancellable: AnyCancellable?
 
     init() {
@@ -346,12 +346,37 @@ final class AppState: ObservableObject {
     }
 
     private func startPermissionMonitoring() {
-        permissionTimer?.invalidate()
-        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        permissionObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        permissionObservers.removeAll()
+
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        let appCenter = NotificationCenter.default
+
+        let activationObserver = workspaceCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshPermissionSnapshot()
             }
         }
+
+        let becomeActiveObserver = appCenter.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshPermissionSnapshot()
+            }
+        }
+
+        permissionObservers = [activationObserver, becomeActiveObserver]
+    }
+
+    deinit {
+        permissionObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     private func openSystemSettingsPane(_ rawURL: String) {

@@ -20,7 +20,7 @@ struct RunLogView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    VStack(spacing: 12) {
+                    LazyVStack(spacing: 12) {
                         ForEach(appState.historyStore.items) { item in
                             RunLogEntry(item: item)
                         }

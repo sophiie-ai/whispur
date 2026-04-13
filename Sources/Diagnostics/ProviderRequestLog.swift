@@ -31,7 +31,7 @@ final class ProviderRequestLog: ObservableObject {
     private let maxItems: Int
     private let fileURL: URL
 
-    init(maxItems: Int = 100) {
+    init(maxItems: Int = 25) {
         self.maxItems = maxItems
 
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
