@@ -23,6 +23,8 @@ enum Prompts {
         11. If the input is empty, silence, non-speech sounds, environmental noise labels, \
            or otherwise not meaningful human speech, respond with a completely empty output. \
            Never acknowledge, ask clarifying questions, or add commentary — just return nothing.
+        12. Strip any bracketed non-speech annotations ("[clicking]", "(music)", "<typing>", etc.) \
+           from the output. If the entire input is only such annotations, return an empty output.
         """
 
     /// Default context inference prompt (for deep context mode).

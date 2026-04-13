@@ -336,10 +336,29 @@ final class DictationPipeline: ObservableObject {
     }
 
     private func normalizedTranscriptText(from text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stripped = Self.stripNonSpeechAnnotations(text)
+        let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard trimmed.uppercased() != "EMPTY" else { return nil }
         return trimmed
+    }
+
+    /// Strip bracketed non-speech annotations that STT engines emit on silence or sound.
+    /// Examples: "[clicking]", "(music playing)", "<noise>", "[typing] hi" -> "hi"
+    static func stripNonSpeechAnnotations(_ text: String) -> String {
+        let patterns = [
+            #"\[[^\]]*\]"#,   // [anything]
+            #"\([^\)]*\)"#,   // (anything)
+            #"\<[^\>]*\>"#,   // <anything>
+            #"\{[^\}]*\}"#    // {anything}
+        ]
+        var result = text
+        for pattern in patterns {
+            result = result.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        // Collapse repeated whitespace
+        result = result.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return result
     }
 
     private func playSound(_ sound: NSSound?) {
