@@ -1,0 +1,15 @@
+# Default owners for everything.
+* @ubinatus
+
+# Release + supply-chain critical paths — always require owner review.
+/.github/ @ubinatus
+/.github/workflows/ @ubinatus
+/scripts/ @ubinatus
+/Sources/Security/ @ubinatus
+/Sources/App/SparkleUpdater.swift @ubinatus
+/Whispur.entitlements @ubinatus
+/Info.plist @ubinatus
+/project.yml @ubinatus
+/release-please-config.json @ubinatus
+/.release-please-manifest.json @ubinatus
+/public/appcast.xml @ubinatus
