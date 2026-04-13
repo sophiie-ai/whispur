@@ -1,5 +1,6 @@
 {
   "outputDirectory": "public",
+  "buildCommand": "cp CHANGELOG.md public/CHANGELOG.md",
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [

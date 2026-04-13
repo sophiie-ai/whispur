@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Changelog — Whispur</title>
+  <meta name="description" content="Every release of Whispur, with links to the tagged builds on GitHub." />
+  <meta name="theme-color" content="#0b2433" />
+  <link rel="canonical" href="https://whispur.app/changelog" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta property="og:title" content="Changelog — Whispur" />
+  <meta property="og:description" content="Every release of Whispur." />
+  <meta property="og:url" content="https://whispur.app/changelog" />
+  <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <style>
+    :root { color-scheme: dark light; --bg: #07141c; --fg: #e8f6fa; --fg-muted: #9bb5c0; --accent: #2ed1c3; --accent-2: #5fb8ff; --border: rgba(255,255,255,.08); --card: rgba(255,255,255,.04); }
+    @media (prefers-color-scheme: light) { :root { --bg:#f6fbfc; --fg:#0a1c24; --fg-muted:#4a6370; --border: rgba(10,28,36,.1); --card: rgba(10,28,36,.02); } }
+    * { box-sizing: border-box; }
+    body { margin:0; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif; line-height: 1.65; }
+    .container { max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+    a { color: var(--accent); }
+    h1 { font-size: 2.5rem; letter-spacing: -.02em; margin: 0 0 .5rem; }
+    .muted { color: var(--fg-muted); }
+    .eyebrow { display:inline-block; padding: .35rem .75rem; border-radius: 999px; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; background: rgba(46,209,195,.12); color: var(--accent); border: 1px solid rgba(46,209,195,.25); margin-bottom: 1rem; }
+
+    .markdown h2 {
+      margin: 2.5rem 0 .5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 1.5rem;
+      letter-spacing: -.01em;
+    }
+    .markdown h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 1rem; }
+    .markdown h2 a { text-decoration: none; color: inherit; background: linear-gradient(135deg, #2ed1c3, #5fb8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .markdown h3 {
+      margin: 1.25rem 0 .5rem;
+      font-size: .85rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+      font-weight: 600;
+    }
+    .markdown ul { padding-left: 1.2rem; margin: .5rem 0 1rem; }
+    .markdown li { margin: .25rem 0; color: var(--fg); }
+    .markdown li::marker { color: var(--accent); }
+    .markdown code { background: var(--card); border: 1px solid var(--border); padding: .1rem .4rem; border-radius: 6px; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+    .markdown p { margin: .5rem 0; }
+    .markdown a { color: var(--accent); }
+
+    .header-link { display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; color: inherit; margin-bottom: 2rem; }
+    .header-link img { border-radius: 6px; }
+
+    .loading, .error { color: var(--fg-muted); font-size: .95rem; padding: 2rem 0; text-align: center; }
+    .error { color: #ff7a7a; }
+
+    .cta {
+      margin-top: 3rem;
+      padding: 1.25rem 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08));
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .cta a {
+      display:inline-block;
+      padding: .5rem 1rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #2ed1c3, #5fb8ff);
+      color: #041018;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: .95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="header-link">
+      <img src="/icon.png" alt="" width="28" height="28" />
+      <strong>Whispur</strong>
+    </a>
+
+    <span class="eyebrow">Changelog</span>
+    <h1>What's new in Whispur</h1>
+    <p class="muted">Every tagged release, with the commits that shipped in it. Pulled straight from the repo.</p>
+
+    <article id="changelog" class="markdown" aria-busy="true">
+      <p class="loading">Loading changelog…</p>
+    </article>
+
+    <div class="cta">
+      <span class="muted">Want to see future entries as they ship?</span>
+      <a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">Watch releases on GitHub</a>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha256-XrBGgP2C6oWAN1qv9ry+m9aUH9kPRoFRUcVBmsIrlSk=" crossorigin="anonymous"></script>
+  <script>
+    (async function() {
+      const target = document.getElementById("changelog");
+      try {
+        const res = await fetch("/CHANGELOG.md", { cache: "no-cache" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const md = await res.text();
+        // Strip the top-level "# Changelog" heading so the page heading isn't duplicated
+        const body = md.replace(/^#\s+Changelog\s*\n+/i, "");
+        target.innerHTML = marked.parse(body, { gfm: true, breaks: false });
+        target.setAttribute("aria-busy", "false");
+        // Make links open in new tab
+        target.querySelectorAll("a[href^='http']").forEach(a => {
+          a.setAttribute("target", "_blank");
+          a.setAttribute("rel", "noopener");
+        });
+      } catch (err) {
+        target.innerHTML = '<p class="error">Could not load the changelog. <a href="https://github.com/sophiie-ai/whispur/blob/main/CHANGELOG.md" rel="noopener">Read it on GitHub</a>.</p>';
+        target.setAttribute("aria-busy", "false");
+      }
+    })();
+  </script>
+</body>
+</html>
