@@ -193,13 +193,27 @@ final class DictationPipeline: ObservableObject {
             beginRecording()
         case .notDetermined:
             phase = .requestingMicrophonePermission
-            let granted = await AudioRecorder.requestMicrophoneAccess()
+            // The system permission dialog can linger indefinitely if the user
+            // ignores it. Cap the wait so the pipeline can recover instead of
+            // hanging forever in `.requestingMicrophonePermission`.
+            let granted = await withTaskGroup(of: Bool?.self, returning: Bool?.self) { group in
+                group.addTask { await AudioRecorder.requestMicrophoneAccess() }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(30))
+                    return nil
+                }
+                defer { group.cancelAll() }
+                return await group.next() ?? nil
+            }
             guard !Task.isCancelled else { return }
 
-            if granted {
+            switch granted {
+            case .some(true):
                 beginRecording()
-            } else {
+            case .some(false):
                 presentError("Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone.")
+            case .none:
+                presentError("Microphone permission request timed out. Try again or grant access in System Settings > Privacy & Security > Microphone.")
             }
         case .restricted, .denied:
             presentError("Microphone access is unavailable. Enable it in System Settings > Privacy & Security > Microphone.")
