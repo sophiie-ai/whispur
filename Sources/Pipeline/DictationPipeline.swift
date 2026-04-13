@@ -8,10 +8,20 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "Pipeline
 
 @MainActor
 final class DictationPipeline: ObservableObject {
+    static let waveformSampleCount = 28
+
     @Published private(set) var phase: PipelinePhase = .idle
     @Published private(set) var audioLevel: Float = 0
+    @Published private(set) var audioSamples: [Float] = Array(repeating: 0, count: DictationPipeline.waveformSampleCount)
     @Published private(set) var lastResult: PipelineResult?
     @Published private(set) var activeTriggerMode: RecordingTriggerMode = .hold
+    /// True when we haven't heard audible input for ~1.3s while recording.
+    /// Use this to prompt the user to check their mic/input device.
+    @Published private(set) var isHearingSilence: Bool = false
+
+    private var silentSampleCount: Int = 0
+    private static let silenceLevelThreshold: Float = 0.05
+    private static let silenceTickThreshold: Int = 60  // ~1.3s at ~47Hz
 
     private let recorder: AudioRecorder
     private let registry: ProviderRegistry
@@ -138,6 +148,7 @@ final class DictationPipeline: ObservableObject {
         audioLevelCancellable?.cancel()
         audioLevelCancellable = nil
         audioLevel = 0
+        resetAudioSamples()
 
         recorder.onRecordingReady = nil
 
@@ -171,6 +182,7 @@ final class DictationPipeline: ObservableObject {
         recorder.cleanup()
 
         audioLevel = 0
+        resetAudioSamples()
         activeTriggerMode = .hold
         phase = .idle
     }
@@ -246,10 +258,13 @@ final class DictationPipeline: ObservableObject {
             return
         }
 
+        resetAudioSamples()
         audioLevelCancellable = recorder.$audioLevel
             .receive(on: RunLoop.main)
             .sink { [weak self] level in
-                self?.audioLevel = level
+                guard let self else { return }
+                self.audioLevel = level
+                self.pushAudioSample(level)
             }
 
         logger.info("Recording session started")
@@ -384,6 +399,38 @@ final class DictationPipeline: ObservableObject {
     private func cancelResetTask() {
         resetTask?.cancel()
         resetTask = nil
+    }
+
+    private func resetAudioSamples() {
+        audioSamples = Array(repeating: 0, count: Self.waveformSampleCount)
+        silentSampleCount = 0
+        isHearingSilence = false
+    }
+
+    /// Append one sample to the rolling waveform buffer, dropping the oldest.
+    /// Log-scales the input so quiet speech still moves the bars.
+    private func pushAudioSample(_ level: Float) {
+        let clamped = max(0, min(1, level))
+        // log10(1 + 9x) maps [0,1] → [0,1] with a gentle low-end boost.
+        let shaped = log10(1 + 9 * clamped)
+        var samples = audioSamples
+        samples.removeFirst()
+        samples.append(shaped)
+        audioSamples = samples
+
+        if case .recording = phase {
+            if clamped < Self.silenceLevelThreshold {
+                silentSampleCount += 1
+                if silentSampleCount >= Self.silenceTickThreshold && !isHearingSilence {
+                    isHearingSilence = true
+                }
+            } else {
+                silentSampleCount = 0
+                if isHearingSilence {
+                    isHearingSilence = false
+                }
+            }
+        }
     }
 }
 

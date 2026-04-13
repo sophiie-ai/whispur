@@ -67,27 +67,32 @@ struct RecordingOverlay: View {
     }
 
     private var recordingRow: some View {
-        HStack(spacing: 12) {
+        let silence = pipeline.isHearingSilence
+        return HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.red.opacity(0.22))
+                    .fill((silence ? Color.orange : Color.red).opacity(0.22))
                     .frame(width: 26, height: 26)
                     .scaleEffect(pipeline.audioLevel > 0.04 ? 1.16 : 0.94)
                     .animation(.easeInOut(duration: 0.14), value: pipeline.audioLevel)
 
                 Circle()
-                    .fill(.red)
+                    .fill(silence ? Color.orange : Color.red)
                     .frame(width: 10, height: 10)
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(pipeline.activeTriggerMode == .hold ? "Listening" : "Recording")
+                Text(silence
+                    ? "Not Hearing You"
+                    : (pipeline.activeTriggerMode == .hold ? "Listening" : "Recording"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
 
-                Text(pipeline.activeTriggerMode == .hold
-                    ? "Release to transcribe"
-                    : "Use Stop or your shortcut to finish")
+                Text(silence
+                    ? "Check your mic or input device"
+                    : (pipeline.activeTriggerMode == .hold
+                        ? "Release to transcribe"
+                        : "Use Stop or your shortcut to finish"))
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(2)
@@ -95,7 +100,11 @@ struct RecordingOverlay: View {
 
             Spacer(minLength: 8)
 
-            CompactWaveformView(level: pipeline.audioLevel)
+            CompactWaveformView(samples: pipeline.audioSamples)
+                .opacity(silence ? 0.35 : 1)
+                .animation(.easeInOut(duration: 0.2), value: silence)
+
+            EscapeHintChip()
 
             if pipeline.activeTriggerMode == .toggle {
                 Button(action: onStop) {
@@ -162,13 +171,11 @@ struct RecordingOverlay: View {
 }
 
 private struct CompactWaveformView: View {
-    let level: Float
-
-    private let multipliers: [CGFloat] = [0.3, 0.5, 0.74, 0.95, 1.0, 0.95, 0.74, 0.5, 0.3]
+    let samples: [Float]
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(multipliers.enumerated()), id: \.offset) { _, multiplier in
+        HStack(spacing: 2) {
+            ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
                 Capsule()
                     .fill(
                         LinearGradient(
@@ -177,16 +184,39 @@ private struct CompactWaveformView: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 4, height: height(multiplier: multiplier))
+                    .frame(width: 2, height: height(for: sample))
             }
         }
         .frame(height: 26)
-        .animation(.easeOut(duration: 0.08), value: level)
+        .animation(.easeOut(duration: 0.08), value: samples)
     }
 
-    private func height(multiplier: CGFloat) -> CGFloat {
-        let normalized = max(0.08, CGFloat(level))
-        return 5 + (normalized * 22 * multiplier)
+    private func height(for sample: Float) -> CGFloat {
+        let normalized = max(0.06, CGFloat(sample))
+        return 3 + normalized * 22
+    }
+}
+
+private struct EscapeHintChip: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("esc")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.white.opacity(0.14))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
+                )
+            Text("cancel")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+        }
+        .foregroundStyle(.white.opacity(0.6))
+        .accessibilityLabel("Press Escape to cancel")
     }
 }
 

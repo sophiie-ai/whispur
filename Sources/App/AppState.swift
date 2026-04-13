@@ -198,13 +198,11 @@ final class AppState: ObservableObject {
         }
 
         pipeline.startRecording(triggerMode: triggerMode)
-        hotkeyManager.cancelWatchEnabled = true
     }
 
     func stopDictation() {
         shortcutSessionController.reset()
         pipeline.stopAndProcess()
-        hotkeyManager.cancelWatchEnabled = false
     }
 
     func toggleManualDictation() {
@@ -315,7 +313,6 @@ final class AppState: ObservableObject {
         guard !pipeline.canStartRecording else { return }
         shortcutSessionController.reset()
         pipeline.cancel()
-        hotkeyManager.cancelWatchEnabled = false
     }
 
     private func observePipeline() {
@@ -327,8 +324,9 @@ final class AppState: ObservableObject {
                 switch phase {
                 case .idle, .done, .error:
                     self.shortcutSessionController.reset()
+                    self.hotkeyManager.cancelWatchEnabled = false
                 default:
-                    break
+                    self.hotkeyManager.cancelWatchEnabled = true
                 }
 
                 if case .requestingMicrophonePermission = phase {

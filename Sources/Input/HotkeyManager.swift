@@ -28,6 +28,12 @@ final class HotkeyManager {
     nonisolated(unsafe) var toggleBinding: ShortcutBinding? = nil
     nonisolated(unsafe) var cancelWatchEnabled = false
 
+    /// Delay before a bare-modifier hold binding (e.g. Fn alone) activates.
+    /// Short taps within this window are ignored so macOS can handle its own
+    /// Fn behaviors (emoji picker, dictation) without racing our overlay.
+    /// Chorded bindings with an explicit keyCode activate immediately.
+    nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.18
+
     @Published private(set) var isAccessibilityGranted = false
     @Published private(set) var isMonitoring = false
     @Published private(set) var eventCount = 0
@@ -39,12 +45,14 @@ final class HotkeyManager {
         var pressedModifierKeyCodes: Set<UInt16> = []
         var pressedKeyCodes: Set<UInt16> = []
         var holdActive = false
+        var holdArming = false
         var toggleActive = false
     }
     private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
 
     private nonisolated(unsafe) var eventTap: CFMachPort?
     private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
+    private nonisolated(unsafe) var holdArmTimer: DispatchWorkItem?
     private var localFlagsMonitor: Any?
     private var localKeyDownMonitor: Any?
     private var localKeyUpMonitor: Any?
@@ -81,10 +89,13 @@ final class HotkeyManager {
         accessibilityTimer = nil
         teardownEventTap()
         teardownLocalMonitors()
+        holdArmTimer?.cancel()
+        holdArmTimer = nil
         stateLock.withLock { state in
             state.pressedModifierKeyCodes.removeAll()
             state.pressedKeyCodes.removeAll()
             state.holdActive = false
+            state.holdArming = false
             state.toggleActive = false
         }
         isMonitoring = false
@@ -280,18 +291,41 @@ final class HotkeyManager {
 
     /// Check all bindings against current key state and fire events.
     private nonisolated func evaluateBindings() {
-        let transitions = stateLock.withLock { state -> [Event] in
-            let holdNowActive = Self.bindingIsActive(holdBinding, state: state)
+        let useThreshold = holdBinding.keyCode == nil && holdArmThreshold > 0
+
+        enum HoldAction { case none, arm, cancelArm }
+
+        let (transitions, holdAction) = stateLock.withLock { state -> ([Event], HoldAction) in
+            let holdNowMatches = Self.bindingIsActive(holdBinding, state: state)
             let toggleNowActive = toggleBinding.map { Self.bindingIsActive($0, state: state) } ?? false
 
             var events: [Event] = []
+            var action: HoldAction = .none
 
-            if holdNowActive && !state.holdActive {
-                state.holdActive = true
-                events.append(.holdActivated)
-            } else if !holdNowActive && state.holdActive {
-                state.holdActive = false
-                events.append(.holdDeactivated)
+            if useThreshold {
+                if holdNowMatches {
+                    if !state.holdActive && !state.holdArming {
+                        state.holdArming = true
+                        action = .arm
+                    }
+                } else {
+                    if state.holdArming {
+                        state.holdArming = false
+                        action = .cancelArm
+                    }
+                    if state.holdActive {
+                        state.holdActive = false
+                        events.append(.holdDeactivated)
+                    }
+                }
+            } else {
+                if holdNowMatches && !state.holdActive {
+                    state.holdActive = true
+                    events.append(.holdActivated)
+                } else if !holdNowMatches && state.holdActive {
+                    state.holdActive = false
+                    events.append(.holdDeactivated)
+                }
             }
 
             if toggleNowActive && !state.toggleActive {
@@ -303,7 +337,17 @@ final class HotkeyManager {
                 events.append(.toggleDeactivated)
             }
 
-            return events
+            return (events, action)
+        }
+
+        switch holdAction {
+        case .arm:
+            scheduleHoldArmTimer()
+        case .cancelArm:
+            holdArmTimer?.cancel()
+            holdArmTimer = nil
+        case .none:
+            break
         }
 
         for event in transitions {
@@ -314,6 +358,36 @@ final class HotkeyManager {
             }
             onEvent?(event)
         }
+    }
+
+    /// Schedule a deferred activation for bare-modifier holds so brief taps
+    /// don't trigger recording (and don't conflict with macOS Fn behaviors).
+    private nonisolated func scheduleHoldArmTimer() {
+        holdArmTimer?.cancel()
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.holdArmTimer = nil
+
+            let shouldFire = self.stateLock.withLock { state -> Bool in
+                guard state.holdArming else { return false }
+                state.holdArming = false
+                // Re-check that the binding is still held when the timer fires.
+                guard Self.bindingIsActive(self.holdBinding, state: state) else {
+                    return false
+                }
+                state.holdActive = true
+                return true
+            }
+
+            if shouldFire {
+                logger.info("Hold activated (after threshold)")
+                self.onEvent?(.holdActivated)
+            }
+        }
+
+        holdArmTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + holdArmThreshold, execute: work)
     }
 
     /// Check if a binding matches the supplied pressed-key snapshot. Pure;
