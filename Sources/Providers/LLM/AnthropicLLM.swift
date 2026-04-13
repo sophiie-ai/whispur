@@ -21,8 +21,12 @@ struct AnthropicLLM: LLMProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
+    private static let endpointURL = URL(string: "https://api.anthropic.com/v1/messages")
+
     func complete(request: LLMRequest) async throws -> LLMResponse {
-        let url = URL(string: "https://api.anthropic.com/v1/messages")!
+        guard let url = Self.endpointURL else {
+            throw LLMError.apiError(provider: .anthropic, message: "Invalid endpoint URL.", statusCode: nil)
+        }
 
         let payload: [String: Any] = [
             "model": model,
