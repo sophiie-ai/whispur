@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/sophiie-ai/whispur/compare/v0.8.1...v0.9.0) (2026-04-14)
+
+
+### Features
+
+* add light-cleanup guardrail and uncertainty clause to default prompt ([42ba2f9](https://github.com/sophiie-ai/whispur/commit/42ba2f92a79452e8c068cda18ce92bccc55a691a))
+* wire demo video + screenshots into landing page and README ([e7c65d6](https://github.com/sophiie-ai/whispur/commit/e7c65d641c9957fc5c28c57babd2042882f81033))
+
+
+### Performance
+
+* compress demo.gif 5.9MB → 1.7MB (72% smaller) ([4663cd2](https://github.com/sophiie-ai/whispur/commit/4663cd247c8c166ed545d61279015605dbd04935))
+
 ## [0.8.1](https://github.com/sophiie-ai/whispur/compare/v0.8.0...v0.8.1) (2026-04-14)
 
 
