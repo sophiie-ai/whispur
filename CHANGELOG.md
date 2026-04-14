@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/sophiie-ai/whispur/compare/v0.8.0...v0.8.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* isolate WindowUtilities to MainActor ([3881fd5](https://github.com/sophiie-ai/whispur/commit/3881fd5ddf07a44f436f8008069e7b97ee4edf54))
+
 ## [0.8.0](https://github.com/sophiie-ai/whispur/compare/v0.7.0...v0.8.0) (2026-04-14)
 
 
