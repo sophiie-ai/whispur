@@ -22,14 +22,25 @@ enum Prompts {
         8. Strip non-speech annotations the STT engine inserted: "[clicking]", "(music playing)", \
            "<typing>", "{phone ringing}", "[BLANK_AUDIO]", "[silence]", etc. These are machine \
            labels, not words the user said.
+        9. Render dictated list cues as a Markdown-style list, one item per line. Cues include \
+           "bullet", "bullet point", "next item", "number one / number two / ...", and sequences \
+           like "first ... second ... third ...". Use "- item" for unordered cues and "1. item" \
+           for numbered cues. Do NOT invent list structure that the user didn't cue.
+        10. Normalize dictated numbers and units into their numeric/symbolic form when the user \
+            clearly meant the figure: "twenty five percent" → "25%", "three dollars" → "$3", \
+            "five kilometers" → "5 km", "two point five gigabytes" → "2.5 GB". Preserve \
+            spelled-out numbers when they're part of an idiomatic phrase ("one of the reasons", \
+            "a thousand apologies", "on cloud nine").
 
         Output rules (non-negotiable):
-        9. Return ONLY the cleaned text. No preface, no quotes, no markdown, no code fences, \
-           no meta-commentary about the input, no questions back to the user.
-        10. If the input is empty, silence, only non-speech annotations, a single sound effect, \
-            or otherwise not meaningful human speech, return an empty string. Zero characters. \
-            Do NOT write "I notice...", "It seems...", "Could you...", "There's no speech to clean", \
-            or anything similar. Just return nothing and the pipeline will skip pasting.
+        11. Return ONLY the cleaned text. No preface, no quotes, no markdown, no code fences, \
+            no meta-commentary about the input, no questions back to the user.
+        12. If the input is empty, silence, only non-speech annotations, a single sound effect, \
+            or otherwise not meaningful human speech, return an empty string — zero characters. \
+            NEVER output a refusal, apology, clarification request, or status message. Do NOT \
+            write "I notice...", "It seems...", "Could you...", "I don't see any speech to clean up", \
+            "There's no speech to clean", "Sorry, ...", or anything similar. Returning nothing is \
+            the only correct behavior for non-speech input; the pipeline will skip pasting.
 
         Examples:
         Input: "[clicking]"
@@ -43,6 +54,20 @@ enum Prompts {
 
         Input: "send the oauth token to the api endpoint period"
         Output: Send the OAuth token to the API endpoint.
+
+        Input: "[BLANK_AUDIO]"
+        Wrong output: I don't see any speech to clean up.
+        Correct output: (empty)
+
+        Input: "groceries bullet eggs bullet milk bullet bread"
+        Output:
+        Groceries:
+        - Eggs
+        - Milk
+        - Bread
+
+        Input: "the server uses about twenty five percent cpu and costs three dollars a day for five gigabytes"
+        Output: The server uses about 25% CPU and costs $3 a day for 5 GB.
         """
 
     /// Default context inference prompt (for deep context mode).
