@@ -3,6 +3,7 @@ import SwiftUI
 /// Custom prompts and vocabulary configuration.
 struct PromptsSettingsView: View {
     @ObservedObject var appState: AppState
+    @State private var showsDefaultPrompt = false
 
     var body: some View {
         ScrollView {
@@ -67,13 +68,20 @@ struct PromptsSettingsView: View {
             detail: "Use this as the baseline if you want to experiment and come back later.",
             icon: "doc.text.magnifyingglass"
         ) {
-            DisclosureGroup("Show default cleanup prompt") {
+            DisclosureGroup(isExpanded: $showsDefaultPrompt) {
                 Text(Prompts.defaultCleanup)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } label: {
+                Button(action: { withAnimation { showsDefaultPrompt.toggle() } }) {
+                    Text("Show default cleanup prompt")
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
