@@ -4,9 +4,19 @@ Whispur is a macOS menu-bar dictation app that turns speech into polished text a
 
 Hold a shortcut to talk, or use an optional toggle shortcut for hands-free capture. Whispur records, transcribes, optionally cleans up the transcript with an LLM, and pastes the result where your cursor is.
 
+![Whispur demo — hold a shortcut, speak, and paste into any app](docs/screenshots/demo.gif)
+
+> [whispur.app](https://whispur.app) · [Download DMG](https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg) · [Changelog](https://whispur.app/changelog)
+
 ## Screenshots
 
-Screenshots will live in [`docs/screenshots`](docs/screenshots/). A placeholder capture script is available at [`scripts/generate-screenshots.sh`](scripts/generate-screenshots.sh) until the final product shots are added.
+| Menu bar | Recording overlay |
+|---|---|
+| ![Menu bar dropdown](docs/screenshots/hero-menubar.png) | ![Recording overlay with waveform](docs/screenshots/recording-overlay.png) |
+
+| Setup checklist | Provider settings |
+|---|---|
+| ![Setup tab](docs/screenshots/settings-setup.png) | ![Providers tab](docs/screenshots/settings-providers.png) |
 
 ## Features
 

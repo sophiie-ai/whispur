@@ -230,9 +230,16 @@
       </p>
 
       <div style="margin-top: 4rem;">
-        <div style="margin: 0 auto; max-width: 960px; aspect-ratio: 16/10; border-radius: 20px; overflow: hidden; border: 1px solid var(--border); background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08)); display: grid; place-items: center; position: relative;">
-          <img src="/icon-512.png" alt="Whispur app icon" width="180" height="180" style="border-radius: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.4); opacity: .95;" />
-          <div style="position:absolute; bottom:1.25rem; left:0; right:0; text-align:center;" class="muted">Screenshots coming soon</div>
+        <div style="margin: 0 auto; max-width: 960px; border-radius: 20px; overflow: hidden; border: 1px solid var(--border); background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08)); box-shadow: 0 30px 80px rgba(0,0,0,.45);">
+          <video
+            autoplay muted loop playsinline preload="metadata"
+            poster="/media/demo-poster.jpg"
+            aria-label="Whispur demo — hold a shortcut, speak, and see the text paste into a note"
+            style="display:block; width:100%; height:auto;"
+          >
+            <source src="/media/demo.mp4" type="video/mp4" />
+            <img src="/media/demo.gif" alt="Whispur demo showing voice dictation pasting into a note" style="width:100%; height:auto;" />
+          </video>
         </div>
       </div>
     </section>
@@ -295,6 +302,39 @@
             <li><strong style="color:var(--fg)">Custom prompts</strong> — write your own</li>
           </ul>
         </article>
+      </div>
+    </section>
+
+    <section class="container" style="padding: 4rem 1.5rem;">
+      <div style="text-align:center; margin-bottom: 3rem;">
+        <span class="eyebrow">A look inside</span>
+        <h2 style="font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -.02em; margin: .75rem 0 0;">Designed for your menu bar.</h2>
+      </div>
+      <div class="grid-2">
+        <figure style="margin:0;">
+          <div style="border-radius: 16px; overflow:hidden; border:1px solid var(--border); background: var(--card);">
+            <img src="/screenshots/hero-menubar.png" alt="Whispur menu bar dropdown showing recording state and last transcript" loading="lazy" style="display:block; width:100%; height:auto;" />
+          </div>
+          <figcaption class="muted" style="font-size:.9rem; margin-top:.75rem; text-align:center;">Menu bar status with last transcript and quick actions.</figcaption>
+        </figure>
+        <figure style="margin:0;">
+          <div style="border-radius: 16px; overflow:hidden; border:1px solid var(--border); background: var(--card); aspect-ratio: 16/10; display:flex; align-items:center; justify-content:center;">
+            <img src="/screenshots/recording-overlay.png" alt="Compact recording overlay with waveform and trigger mode" loading="lazy" style="display:block; width:92%; height:auto;" />
+          </div>
+          <figcaption class="muted" style="font-size:.9rem; margin-top:.75rem; text-align:center;">Compact top-center recording surface with live waveform.</figcaption>
+        </figure>
+        <figure style="margin:0;">
+          <div style="border-radius: 16px; overflow:hidden; border:1px solid var(--border); background: var(--card);">
+            <img src="/screenshots/settings-setup.png" alt="Whispur Setup tab with permission checklist" loading="lazy" style="display:block; width:100%; height:auto;" />
+          </div>
+          <figcaption class="muted" style="font-size:.9rem; margin-top:.75rem; text-align:center;">Setup checklist walks you through permissions and provider config.</figcaption>
+        </figure>
+        <figure style="margin:0;">
+          <div style="border-radius: 16px; overflow:hidden; border:1px solid var(--border); background: var(--card);">
+            <img src="/screenshots/settings-providers.png" alt="Provider settings with speech and cleanup provider pickers" loading="lazy" style="display:block; width:100%; height:auto;" />
+          </div>
+          <figcaption class="muted" style="font-size:.9rem; margin-top:.75rem; text-align:center;">Swap speech or cleanup provider in a click — keys live in Keychain.</figcaption>
+        </figure>
       </div>
     </section>
 
