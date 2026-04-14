@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/sophiie-ai/whispur/compare/v0.7.0...v0.8.0) (2026-04-14)
+
+
+### Features
+
+* sharpen default cleanup prompt ([353a9e5](https://github.com/sophiie-ai/whispur/commit/353a9e52c665e3cf70bc7f2b05a12b73794e0b8c))
+* show Dock icon while a Whispur window is open ([e81ac2b](https://github.com/sophiie-ai/whispur/commit/e81ac2b7acefd73df0ffdc5e58af5c392154d99b))
+
+
+### Bug Fixes
+
+* expand default-prompt disclosure hit target ([aa0a3bf](https://github.com/sophiie-ai/whispur/commit/aa0a3bfb933786d2335c284f75aedf7b2c325113))
+
 ## [0.7.0](https://github.com/sophiie-ai/whispur/compare/v0.6.2...v0.7.0) (2026-04-14)
 
 
