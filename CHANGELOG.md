@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/sophiie-ai/whispur/compare/v0.6.0...v0.6.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* make settings sidebar rows fully clickable ([e2a2373](https://github.com/sophiie-ai/whispur/commit/e2a2373b71c25418899a86c8f440a0a5415ccbd6))
+
 ## [0.6.0](https://github.com/sophiie-ai/whispur/compare/v0.5.2...v0.6.0) (2026-04-14)
 
 
