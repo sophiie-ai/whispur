@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/sophiie-ai/whispur/compare/v0.5.2...v0.6.0) (2026-04-14)
+
+
+### Features
+
+* add Fn hold threshold, ESC cancel, waveform + silence hints ([4a263ef](https://github.com/sophiie-ai/whispur/commit/4a263ef091c911644b9984154adb8336dd3a76f4))
+* add Groq Whisper Large v3 as an STT provider ([55b0c6f](https://github.com/sophiie-ai/whispur/commit/55b0c6f89731e82d00d9fc18d7e349f4b9409887))
+
 ## [0.5.2](https://github.com/sophiie-ai/whispur/compare/v0.5.1...v0.5.2) (2026-04-13)
 
 
