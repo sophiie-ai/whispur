@@ -59,8 +59,8 @@ private struct MenuBarStatusIcon: View {
             if let tab = notification.object as? String {
                 selectedTabRaw = tab
             }
-            openWindow(id: "settings")
-            NSApp.activate(ignoringOtherApps: true)
+            WindowUtilities.dismissMenuBarPopover()
+            WindowUtilities.focusOrOpenWindow(id: .settings, using: openWindow)
         }
     }
 }

@@ -244,6 +244,7 @@ struct MenuBarView: View {
             Button("Settings") {
                 openSettings(tab: .general)
             }
+            .keyboardShortcut(",", modifiers: .command)
 
             Button("Check for Updates…") {
                 appState.sparkleUpdater.checkForUpdates()
@@ -292,13 +293,13 @@ struct MenuBarView: View {
 
     private func openSettings(tab: SettingsTab) {
         selectedTabRaw = tab.rawValue
-        openWindow(id: "settings")
-        NSApp.activate(ignoringOtherApps: true)
+        WindowUtilities.dismissMenuBarPopover()
+        WindowUtilities.focusOrOpenWindow(id: .settings, using: openWindow)
     }
 
     private func openAbout() {
-        openWindow(id: "about")
-        NSApp.activate(ignoringOtherApps: true)
+        WindowUtilities.dismissMenuBarPopover()
+        WindowUtilities.focusOrOpenWindow(id: .about, using: openWindow)
     }
 
     private var primaryActionTitle: String {
