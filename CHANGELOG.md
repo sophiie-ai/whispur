@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/sophiie-ai/whispur/compare/v0.6.1...v0.6.2) (2026-04-14)
+
+
+### Bug Fixes
+
+* dismiss menu bar popover and focus window on settings open ([5bb43bb](https://github.com/sophiie-ai/whispur/commit/5bb43bbc914a2a2787ecb2b1b0616474177e11da))
+
 ## [0.6.1](https://github.com/sophiie-ai/whispur/compare/v0.6.0...v0.6.1) (2026-04-14)
 
 
