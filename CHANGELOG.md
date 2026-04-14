@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/sophiie-ai/whispur/compare/v0.6.2...v0.7.0) (2026-04-14)
+
+
+### Features
+
+* let users pick up to 3 preferred STT languages ([e07dd40](https://github.com/sophiie-ai/whispur/commit/e07dd40939986e3792b64ccf63db214e8169c11b))
+* use Bedrock API key for AWS auth and wire up Bedrock LLM ([70f3b49](https://github.com/sophiie-ai/whispur/commit/70f3b492f719faa80714ae057aa2429808af9290))
+
 ## [0.6.2](https://github.com/sophiie-ai/whispur/compare/v0.6.1...v0.6.2) (2026-04-14)
 
 
