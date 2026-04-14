@@ -3,6 +3,7 @@ import Foundation
 /// Identifies available speech-to-text providers.
 enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     case openai
+    case groqWhisper
     case deepgram
     case elevenlabs
     case bedrock
@@ -13,6 +14,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .openai: "OpenAI Whisper"
+        case .groqWhisper: "Groq Whisper Large v3"
         case .deepgram: "Deepgram"
         case .elevenlabs: "ElevenLabs"
         case .bedrock: "AWS Bedrock"
@@ -27,6 +29,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     var keychainKeys: [KeychainKey] {
         switch self {
         case .openai: [.openaiAPIKey]
+        case .groqWhisper: [.groqAPIKey]
         case .deepgram: [.deepgramAPIKey]
         case .elevenlabs: [.elevenlabsAPIKey]
         case .bedrock: [.awsAccessKeyID, .awsSecretAccessKey]

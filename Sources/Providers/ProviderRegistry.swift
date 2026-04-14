@@ -23,6 +23,9 @@ final class ProviderRegistry {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
             return OpenAISTT(apiKey: key, httpClient: httpClient)
+        case .groqWhisper:
+            guard let key = keychain.get(.groqAPIKey) else { return nil }
+            return GroqWhisperSTT(apiKey: key, httpClient: httpClient)
         case .deepgram:
             guard let key = keychain.get(.deepgramAPIKey) else { return nil }
             return DeepgramSTT(apiKey: key, httpClient: httpClient)
