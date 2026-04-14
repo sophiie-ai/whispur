@@ -6,6 +6,7 @@ enum WhispurWindowID: String {
     case about
 }
 
+@MainActor
 enum WindowUtilities {
     /// Dismisses the SwiftUI `MenuBarExtra` popover window, if it's currently open.
     static func dismissMenuBarPopover() {
@@ -29,7 +30,7 @@ enum WindowUtilities {
 
         openWindow(id: id.rawValue)
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             if let window = findWindow(id: id) {
                 DockIconController.shared.register(window)
                 window.makeKeyAndOrderFront(nil)
