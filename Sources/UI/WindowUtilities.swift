@@ -21,6 +21,7 @@ enum WindowUtilities {
         NSApp.activate(ignoringOtherApps: true)
 
         if let existing = findWindow(id: id) {
+            DockIconController.shared.register(existing)
             existing.makeKeyAndOrderFront(nil)
             existing.orderFrontRegardless()
             return
@@ -30,6 +31,7 @@ enum WindowUtilities {
 
         DispatchQueue.main.async {
             if let window = findWindow(id: id) {
+                DockIconController.shared.register(window)
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()
             }
