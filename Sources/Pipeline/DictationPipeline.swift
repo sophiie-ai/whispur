@@ -29,6 +29,7 @@ final class DictationPipeline: ObservableObject {
 
     var selectedSTT: STTProviderID = .apple
     var selectedLLM: LLMProviderID = .anthropic
+    var sttLanguages: [String] = []
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
@@ -293,7 +294,7 @@ final class DictationPipeline: ObservableObject {
                 throw STTError.missingAPIKey(provider: selectedSTT)
             }
 
-            let rawTranscript = try await sttProvider.transcribe(fileURL: wavURL)
+            let rawTranscript = try await sttProvider.transcribe(fileURL: wavURL, languages: sttLanguages)
             guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {
                 phase = .done("No speech detected.")
                 scheduleResetToIdle(after: .seconds(1))

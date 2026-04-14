@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple
+    @AppStorage("sttLanguages") var sttLanguagesRaw: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
@@ -338,9 +339,32 @@ final class AppState: ObservableObject {
     private func syncPipelineConfig() {
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
+        pipeline.sttLanguages = sttLanguagesList
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
+    }
+
+    var sttLanguagesList: [String] {
+        sttLanguagesRaw
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    func addSTTLanguage(_ code: String) {
+        var list = sttLanguagesList
+        guard !list.contains(code), list.count < 3 else { return }
+        list.append(code)
+        sttLanguagesRaw = list.joined(separator: ",")
+        syncPipelineConfig()
+    }
+
+    func removeSTTLanguage(_ code: String) {
+        var list = sttLanguagesList
+        list.removeAll { $0 == code }
+        sttLanguagesRaw = list.joined(separator: ",")
+        syncPipelineConfig()
     }
 
     private func startPermissionMonitoring() {

@@ -21,13 +21,42 @@ struct DeepgramSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
         var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
-        components.queryItems = [
+        var query: [URLQueryItem] = [
             URLQueryItem(name: "model", value: model),
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
         ]
+
+        // Deepgram language routing (nova-3):
+        //  - 1 language → send `language=<iso-639-1>` for best accuracy.
+        //  - 2–3 languages all within nova-3's multi set → `language=multi`
+        //    (handles code-switching within a single utterance).
+        //  - 2–3 languages with any outside the multi set → constrained
+        //    auto-detect via repeated `detect_language` params.
+        let isoCodes = languages.map { STTLanguage(code: $0, displayName: "").iso639_1 }
+        let languageSummary: String
+        switch isoCodes.count {
+        case 0:
+            languageSummary = "auto"
+        case 1:
+            query.append(URLQueryItem(name: "language", value: isoCodes[0]))
+            languageSummary = isoCodes[0]
+        default:
+            let allInMultiSet = isoCodes.allSatisfy { STTLanguageCatalog.deepgramNova3MultiISO.contains($0) }
+            if allInMultiSet {
+                query.append(URLQueryItem(name: "language", value: "multi"))
+                languageSummary = "multi (\(isoCodes.joined(separator: ",")))"
+            } else {
+                for code in isoCodes {
+                    query.append(URLQueryItem(name: "detect_language", value: code))
+                }
+                languageSummary = "detect(\(isoCodes.joined(separator: ",")))"
+            }
+        }
+
+        components.queryItems = query
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -48,6 +77,7 @@ struct DeepgramSTT: STTProvider {
                 model: \(model)
                 smart_format: true
                 punctuate: true
+                language: \(languageSummary)
                 """
             )
 

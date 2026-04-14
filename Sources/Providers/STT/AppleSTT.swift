@@ -6,7 +6,7 @@ import Speech
 struct AppleSTT: STTProvider {
     static let providerID: STTProviderID = .apple
 
-    func transcribe(fileURL: URL) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
         if SFSpeechRecognizer.authorizationStatus() != .authorized {
             let granted = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in
@@ -22,10 +22,19 @@ struct AppleSTT: STTProvider {
             }
         }
 
-        guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+        // SFSpeechRecognizer is locked to a single locale per instance. Use
+        // the user's primary language when set; fall back to system default.
+        let recognizer: SFSpeechRecognizer? = {
+            if let primary = languages.first {
+                return SFSpeechRecognizer(locale: Locale(identifier: primary))
+            }
+            return SFSpeechRecognizer()
+        }()
+
+        guard let recognizer, recognizer.isAvailable else {
             throw STTError.apiError(
                 provider: .apple,
-                message: "Speech recognizer is not available for the current locale.",
+                message: "Speech recognizer is not available for the selected language.",
                 statusCode: nil
             )
         }

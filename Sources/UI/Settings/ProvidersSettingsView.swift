@@ -8,9 +8,20 @@ struct ProvidersSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 speechCard
+                languagesCard
                 cleanupCard
             }
             .padding(24)
+        }
+    }
+
+    private var languagesCard: some View {
+        PreferenceCard(
+            "Preferred Languages",
+            detail: "Pick up to 3 languages you speak. Whispur sends these as hints to the selected STT provider. Leave empty for auto-detect.",
+            icon: "character.bubble"
+        ) {
+            STTLanguagesPicker(appState: appState)
         }
     }
 
@@ -86,6 +97,81 @@ struct ProvidersSettingsView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct STTLanguagesPicker: View {
+    @ObservedObject var appState: AppState
+
+    private var selectedCodes: [String] {
+        appState.sttLanguagesList
+    }
+
+    private var availableLanguages: [STTLanguage] {
+        STTLanguageCatalog.all.filter { !selectedCodes.contains($0.code) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if selectedCodes.isEmpty {
+                Text("No languages set — STT will auto-detect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                FlowChips(codes: selectedCodes) { code in
+                    appState.removeSTTLanguage(code)
+                }
+            }
+
+            HStack {
+                Menu {
+                    ForEach(availableLanguages) { language in
+                        Button(language.displayName) {
+                            appState.addSTTLanguage(language.code)
+                        }
+                    }
+                } label: {
+                    Label("Add language", systemImage: "plus")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(selectedCodes.count >= 3 || availableLanguages.isEmpty)
+
+                if selectedCodes.count >= 3 {
+                    Text("Maximum of 3 languages.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+        }
+    }
+}
+
+private struct FlowChips: View {
+    let codes: [String]
+    let onRemove: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(codes, id: \.self) { code in
+                HStack(spacing: 6) {
+                    Text(STTLanguageCatalog.displayName(for: code))
+                        .font(.caption.weight(.semibold))
+                    Button {
+                        onRemove(code)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.orange.opacity(0.15), in: Capsule())
             }
         }
     }

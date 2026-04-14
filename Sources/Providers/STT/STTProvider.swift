@@ -43,9 +43,13 @@ protocol STTProvider {
     static var providerID: STTProviderID { get }
 
     /// Transcribe an audio file and return the raw text.
-    /// - Parameter fileURL: Path to a 16kHz mono WAV file.
+    /// - Parameters:
+    ///   - fileURL: Path to a 16kHz mono WAV file.
+    ///   - languages: Preferred languages as BCP-47 codes (e.g. `en-US`),
+    ///     in user priority order. Empty means auto-detect. Providers that
+    ///     only accept one language should use the first entry.
     /// - Returns: The raw transcription text.
-    func transcribe(fileURL: URL) async throws -> String
+    func transcribe(fileURL: URL, languages: [String]) async throws -> String
 }
 
 // MARK: - Errors

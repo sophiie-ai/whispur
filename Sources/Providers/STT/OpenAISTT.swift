@@ -24,7 +24,7 @@ struct OpenAISTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
         guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
             throw STTError.apiError(provider: .openai, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -36,11 +36,21 @@ struct OpenAISTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
+        // Whisper accepts a single ISO-639-1 `language`. Send it only when the
+        // user picked exactly one preferred language; otherwise let Whisper
+        // auto-detect across the full language set.
+        let languageParam: String? = languages.count == 1
+            ? STTLanguage(code: languages[0], displayName: "").iso639_1
+            : nil
+
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: "audio.wav", mimeType: "audio/wav", data: audioData)
         body.appendMultipart(boundary: boundary, name: "model", value: model)
         body.appendMultipart(boundary: boundary, name: "response_format", value: "text")
+        if let languageParam {
+            body.appendMultipart(boundary: boundary, name: "language", value: languageParam)
+        }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
@@ -54,6 +64,7 @@ struct OpenAISTT: STTProvider {
                 file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
                 model: \(model)
                 response_format: text
+                language: \(languageParam ?? "auto")
                 """
             )
 

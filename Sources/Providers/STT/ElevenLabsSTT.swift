@@ -23,7 +23,7 @@ struct ElevenLabsSTT: STTProvider {
 
     private static let endpointURL = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")
 
-    func transcribe(fileURL: URL) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
         guard let url = Self.endpointURL else {
             throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -35,11 +35,20 @@ struct ElevenLabsSTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
+        // Scribe accepts a single `language_code` (ISO-639-1). Send it only
+        // when the user picked exactly one; otherwise rely on auto-detect.
+        let languageParam: String? = languages.count == 1
+            ? STTLanguage(code: languages[0], displayName: "").iso639_1
+            : nil
+
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: fileURL.lastPathComponent, mimeType: "audio/wav", data: audioData)
         body.appendMultipart(boundary: boundary, name: "model_id", value: model)
         body.appendMultipart(boundary: boundary, name: "file_format", value: "pcm_s16le_16")
+        if let languageParam {
+            body.appendMultipart(boundary: boundary, name: "language_code", value: languageParam)
+        }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
@@ -53,6 +62,7 @@ struct ElevenLabsSTT: STTProvider {
                 file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
                 model_id: \(model)
                 file_format: pcm_s16le_16
+                language_code: \(languageParam ?? "auto")
                 """
             )
 
