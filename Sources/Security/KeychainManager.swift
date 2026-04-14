@@ -8,8 +8,7 @@ enum KeychainKey: String, CaseIterable {
     case groqAPIKey = "groq-api-key"
     case deepgramAPIKey = "deepgram-api-key"
     case elevenlabsAPIKey = "elevenlabs-api-key"
-    case awsAccessKeyID = "aws-access-key-id"
-    case awsSecretAccessKey = "aws-secret-access-key"
+    case awsBedrockAPIKey = "aws-bedrock-api-key"
     case awsRegion = "aws-region"
 
     var displayName: String {
@@ -19,8 +18,7 @@ enum KeychainKey: String, CaseIterable {
         case .groqAPIKey: "Groq API Key"
         case .deepgramAPIKey: "Deepgram API Key"
         case .elevenlabsAPIKey: "ElevenLabs API Key"
-        case .awsAccessKeyID: "AWS Access Key ID"
-        case .awsSecretAccessKey: "AWS Secret Access Key"
+        case .awsBedrockAPIKey: "Bedrock API Key"
         case .awsRegion: "AWS Region"
         }
     }

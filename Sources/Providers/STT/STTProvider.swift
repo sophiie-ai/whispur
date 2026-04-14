@@ -6,7 +6,6 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     case groqWhisper
     case deepgram
     case elevenlabs
-    case bedrock
     case apple
 
     var id: String { rawValue }
@@ -17,7 +16,6 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .groqWhisper: "Groq Whisper Large v3"
         case .deepgram: "Deepgram"
         case .elevenlabs: "ElevenLabs"
-        case .bedrock: "AWS Bedrock"
         case .apple: "Apple (on-device)"
         }
     }
@@ -32,7 +30,6 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .groqWhisper: [.groqAPIKey]
         case .deepgram: [.deepgramAPIKey]
         case .elevenlabs: [.elevenlabsAPIKey]
-        case .bedrock: [.awsAccessKeyID, .awsSecretAccessKey]
         case .apple: []
         }
     }

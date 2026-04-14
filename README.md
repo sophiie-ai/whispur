@@ -67,7 +67,6 @@ make run
 | OpenAI Whisper | Available | Cloud STT via API key |
 | Deepgram | Available | Cloud STT via API key |
 | ElevenLabs Scribe | Available | Cloud STT via API key |
-| AWS Bedrock | Planned | Provider slot exists, implementation not shipped yet |
 
 ### Transcript cleanup
 
@@ -76,7 +75,7 @@ make run
 | Anthropic Claude | Available | High-quality cleanup |
 | OpenAI | Available | Fast cleanup path |
 | Groq | Available | OpenAI-compatible endpoint |
-| AWS Bedrock | Planned | Provider slot exists, implementation not shipped yet |
+| AWS Bedrock | Available | Claude via Bedrock, authenticated with a Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK`) |
 
 ## Privacy
 

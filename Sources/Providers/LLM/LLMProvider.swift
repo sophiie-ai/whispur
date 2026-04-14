@@ -23,7 +23,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: [.openaiAPIKey]
         case .anthropic: [.anthropicAPIKey]
         case .groq: [.groqAPIKey]
-        case .bedrock: [.awsAccessKeyID, .awsSecretAccessKey]
+        case .bedrock: [.awsBedrockAPIKey, .awsRegion]
         }
     }
 }

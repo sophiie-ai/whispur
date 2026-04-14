@@ -32,9 +32,6 @@ final class ProviderRegistry {
         case .elevenlabs:
             guard let key = keychain.get(.elevenlabsAPIKey) else { return nil }
             return ElevenLabsSTT(apiKey: key, httpClient: httpClient)
-        case .bedrock:
-            // TODO: Implement Bedrock STT with AWS SDK
-            return nil
         case .apple:
             return AppleSTT()
         }
@@ -59,8 +56,11 @@ final class ProviderRegistry {
             guard let key = keychain.get(.groqAPIKey) else { return nil }
             return GroqLLM(apiKey: key, httpClient: httpClient)
         case .bedrock:
-            // TODO: Implement Bedrock LLM with AWS SDK
-            return nil
+            guard let key = keychain.get(.awsBedrockAPIKey),
+                  let region = keychain.get(.awsRegion)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !region.isEmpty
+            else { return nil }
+            return BedrockLLM(apiKey: key, region: region, httpClient: httpClient)
         }
     }
 
