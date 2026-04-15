@@ -56,6 +56,12 @@ final class HotkeyManager {
     private var localFlagsMonitor: Any?
     private var localKeyDownMonitor: Any?
     private var localKeyUpMonitor: Any?
+    /// Dedicated ESC watcher that runs in parallel with the CGEvent tap.
+    /// Some focused-input contexts (secure input, certain IMEs, other taps
+    /// ahead of ours) can swallow keyDown events before our tap sees them.
+    /// Global monitors can't *consume* events, but they reliably *observe*,
+    /// so they let us still fire cancel even when the tap path misses.
+    private var globalEscMonitor: Any?
     private var accessibilityTimer: Timer?
 
     // MARK: - Lifecycle
@@ -63,6 +69,7 @@ final class HotkeyManager {
     func start() {
         checkAccessibilityAndInstall()
         scheduleAccessibilityPollIfNeeded()
+        installGlobalEscMonitor()
     }
 
     /// Poll for Accessibility permission changes only until it's granted and
@@ -89,6 +96,7 @@ final class HotkeyManager {
         accessibilityTimer = nil
         teardownEventTap()
         teardownLocalMonitors()
+        teardownGlobalEscMonitor()
         holdArmTimer?.cancel()
         holdArmTimer = nil
         stateLock.withLock { state in
@@ -195,6 +203,25 @@ final class HotkeyManager {
         if let m = localKeyUpMonitor { NSEvent.removeMonitor(m); localKeyUpMonitor = nil }
     }
 
+    // MARK: - Global ESC watcher (parallel to CGEvent tap)
+
+    private func installGlobalEscMonitor() {
+        guard globalEscMonitor == nil else { return }
+        globalEscMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return }
+            guard let self, self.cancelWatchEnabled else { return }
+            logger.info("ESC observed by global monitor — firing cancel")
+            self.onEvent?(.cancelRequested)
+        }
+    }
+
+    private func teardownGlobalEscMonitor() {
+        if let m = globalEscMonitor {
+            NSEvent.removeMonitor(m)
+            globalEscMonitor = nil
+        }
+    }
+
     // MARK: - CGEventTap Handler
 
     private nonisolated func handleEventTap(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -271,9 +298,12 @@ final class HotkeyManager {
             _ = state.pressedKeyCodes.insert(keyCode)
         }
         // Escape while recording → cancel (consume the event so the focused app doesn't see it).
-        if keyCode == 53, cancelWatchEnabled {
-            onEvent?(.cancelRequested)
-            return true
+        if keyCode == 53 {
+            logger.info("ESC keyDown via tap — cancelWatchEnabled=\(self.cancelWatchEnabled)")
+            if cancelWatchEnabled {
+                onEvent?(.cancelRequested)
+                return true
+            }
         }
         evaluateBindings()
         return false
