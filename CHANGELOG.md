@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/sophiie-ai/whispur/compare/v0.9.1...v0.9.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* lower voice-activity threshold so quiet speech isn't rejected ([4c8e1fe](https://github.com/sophiie-ai/whispur/commit/4c8e1febaa702f9b56b8e05c3ddac62454b36e56))
+
 ## [0.9.1](https://github.com/sophiie-ai/whispur/compare/v0.9.0...v0.9.1) (2026-04-15)
 
 
