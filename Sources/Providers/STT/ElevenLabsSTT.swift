@@ -23,7 +23,7 @@ struct ElevenLabsSTT: STTProvider {
 
     private static let endpointURL = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")
 
-    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
+    func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         guard let url = Self.endpointURL else {
             throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -35,11 +35,8 @@ struct ElevenLabsSTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
-        // Scribe accepts a single `language_code` (ISO-639-1). Send it only
-        // when the user picked exactly one; otherwise rely on auto-detect.
-        let languageParam: String? = languages.count == 1
-            ? STTLanguage(code: languages[0], displayName: "").iso639_1
-            : nil
+        // Scribe accepts a single `language_code` (ISO-639-1) or omit for auto.
+        let languageParam = STTLanguageResolver.iso639_1(for: language)
 
         // Scribe's `biased_keywords` takes a JSON array of terms with
         // optional `:weight` (1.0–5.0). Use a mid boost so Scribe prefers

@@ -24,7 +24,7 @@ struct OpenAISTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
+    func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
             throw STTError.apiError(provider: .openai, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -36,12 +36,8 @@ struct OpenAISTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
-        // Whisper accepts a single ISO-639-1 `language`. Send it only when the
-        // user picked exactly one preferred language; otherwise let Whisper
-        // auto-detect across the full language set.
-        let languageParam: String? = languages.count == 1
-            ? STTLanguage(code: languages[0], displayName: "").iso639_1
-            : nil
+        // Whisper accepts a single ISO-639-1 `language` or nothing (auto).
+        let languageParam = STTLanguageResolver.iso639_1(for: language)
 
         let promptParam = WhisperVocabularyPrompt.build(from: vocabulary)
 

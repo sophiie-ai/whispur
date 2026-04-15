@@ -36,7 +36,7 @@ final class DictationPipeline: ObservableObject {
 
     var selectedSTT: STTProviderID = .apple
     var selectedLLM: LLMProviderID = .anthropic
-    var sttLanguages: [String] = []
+    var sttLanguageSelection: STTLanguageSelection = .auto
     var customVocabulary: [String] = []
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
@@ -322,7 +322,7 @@ final class DictationPipeline: ObservableObject {
 
             let rawTranscript = try await sttProvider.transcribe(
                 fileURL: wavURL,
-                languages: sttLanguages,
+                language: sttLanguageSelection,
                 vocabulary: customVocabulary
             )
             guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {

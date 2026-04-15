@@ -27,7 +27,7 @@ struct GroqWhisperSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
+    func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
             throw STTError.apiError(provider: .groqWhisper, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -40,10 +40,8 @@ struct GroqWhisperSTT: STTProvider {
         request.timeoutInterval = timeoutSeconds
 
         // Groq's Whisper endpoint is OpenAI-compatible: single ISO-639-1
-        // `language`, so only send it when the user picked exactly one.
-        let languageParam: String? = languages.count == 1
-            ? STTLanguage(code: languages[0], displayName: "").iso639_1
-            : nil
+        // `language` or omit for auto-detect.
+        let languageParam = STTLanguageResolver.iso639_1(for: language)
 
         let promptParam = WhisperVocabularyPrompt.build(from: vocabulary)
 

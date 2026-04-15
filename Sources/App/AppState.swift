@@ -8,7 +8,8 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple
-    @AppStorage("sttLanguages") var sttLanguagesRaw: String = ""
+    /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
+    @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
@@ -89,9 +90,32 @@ final class AppState: ObservableObject {
             onStop: { [weak self] in self?.stopDictation() },
             onCancel: { [weak self] in self?.cancelDictation() }
         )
+        Self.migrateLegacyLanguagesPreferenceIfNeeded()
+
         syncPipelineConfig()
         refreshPermissionSnapshot()
         sparkleUpdater.checkForUpdatesInBackground()
+    }
+
+    /// One-shot migration of the prior multi-language CSV setting
+    /// (`sttLanguages`) into the new single-selection storage key
+    /// (`sttLanguageSelection`). Keeps the first entry as the user's single
+    /// preferred language; empty list becomes auto-detect.
+    private static func migrateLegacyLanguagesPreferenceIfNeeded() {
+        let defaults = UserDefaults.standard
+        let legacyKey = "sttLanguages"
+        let newKey = "sttLanguageSelection"
+        guard let legacy = defaults.string(forKey: legacyKey) else { return }
+        // Only migrate if the new key hasn't been set yet — don't overwrite a
+        // user who already made a choice in the new UI.
+        if defaults.object(forKey: newKey) == nil {
+            let firstCode = legacy
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty } ?? ""
+            defaults.set(firstCode, forKey: newKey)
+        }
+        defaults.removeObject(forKey: legacyKey)
     }
 
     private func setupLearning() {
@@ -381,33 +405,19 @@ final class AppState: ObservableObject {
     private func syncPipelineConfig() {
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
-        pipeline.sttLanguages = sttLanguagesList
+        pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
     }
 
-    var sttLanguagesList: [String] {
-        sttLanguagesRaw
-            .split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
-
-    func addSTTLanguage(_ code: String) {
-        var list = sttLanguagesList
-        guard !list.contains(code), list.count < 3 else { return }
-        list.append(code)
-        sttLanguagesRaw = list.joined(separator: ",")
-        syncPipelineConfig()
-    }
-
-    func removeSTTLanguage(_ code: String) {
-        var list = sttLanguagesList
-        list.removeAll { $0 == code }
-        sttLanguagesRaw = list.joined(separator: ",")
-        syncPipelineConfig()
+    var sttLanguageSelection: STTLanguageSelection {
+        get { STTLanguageSelection(storageValue: sttLanguageSelectionStorage) }
+        set {
+            sttLanguageSelectionStorage = newValue.storageValue
+            syncPipelineConfig()
+        }
     }
 
     private func startPermissionMonitoring() {

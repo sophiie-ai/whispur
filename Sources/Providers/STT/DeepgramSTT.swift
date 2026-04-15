@@ -21,7 +21,7 @@ struct DeepgramSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
+    func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         var query: [URLQueryItem] = [
             URLQueryItem(name: "model", value: model),
@@ -41,31 +41,17 @@ struct DeepgramSTT: STTProvider {
             query.append(URLQueryItem(name: "keyterm", value: term))
         }
 
-        // Deepgram language routing (nova-3):
-        //  - 1 language → send `language=<iso-639-1>` for best accuracy.
-        //  - 2–3 languages all within nova-3's multi set → `language=multi`
-        //    (handles code-switching within a single utterance).
-        //  - 2–3 languages with any outside the multi set → constrained
-        //    auto-detect via repeated `detect_language` params.
-        let isoCodes = languages.map { STTLanguage(code: $0, displayName: "").iso639_1 }
+        // Deepgram language routing: `.auto` → `language=multi` (nova-3
+        // code-switching across EN/ES/FR/DE/HI/RU/PT/JA/IT/NL); a specific
+        // selection passes through as BCP-47 for best single-language accuracy.
         let languageSummary: String
-        switch isoCodes.count {
-        case 0:
-            languageSummary = "auto"
-        case 1:
-            query.append(URLQueryItem(name: "language", value: isoCodes[0]))
-            languageSummary = isoCodes[0]
-        default:
-            let allInMultiSet = isoCodes.allSatisfy { STTLanguageCatalog.deepgramNova3MultiISO.contains($0) }
-            if allInMultiSet {
-                query.append(URLQueryItem(name: "language", value: "multi"))
-                languageSummary = "multi (\(isoCodes.joined(separator: ",")))"
-            } else {
-                for code in isoCodes {
-                    query.append(URLQueryItem(name: "detect_language", value: code))
-                }
-                languageSummary = "detect(\(isoCodes.joined(separator: ",")))"
-            }
+        switch STTLanguageResolver.deepgram(for: language) {
+        case .multi:
+            query.append(URLQueryItem(name: "language", value: "multi"))
+            languageSummary = "multi"
+        case .single(let code):
+            query.append(URLQueryItem(name: "language", value: code))
+            languageSummary = code
         }
 
         components.queryItems = query

@@ -45,16 +45,17 @@ protocol STTProvider {
     /// Transcribe an audio file and return the raw text.
     /// - Parameters:
     ///   - fileURL: Path to a 16kHz mono WAV file.
-    ///   - languages: Preferred languages as BCP-47 codes (e.g. `en-US`),
-    ///     in user priority order. Empty means auto-detect. Providers that
-    ///     only accept one language should use the first entry.
+    ///   - language: The user's language selection. Each provider maps this
+    ///     through `STTLanguageResolver` into its native parameter shape —
+    ///     e.g. `.auto` becomes `language=multi` for Deepgram nova-3 but is
+    ///     omitted entirely for Whisper.
     ///   - vocabulary: Custom terms to bias the recognizer toward (names,
     ///     acronyms, product words). Providers wire this into their own
     ///     biasing feature — prompt text for Whisper, `keyterm` for
     ///     Deepgram nova-3, `biased_keywords` for ElevenLabs Scribe,
     ///     `contextualStrings` for Apple. Empty means no biasing.
     /// - Returns: The raw transcription text.
-    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String
+    func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String
 }
 
 // MARK: - Errors

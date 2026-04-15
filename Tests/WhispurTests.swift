@@ -108,6 +108,49 @@ final class WhispurTests: XCTestCase {
         XCTAssertFalse(mods.contains(.function))
     }
 
+    // MARK: - STTLanguageSelection
+
+    func testSTTLanguageSelectionStorageRoundTrip() {
+        XCTAssertEqual(STTLanguageSelection(storageValue: "").storageValue, "")
+        XCTAssertEqual(STTLanguageSelection(storageValue: "en-US").storageValue, "en-US")
+        XCTAssertEqual(STTLanguageSelection(storageValue: "  ").storageValue, "")
+        if case .single(let code) = STTLanguageSelection(storageValue: "es-MX") {
+            XCTAssertEqual(code, "es-MX")
+        } else {
+            XCTFail("Expected .single")
+        }
+        if case .auto = STTLanguageSelection(storageValue: "") { } else {
+            XCTFail("Expected .auto")
+        }
+    }
+
+    func testSTTLanguageResolverISO639_1() {
+        XCTAssertNil(STTLanguageResolver.iso639_1(for: .auto))
+        XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "en-US")), "en")
+        XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "es-MX")), "es")
+        XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "zh")), "zh")
+    }
+
+    func testSTTLanguageResolverDeepgramMapsAutoToMulti() {
+        if case .multi = STTLanguageResolver.deepgram(for: .auto) { } else {
+            XCTFail("Expected .multi for .auto")
+        }
+        if case .single(let code) = STTLanguageResolver.deepgram(for: .single(code: "fr-FR")) {
+            XCTAssertEqual(code, "fr-FR")
+        } else {
+            XCTFail("Expected .single passthrough")
+        }
+    }
+
+    func testSTTLanguageResolverAppleLocaleForAutoIsNonEmpty() {
+        let locale = STTLanguageResolver.appleLocale(for: .auto)
+        XCTAssertFalse(locale.isEmpty)
+    }
+
+    func testSTTLanguageResolverAppleLocalePassesSingleThrough() {
+        XCTAssertEqual(STTLanguageResolver.appleLocale(for: .single(code: "ja-JP")), "ja-JP")
+    }
+
     // MARK: - Helpers
 
     private func makeEntry(statusCode: Int?, errorMessage: String? = nil) -> ProviderRequestLogEntry {

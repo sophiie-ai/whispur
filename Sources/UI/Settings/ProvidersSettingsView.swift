@@ -17,11 +17,11 @@ struct ProvidersSettingsView: View {
 
     private var languagesCard: some View {
         PreferenceCard(
-            "Preferred Languages",
-            detail: "Pick up to 3 languages you speak. Whispur sends these as hints to the selected STT provider. Leave empty for auto-detect.",
+            "Preferred Language",
+            detail: "Pick the language you speak. Whispur sends this as a hint to the selected STT provider. Auto-detect asks the provider to identify the language itself — best when you switch between languages.",
             icon: "character.bubble"
         ) {
-            STTLanguagesPicker(appState: appState)
+            STTLanguagePicker(appState: appState)
         }
     }
 
@@ -102,77 +102,58 @@ struct ProvidersSettingsView: View {
     }
 }
 
-private struct STTLanguagesPicker: View {
+private struct STTLanguagePicker: View {
     @ObservedObject var appState: AppState
 
-    private var selectedCodes: [String] {
-        appState.sttLanguagesList
-    }
+    private static let autoTag = "__auto__"
 
-    private var availableLanguages: [STTLanguage] {
-        STTLanguageCatalog.all.filter { !selectedCodes.contains($0.code) }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if selectedCodes.isEmpty {
-                Text("No languages set — STT will auto-detect.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                FlowChips(codes: selectedCodes) { code in
-                    appState.removeSTTLanguage(code)
-                }
-            }
-
-            HStack {
-                Menu {
-                    ForEach(availableLanguages) { language in
-                        Button(language.displayName) {
-                            appState.addSTTLanguage(language.code)
-                        }
-                    }
-                } label: {
-                    Label("Add language", systemImage: "plus")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .disabled(selectedCodes.count >= 3 || availableLanguages.isEmpty)
-
-                if selectedCodes.count >= 3 {
-                    Text("Maximum of 3 languages.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
+    private var selectionTag: String {
+        switch appState.sttLanguageSelection {
+        case .auto: return Self.autoTag
+        case .single(let code): return code
         }
     }
-}
 
-private struct FlowChips: View {
-    let codes: [String]
-    let onRemove: (String) -> Void
+    private var selectionBinding: Binding<String> {
+        Binding(
+            get: { selectionTag },
+            set: { newTag in
+                appState.sttLanguageSelection = newTag == Self.autoTag
+                    ? .auto
+                    : .single(code: newTag)
+            }
+        )
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(codes, id: \.self) { code in
-                HStack(spacing: 6) {
-                    Text(STTLanguageCatalog.displayName(for: code))
-                        .font(.caption.weight(.semibold))
-                    Button {
-                        onRemove(code)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Language", selection: selectionBinding) {
+                Text("Auto-detect").tag(Self.autoTag)
+                Divider()
+                ForEach(STTLanguageCatalog.all) { language in
+                    Text(language.displayName).tag(language.code)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.orange.opacity(0.15), in: Capsule())
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 260)
+
+            Text(footnote(for: appState.selectedSTT, selection: appState.sttLanguageSelection))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func footnote(for provider: STTProviderID, selection: STTLanguageSelection) -> String {
+        switch (provider, selection) {
+        case (.deepgram, .auto):
+            return "Deepgram will use nova-3's multilingual mode (English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch)."
+        case (.apple, .auto):
+            return "Apple has no auto mode — Whispur falls back to your system language."
+        case (.openai, .auto), (.groqWhisper, .auto), (.elevenlabs, .auto):
+            return "The provider will detect the language on each recording."
+        default:
+            return "Whispur will tell \(provider.displayName) which language to expect."
         }
     }
 }

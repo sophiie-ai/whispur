@@ -16,6 +16,34 @@ struct STTLanguage: Identifiable, Hashable {
     }
 }
 
+/// The user's language preference, applied uniformly across STT providers.
+///
+/// The UI exposes a single dropdown (auto + curated catalog). Each provider
+/// translates this selection into its own native parameter shape via
+/// `STTLanguageResolver`, so "Auto" on OpenAI Whisper means `language=<omitted>`
+/// while "Auto" on Deepgram nova-3 means `language=multi`.
+enum STTLanguageSelection: Equatable {
+    case auto
+    case single(code: String)
+
+    /// Compact storage form for `@AppStorage`. Empty string = auto.
+    var storageValue: String {
+        switch self {
+        case .auto: return ""
+        case .single(let code): return code
+        }
+    }
+
+    init(storageValue: String) {
+        let trimmed = storageValue.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            self = .auto
+        } else {
+            self = .single(code: trimmed)
+        }
+    }
+}
+
 enum STTLanguageCatalog {
     /// Curated subset of languages broadly supported by Whispur's STT providers.
     static let all: [STTLanguage] = [
@@ -67,4 +95,59 @@ enum STTLanguageCatalog {
     static let deepgramNova3MultiISO: Set<String> = [
         "en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl",
     ]
+}
+
+/// Per-provider translation of `STTLanguageSelection` into native API shapes.
+///
+/// Each provider calls the helper it needs. This keeps the catalog in one place
+/// and guarantees consistent behavior across providers (e.g. `.auto` never
+/// silently falls back to "send nothing and hope the model detects correctly"
+/// for providers that have a better explicit mode).
+enum STTLanguageResolver {
+    /// OpenAI / Groq Whisper / ElevenLabs Scribe: single ISO-639-1 or nil for auto.
+    static func iso639_1(for selection: STTLanguageSelection) -> String? {
+        switch selection {
+        case .auto:
+            return nil
+        case .single(let code):
+            let iso = STTLanguage(code: code, displayName: "").iso639_1
+            return iso.isEmpty ? nil : iso
+        }
+    }
+
+    /// Deepgram-specific decision: auto maps to `language=multi` on nova-3
+    /// (best for code-switching across the 10 most common languages); a
+    /// specific selection passes through as BCP-47.
+    enum DeepgramLanguage {
+        case multi
+        case single(String)
+    }
+
+    static func deepgram(for selection: STTLanguageSelection) -> DeepgramLanguage {
+        switch selection {
+        case .auto:
+            return .multi
+        case .single(let code):
+            return .single(code)
+        }
+    }
+
+    /// Apple `SFSpeechRecognizer` has no auto mode — fall back to the system
+    /// locale if it's in the catalog, otherwise `en-US`.
+    static func appleLocale(for selection: STTLanguageSelection) -> String {
+        switch selection {
+        case .single(let code):
+            return code
+        case .auto:
+            let systemID = Locale.current.identifier
+            if STTLanguageCatalog.language(for: systemID) != nil {
+                return systemID
+            }
+            let primary = systemID.split(separator: "_").first.map(String.init) ?? systemID
+            if let match = STTLanguageCatalog.all.first(where: { $0.iso639_1 == primary }) {
+                return match.code
+            }
+            return "en-US"
+        }
+    }
 }
