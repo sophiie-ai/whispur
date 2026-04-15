@@ -24,7 +24,7 @@ struct OpenAISTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
         guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
             throw STTError.apiError(provider: .openai, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -43,6 +43,8 @@ struct OpenAISTT: STTProvider {
             ? STTLanguage(code: languages[0], displayName: "").iso639_1
             : nil
 
+        let promptParam = WhisperVocabularyPrompt.build(from: vocabulary)
+
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: "audio.wav", mimeType: "audio/wav", data: audioData)
@@ -50,6 +52,9 @@ struct OpenAISTT: STTProvider {
         body.appendMultipart(boundary: boundary, name: "response_format", value: "text")
         if let languageParam {
             body.appendMultipart(boundary: boundary, name: "language", value: languageParam)
+        }
+        if let promptParam {
+            body.appendMultipart(boundary: boundary, name: "prompt", value: promptParam)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
@@ -65,6 +70,7 @@ struct OpenAISTT: STTProvider {
                 model: \(model)
                 response_format: text
                 language: \(languageParam ?? "auto")
+                prompt: \(promptParam ?? "-")
                 """
             )
 

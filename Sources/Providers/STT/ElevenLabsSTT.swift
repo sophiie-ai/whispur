@@ -23,7 +23,7 @@ struct ElevenLabsSTT: STTProvider {
 
     private static let endpointURL = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")
 
-    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
         guard let url = Self.endpointURL else {
             throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -41,6 +41,19 @@ struct ElevenLabsSTT: STTProvider {
             ? STTLanguage(code: languages[0], displayName: "").iso639_1
             : nil
 
+        // Scribe's `biased_keywords` takes a JSON array of terms with
+        // optional `:weight` (1.0–5.0). Use a mid boost so Scribe prefers
+        // the user's vocabulary without overriding the acoustic model.
+        let biasedTerms = vocabulary
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(50)
+        let biasedKeywordsJSON: String? = {
+            guard !biasedTerms.isEmpty else { return nil }
+            let entries = biasedTerms.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\""))\":2.0" }
+            return "[" + entries.joined(separator: ",") + "]"
+        }()
+
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: fileURL.lastPathComponent, mimeType: "audio/wav", data: audioData)
@@ -48,6 +61,9 @@ struct ElevenLabsSTT: STTProvider {
         body.appendMultipart(boundary: boundary, name: "file_format", value: "pcm_s16le_16")
         if let languageParam {
             body.appendMultipart(boundary: boundary, name: "language_code", value: languageParam)
+        }
+        if let biasedKeywordsJSON {
+            body.appendMultipart(boundary: boundary, name: "biased_keywords", value: biasedKeywordsJSON)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
@@ -63,6 +79,7 @@ struct ElevenLabsSTT: STTProvider {
                 model_id: \(model)
                 file_format: pcm_s16le_16
                 language_code: \(languageParam ?? "auto")
+                biased_keywords: \(biasedKeywordsJSON ?? "-")
                 """
             )
 

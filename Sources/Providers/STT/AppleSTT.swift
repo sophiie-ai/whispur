@@ -6,7 +6,7 @@ import Speech
 struct AppleSTT: STTProvider {
     static let providerID: STTProviderID = .apple
 
-    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
         if SFSpeechRecognizer.authorizationStatus() != .authorized {
             let granted = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in
@@ -41,6 +41,13 @@ struct AppleSTT: STTProvider {
 
         let request = SFSpeechURLRecognitionRequest(url: fileURL)
         request.shouldReportPartialResults = false
+
+        let contextualStrings = vocabulary
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !contextualStrings.isEmpty {
+            request.contextualStrings = contextualStrings
+        }
 
         return try await withCheckedThrowingContinuation { continuation in
             recognizer.recognitionTask(with: request) { result, error in

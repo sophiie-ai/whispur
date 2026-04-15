@@ -37,6 +37,7 @@ final class DictationPipeline: ObservableObject {
     var selectedSTT: STTProviderID = .apple
     var selectedLLM: LLMProviderID = .anthropic
     var sttLanguages: [String] = []
+    var customVocabulary: [String] = []
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
@@ -314,7 +315,11 @@ final class DictationPipeline: ObservableObject {
                 throw STTError.missingAPIKey(provider: selectedSTT)
             }
 
-            let rawTranscript = try await sttProvider.transcribe(fileURL: wavURL, languages: sttLanguages)
+            let rawTranscript = try await sttProvider.transcribe(
+                fileURL: wavURL,
+                languages: sttLanguages,
+                vocabulary: customVocabulary
+            )
             guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {
                 phase = .done("No speech detected.")
                 scheduleResetToIdle(after: .seconds(1))
@@ -335,7 +340,7 @@ final class DictationPipeline: ObservableObject {
                 do {
                     let response = try await llmProvider.complete(
                         request: LLMRequest(
-                            systemPrompt: systemPrompt,
+                            systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
                             userMessage: normalizedRawTranscript
                         )
                     )
@@ -381,8 +386,30 @@ final class DictationPipeline: ObservableObject {
             logger.info("Pipeline processing cancelled")
             phase = .idle
         } catch {
-            presentError(error.localizedDescription)
+            // URLSession throws URLError.cancelled when its Task is cancelled
+            // mid-request; treat it as a clean cancel rather than surfacing
+            // a misleading "cancelled" error banner.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                logger.info("Pipeline processing cancelled")
+                phase = .idle
+            } else {
+                presentError(error.localizedDescription)
+            }
         }
+    }
+
+    private func buildSystemPrompt(vocabulary: [String]) -> String {
+        let terms = vocabulary
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !terms.isEmpty else { return systemPrompt }
+        let joined = terms.joined(separator: ", ")
+        return systemPrompt + """
+
+
+        Preserve these proper nouns / terms exactly as spelled when they appear \
+        (do not paraphrase, translate, or correct them): \(joined).
+        """
     }
 
     private func normalizedTranscriptText(from text: String) -> String? {

@@ -21,13 +21,25 @@ struct DeepgramSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    func transcribe(fileURL: URL, languages: [String]) async throws -> String {
+    func transcribe(fileURL: URL, languages: [String], vocabulary: [String]) async throws -> String {
         var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         var query: [URLQueryItem] = [
             URLQueryItem(name: "model", value: model),
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
         ]
+
+        // Nova-3 uses `keyterm` (exact-match phrase biasing). Older models
+        // used `keywords` with optional `:boost`. Nova-3 ignores `keywords`,
+        // so only send `keyterm` here — kept at a reasonable cap to avoid
+        // ballooning the query string.
+        let biasedTerms = vocabulary
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(50)
+        for term in biasedTerms {
+            query.append(URLQueryItem(name: "keyterm", value: term))
+        }
 
         // Deepgram language routing (nova-3):
         //  - 1 language → send `language=<iso-639-1>` for best accuracy.
@@ -78,6 +90,7 @@ struct DeepgramSTT: STTProvider {
                 smart_format: true
                 punctuate: true
                 language: \(languageSummary)
+                keyterms: \(biasedTerms.isEmpty ? "-" : biasedTerms.joined(separator: ", "))
                 """
             )
 

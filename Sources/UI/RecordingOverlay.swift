@@ -32,11 +32,25 @@ struct RecordingOverlay: View {
                 }
             case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
                 overlayShell {
-                    statusRow(
-                        title: pipeline.statusTitle,
-                        detail: pipeline.statusDetail,
-                        leading: AnyView(ActivityDotsView(color: .blue))
-                    )
+                    HStack(spacing: 12) {
+                        statusRow(
+                            title: pipeline.statusTitle,
+                            detail: pipeline.statusDetail,
+                            leading: AnyView(ActivityDotsView(color: .blue))
+                        )
+
+                        EscapeHintChip()
+
+                        Button(action: onCancel) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 22, height: 22)
+                                .background(Circle().fill(Color.white.opacity(0.18)))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Cancel (discard)")
+                    }
                 }
             case .done(let text):
                 overlayShell {

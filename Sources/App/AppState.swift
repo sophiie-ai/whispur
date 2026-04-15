@@ -345,6 +345,7 @@ final class AppState: ObservableObject {
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
         pipeline.sttLanguages = sttLanguagesList
+        pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
