@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/sophiie-ai/whispur/compare/v0.10.0...v0.11.0) (2026-04-15)
+
+
+### Features
+
+* learn corrections from the user's edits (opt-in) ([cb5f54d](https://github.com/sophiie-ai/whispur/commit/cb5f54d64047f991842b504a1b4bdcfb233710c7))
+
 ## [0.10.0](https://github.com/sophiie-ai/whispur/compare/v0.9.3...v0.10.0) (2026-04-15)
 
 
