@@ -54,11 +54,25 @@ struct PromptsSettingsView: View {
             detail: "One term per line. Useful for product names, acronyms, and proper nouns.",
             icon: "text.book.closed"
         ) {
-            TextEditor(text: $appState.customVocabulary)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 120)
-                .padding(10)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 12) {
+                TextEditor(text: $appState.customVocabulary)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 120)
+                    .padding(10)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                Toggle(isOn: $appState.learnFromEdits) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Learn from my edits")
+                            .font(.callout.weight(.medium))
+                        Text("After a paste, Whispur re-reads the focused text field on your next dictation. If you changed a word, it asks before adding that word to this vocabulary.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+            }
         }
     }
 

@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
     @AppStorage("customVocabulary") var customVocabulary: String = ""
+    @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
     @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
@@ -31,6 +32,7 @@ final class AppState: ObservableObject {
     let registry: ProviderRegistry
     let overlayManager: OverlayPanelManager
     let sparkleUpdater: SparkleUpdater
+    let learning: TranscriptLearning
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
@@ -60,6 +62,7 @@ final class AppState: ObservableObject {
         let sparkleUpdater = SparkleUpdater()
         let hotkeyManager = HotkeyManager()
         let overlayManager = OverlayPanelManager()
+        let learning = TranscriptLearning()
 
         self.keychain = keychain
         self.registry = registry
@@ -70,12 +73,14 @@ final class AppState: ObservableObject {
         self.hotkeyManager = hotkeyManager
         self.overlayManager = overlayManager
         self.providerRequestLog = providerRequestLog
+        self.learning = learning
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
 
         setupHotkeys()
         observePipeline()
+        setupLearning()
         hotkeyManager.start()
         startPermissionMonitoring()
 
@@ -87,6 +92,31 @@ final class AppState: ObservableObject {
         syncPipelineConfig()
         refreshPermissionSnapshot()
         sparkleUpdater.checkForUpdatesInBackground()
+    }
+
+    private func setupLearning() {
+        learning.isEnabled = learnFromEdits
+        learning.onLearnTerm = { [weak self] _, toTerm in
+            guard let self else { return }
+            self.appendToVocabulary(toTerm)
+        }
+        pipeline.onPasteCompleted = { [weak self] pasted in
+            guard let self, self.learnFromEdits else { return }
+            self.learning.captureAfterPaste(pastedText: pasted)
+        }
+    }
+
+    private func appendToVocabulary(_ term: String) {
+        let trimmed = term.trimmingCharacters(in: .punctuationCharacters)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let existing = VocabularyParser.parse(customVocabulary)
+        guard !existing.contains(where: { $0.lowercased() == trimmed.lowercased() }) else { return }
+        let prefix = customVocabulary.isEmpty || customVocabulary.hasSuffix("\n")
+            ? customVocabulary
+            : customVocabulary + "\n"
+        customVocabulary = prefix + trimmed
+        syncPipelineConfig()
     }
 
     var isSelectedSTTConfigured: Bool {
@@ -189,6 +219,13 @@ final class AppState: ObservableObject {
     func startDictation(triggerMode: RecordingTriggerMode = .hold) {
         syncPipelineConfig()
         refreshPermissionSnapshot()
+
+        // Before the new recording begins, check whether the user edited
+        // the previous paste — if so, offer to learn those words.
+        learning.isEnabled = learnFromEdits
+        if learnFromEdits {
+            Task { [weak self] in await self?.learning.reconcile() }
+        }
 
         guard hotkeyManager.isAccessibilityGranted else {
             pipeline.presentError("Accessibility access is required before Whispur can paste dictated text.")

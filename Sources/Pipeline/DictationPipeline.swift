@@ -42,6 +42,11 @@ final class DictationPipeline: ObservableObject {
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
 
+    /// Fires with the final pasted text right after `TextInjector.paste`
+    /// returns. Used by the learning module to snapshot the focused field
+    /// before the user starts editing.
+    var onPasteCompleted: ((String) -> Void)?
+
     private var audioLevelCancellable: AnyCancellable?
     private var microphoneRequestTask: Task<Void, Never>?
     private var processingTask: Task<Void, Never>?
@@ -365,6 +370,7 @@ final class DictationPipeline: ObservableObject {
 
             phase = .pasting
             await TextInjector.paste(finalTranscript, preserveClipboard: preserveClipboard)
+            onPasteCompleted?(finalTranscript)
 
             let result = PipelineResult(
                 rawTranscript: normalizedRawTranscript,
