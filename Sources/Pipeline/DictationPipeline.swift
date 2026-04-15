@@ -26,7 +26,9 @@ final class DictationPipeline: ObservableObject {
     /// A recording whose peak level never crosses this is treated as silent.
     /// STT providers (Whisper especially) hallucinate confident-sounding text
     /// on silent audio ("Thanks for watching!"), so we skip processing entirely.
-    private static let voiceActivityPeakThreshold: Float = 0.08
+    /// Keep this well below `silenceLevelThreshold` (0.05) so quiet speech
+    /// still passes; this only catches sessions where the mic captured nothing.
+    private static let voiceActivityPeakThreshold: Float = 0.02
 
     private let recorder: AudioRecorder
     private let registry: ProviderRegistry
