@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/sophiie-ai/whispur/compare/v0.9.2...v0.9.3) (2026-04-15)
+
+
+### Bug Fixes
+
+* capture audio peak before reset and restore cancel affordances ([b2ed22e](https://github.com/sophiie-ai/whispur/commit/b2ed22e40eb66f52ee13c28bd2c44b5b6c75eba2))
+
 ## [0.9.2](https://github.com/sophiie-ai/whispur/compare/v0.9.1...v0.9.2) (2026-04-15)
 
 
