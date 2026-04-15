@@ -8,9 +8,15 @@ final class OverlayPanelManager {
     private var panel: NSPanel?
     private var phaseCancellable: AnyCancellable?
     private var stopHandler: (() -> Void)?
+    private var cancelHandler: (() -> Void)?
 
-    func bind(to pipeline: DictationPipeline, onStop: @escaping () -> Void) {
+    func bind(
+        to pipeline: DictationPipeline,
+        onStop: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         stopHandler = onStop
+        cancelHandler = onCancel
 
         phaseCancellable = pipeline.$phase
             .receive(on: RunLoop.main)
@@ -43,7 +49,8 @@ final class OverlayPanelManager {
         panel?.contentView = NSHostingView(
             rootView: RecordingOverlay(
                 pipeline: pipeline,
-                onStop: { [weak self] in self?.stopHandler?() }
+                onStop: { [weak self] in self?.stopHandler?() },
+                onCancel: { [weak self] in self?.cancelHandler?() }
             )
             .frame(width: 430)
         )
@@ -58,7 +65,8 @@ final class OverlayPanelManager {
         let hostingView = NSHostingView(
             rootView: RecordingOverlay(
                 pipeline: pipeline,
-                onStop: { [weak self] in self?.stopHandler?() }
+                onStop: { [weak self] in self?.stopHandler?() },
+                onCancel: { [weak self] in self?.cancelHandler?() }
             )
             .frame(width: 430)
         )

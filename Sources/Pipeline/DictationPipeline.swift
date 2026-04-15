@@ -156,11 +156,11 @@ final class DictationPipeline: ObservableObject {
         audioLevelCancellable?.cancel()
         audioLevelCancellable = nil
         audioLevel = 0
-        resetAudioSamples()
 
         recorder.onRecordingReady = nil
 
         guard let recordedURL = recorder.stopRecording() else {
+            resetAudioSamples()
             presentError("No audio was captured.")
             return
         }
@@ -168,6 +168,7 @@ final class DictationPipeline: ObservableObject {
         playSound(.pop)
 
         let capturedPeak = peakAudioLevel
+        resetAudioSamples()
         processingTask?.cancel()
         processingTask = Task { [weak self] in
             await self?.processRecording(at: recordedURL, peakLevel: capturedPeak)

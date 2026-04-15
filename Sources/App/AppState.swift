@@ -79,9 +79,11 @@ final class AppState: ObservableObject {
         hotkeyManager.start()
         startPermissionMonitoring()
 
-        overlayManager.bind(to: pipeline) { [weak self] in
-            self?.stopDictation()
-        }
+        overlayManager.bind(
+            to: pipeline,
+            onStop: { [weak self] in self?.stopDictation() },
+            onCancel: { [weak self] in self?.cancelDictation() }
+        )
         syncPipelineConfig()
         refreshPermissionSnapshot()
         sparkleUpdater.checkForUpdatesInBackground()
@@ -317,8 +319,11 @@ final class AppState: ObservableObject {
     }
 
     private func observePipeline() {
+        // Use `sink` directly (no `receive(on:)`) so the cancel-watch flag
+        // flips in the same turn as the phase change. The CGEvent tap reads
+        // this flag from its own thread and can fire before any delayed
+        // main-thread hop would complete, dropping ESC-to-cancel.
         phaseCancellable = pipeline.$phase
-            .receive(on: RunLoop.main)
             .sink { [weak self] phase in
                 guard let self else { return }
 

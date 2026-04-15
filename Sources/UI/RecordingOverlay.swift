@@ -3,6 +3,7 @@ import SwiftUI
 struct RecordingOverlay: View {
     @ObservedObject var pipeline: DictationPipeline
     let onStop: () -> Void
+    let onCancel: () -> Void
 
     var body: some View {
         Group {
@@ -95,9 +96,19 @@ struct RecordingOverlay: View {
                 .opacity(silence ? 0.35 : 1)
                 .animation(.easeInOut(duration: 0.2), value: silence)
 
-            if !isHold {
-                EscapeHintChip()
+            EscapeHintChip()
 
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Color.white.opacity(0.18)))
+            }
+            .buttonStyle(.plain)
+            .help("Cancel (discard recording)")
+
+            if !isHold {
                 Button(action: onStop) {
                     HStack(spacing: 5) {
                         Image(systemName: "stop.fill")
