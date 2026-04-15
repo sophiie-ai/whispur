@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/sophiie-ai/whispur/compare/v0.11.0...v0.11.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* single language picker with per-provider resolver ([2fa4b60](https://github.com/sophiie-ai/whispur/commit/2fa4b60d160f6b5f93ee99a3e9105a7d7d07f1bd))
+
 ## [0.11.0](https://github.com/sophiie-ai/whispur/compare/v0.10.0...v0.11.0) (2026-04-15)
 
 
