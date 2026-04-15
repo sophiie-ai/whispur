@@ -68,45 +68,36 @@ struct RecordingOverlay: View {
 
     private var recordingRow: some View {
         let silence = pipeline.isHearingSilence
-        return HStack(spacing: 12) {
+        let isHold = pipeline.activeTriggerMode == .hold
+        return HStack(spacing: 10) {
             ZStack {
                 Circle()
                     .fill((silence ? Color.orange : Color.red).opacity(0.22))
-                    .frame(width: 26, height: 26)
+                    .frame(width: 24, height: 24)
                     .scaleEffect(pipeline.audioLevel > 0.04 ? 1.16 : 0.94)
                     .animation(.easeInOut(duration: 0.14), value: pipeline.audioLevel)
 
                 Circle()
                     .fill(silence ? Color.orange : Color.red)
-                    .frame(width: 10, height: 10)
+                    .frame(width: 9, height: 9)
             }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(silence
-                    ? "Not Hearing You"
-                    : (pipeline.activeTriggerMode == .hold ? "Listening" : "Recording"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+            Text(silence
+                ? "No audio"
+                : (isHold ? "Listening" : "Recording"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: true, vertical: false)
 
-                Text(silence
-                    ? "Check your mic or input device"
-                    : (pipeline.activeTriggerMode == .hold
-                        ? "Release to transcribe"
-                        : "Use Stop or your shortcut to finish"))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
 
             CompactWaveformView(samples: pipeline.audioSamples)
                 .opacity(silence ? 0.35 : 1)
                 .animation(.easeInOut(duration: 0.2), value: silence)
 
-            EscapeHintChip()
+            if !isHold {
+                EscapeHintChip()
 
-            if pipeline.activeTriggerMode == .toggle {
                 Button(action: onStop) {
                     HStack(spacing: 5) {
                         Image(systemName: "stop.fill")

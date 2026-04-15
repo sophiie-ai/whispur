@@ -20,8 +20,13 @@ final class DictationPipeline: ObservableObject {
     @Published private(set) var isHearingSilence: Bool = false
 
     private var silentSampleCount: Int = 0
+    private var peakAudioLevel: Float = 0
     private static let silenceLevelThreshold: Float = 0.05
     private static let silenceTickThreshold: Int = 60  // ~1.3s at ~47Hz
+    /// A recording whose peak level never crosses this is treated as silent.
+    /// STT providers (Whisper especially) hallucinate confident-sounding text
+    /// on silent audio ("Thanks for watching!"), so we skip processing entirely.
+    private static let voiceActivityPeakThreshold: Float = 0.08
 
     private let recorder: AudioRecorder
     private let registry: ProviderRegistry
@@ -160,9 +165,10 @@ final class DictationPipeline: ObservableObject {
 
         playSound(.pop)
 
+        let capturedPeak = peakAudioLevel
         processingTask?.cancel()
         processingTask = Task { [weak self] in
-            await self?.processRecording(at: recordedURL)
+            await self?.processRecording(at: recordedURL, peakLevel: capturedPeak)
         }
     }
 
@@ -271,13 +277,24 @@ final class DictationPipeline: ObservableObject {
         logger.info("Recording session started")
     }
 
-    private func processRecording(at recordedURL: URL) async {
+    private func processRecording(at recordedURL: URL, peakLevel: Float) async {
         defer {
             processingTask = nil
         }
 
         defer {
             recorder.cleanup()
+        }
+
+        // Skip STT entirely if the whole recording was below the voice-activity floor.
+        // Providers confidently hallucinate on silent audio (Whisper's famous
+        // "Thanks for watching!"); don't paste anything if the user didn't speak.
+        if peakLevel < Self.voiceActivityPeakThreshold {
+            logger.info("Skipping STT: peak level \(peakLevel) below voice-activity threshold")
+            try? FileManager.default.removeItem(at: recordedURL)
+            phase = .done("No speech detected.")
+            scheduleResetToIdle(after: .seconds(1))
+            return
         }
 
         do {
@@ -405,6 +422,7 @@ final class DictationPipeline: ObservableObject {
     private func resetAudioSamples() {
         audioSamples = Array(repeating: 0, count: Self.waveformSampleCount)
         silentSampleCount = 0
+        peakAudioLevel = 0
         isHearingSilence = false
     }
 
@@ -420,6 +438,9 @@ final class DictationPipeline: ObservableObject {
         audioSamples = samples
 
         if case .recording = phase {
+            if clamped > peakAudioLevel {
+                peakAudioLevel = clamped
+            }
             if clamped < Self.silenceLevelThreshold {
                 silentSampleCount += 1
                 if silentSampleCount >= Self.silenceTickThreshold && !isHearingSilence {
