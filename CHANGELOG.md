@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/sophiie-ai/whispur/compare/v0.9.0...v0.9.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* declutter recording overlay and skip STT on silent audio ([4519993](https://github.com/sophiie-ai/whispur/commit/4519993aff152d5773c55261ed3998d7ec820677))
+
 ## [0.9.0](https://github.com/sophiie-ai/whispur/compare/v0.8.1...v0.9.0) (2026-04-14)
 
 
