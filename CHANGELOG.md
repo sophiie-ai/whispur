@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/sophiie-ai/whispur/compare/v0.9.3...v0.10.0) (2026-04-15)
+
+
+### Features
+
+* wire custom vocabulary through STT/LLM and allow cancel during post-processing ([102b2b8](https://github.com/sophiie-ai/whispur/commit/102b2b8b486004e4868218d3a7d79b8245df633c))
+
+
+### Bug Fixes
+
+* add parallel ESC monitor so cancel works inside text inputs ([9701fb6](https://github.com/sophiie-ai/whispur/commit/9701fb69d5fe8daee72c8ef1e5bc89132a1fcf4d))
+
 ## [0.9.3](https://github.com/sophiie-ai/whispur/compare/v0.9.2...v0.9.3) (2026-04-15)
 
 
