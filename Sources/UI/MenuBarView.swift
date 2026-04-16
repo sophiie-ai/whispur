@@ -10,11 +10,6 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             actionCard
-            modePicker
-
-            if let ruleHint = activeRuleHint {
-                activeRuleCard(ruleHint)
-            }
 
             if appState.showSetupGuide && (!appState.isReadyForDailyUse || !appState.hasCompletedFirstDictation) {
                 setupCard
@@ -69,56 +64,6 @@ struct MenuBarView: View {
 
             PreferenceBadge(title: statusBadgeTitle, tone: statusBadgeTone)
         }
-    }
-
-    private var activeRuleHint: String? {
-        appState.pipeline.activeRuleSummary
-    }
-
-    private func activeRuleCard(_ hint: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "app.badge.checkmark")
-                .font(.caption)
-                .foregroundStyle(.orange)
-            Text(hint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer(minLength: 4)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Mode")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Edit") {
-                    openSettings(tab: .prompts)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            }
-
-            // Segmented chip strip — compact, touch-friendly, shows all 5
-            // modes at once so switching is a single click.
-            HStack(spacing: 6) {
-                ForEach(DictationModeID.allCases) { mode in
-                    ModeChip(
-                        mode: mode,
-                        isActive: appState.selectedModeID == mode,
-                        action: { appState.selectedModeID = mode }
-                    )
-                }
-            }
-        }
-        .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var actionCard: some View {
@@ -415,31 +360,3 @@ struct MenuBarView: View {
     }
 }
 
-private struct ModeChip: View {
-    let mode: DictationModeID
-    let isActive: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: mode.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(mode.displayName)
-                    .font(.system(size: 10, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(isActive ? Color.white : Color.primary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isActive ? Color.orange : Color.primary.opacity(0.05))
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(mode.subtitle)
-    }
-}

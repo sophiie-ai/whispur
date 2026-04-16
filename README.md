@@ -21,11 +21,11 @@ Hold a shortcut to talk, or use an optional toggle shortcut for hands-free captu
 ## Features
 
 - Lives in the macOS menu bar instead of taking over your desktop
-- Hold-to-talk and toggle dictation modes
+- Hold-to-talk or toggle-to-latch recording
 - Multi-provider speech-to-text with local Apple dictation support
 - Optional transcript cleanup with provider-selectable LLMs
 - Paste-back into the active app with clipboard preservation
-- Custom vocabulary and cleanup prompts for better technical dictation
+- Custom vocabulary and a single editable cleanup prompt for technical dictation
 - Local-first default path when you stick with Apple on-device transcription
 - Sparkle-based auto-updates for signed releases
 
@@ -65,7 +65,7 @@ make run
 - Hold shortcut: Press and hold your configured shortcut to record, then release to transcribe and paste.
 - Toggle shortcut: Press once to start recording, press again to stop and process.
 - Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts.
-- Prompt tuning: Open `Settings` → `Prompts` to change cleanup behavior or add domain vocabulary.
+- Prompt tuning: Open `Settings` → `Prompts` to override the cleanup prompt or add domain vocabulary.
 
 ## Provider Matrix
 

@@ -42,12 +42,6 @@ final class DictationPipeline: ObservableObject {
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
-    /// Currently active dictation mode. Set by `AppState.syncPipelineConfig`
-    /// before each recording — the UI reads this to label the overlay.
-    @Published var activeModeID: DictationModeID = .general
-    /// Non-nil when a per-app override kicked in. Shown in the overlay so
-    /// the user knows which providers are about to run.
-    @Published var activeRuleSummary: String?
 
     /// Fires with the final pasted text right after `TextInjector.paste`
     /// returns. Used by the learning module to snapshot the focused field

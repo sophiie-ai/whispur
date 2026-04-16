@@ -11,8 +11,6 @@ final class AppState: ObservableObject {
     /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
-    @AppStorage("selectedDictationMode") var selectedModeID: DictationModeID = .general
-    @AppStorage("appRulesEnabled") var appRulesEnabled: Bool = true
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
@@ -36,8 +34,6 @@ final class AppState: ObservableObject {
     let overlayManager: OverlayPanelManager
     let sparkleUpdater: SparkleUpdater
     let learning: TranscriptLearning
-    let modeStore: DictationModeStore
-    let appRules: AppProviderRulesStore
     let learningSuggestions: LearningSuggestionCenter
     private let learningToastPanel: LearningToastPanelManager
 
@@ -71,8 +67,6 @@ final class AppState: ObservableObject {
         let hotkeyManager = HotkeyManager()
         let overlayManager = OverlayPanelManager()
         let learning = TranscriptLearning()
-        let modeStore = DictationModeStore()
-        let appRules = AppProviderRulesStore()
         let learningSuggestions = LearningSuggestionCenter()
         let learningToastPanel = LearningToastPanelManager()
 
@@ -86,8 +80,6 @@ final class AppState: ObservableObject {
         self.overlayManager = overlayManager
         self.providerRequestLog = providerRequestLog
         self.learning = learning
-        self.modeStore = modeStore
-        self.appRules = appRules
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
 
@@ -114,10 +106,23 @@ final class AppState: ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
             Self.migrateLegacyLanguagesPreferenceIfNeeded()
+            Self.clearRetiredModesStorage()
             self.hotkeyManager.start()
             self.startPermissionMonitoring()
             self.sparkleUpdater.checkForUpdatesInBackground()
         }
+    }
+
+    /// Drop UserDefaults keys that outlived dictation modes and per-app
+    /// provider rules. A user's global `customSystemPrompt` override (if
+    /// any) is preserved; per-mode customizations and per-app rules are
+    /// not carried forward.
+    private static func clearRetiredModesStorage() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "whispur.dictationModes.customPrompts")
+        defaults.removeObject(forKey: "selectedDictationMode")
+        defaults.removeObject(forKey: "whispur.appProviderRules")
+        defaults.removeObject(forKey: "appRulesEnabled")
     }
 
     /// One-shot migration of the prior multi-language CSV setting
@@ -431,28 +436,16 @@ final class AppState: ObservableObject {
     }
 
     private func syncPipelineConfig() {
-        // Resolve the active context right before dictation. The frontmost
-        // app + selected mode win over the global provider/prompt defaults,
-        // and the user can still disable rules globally from settings.
-        let rule = appRulesEnabled ? appRules.currentRule() : nil
-        let effectiveSTT = rule?.sttOverride ?? selectedSTT
-        let effectiveLLM = rule?.llmOverride ?? selectedLLM
-        let effectiveMode = rule?.modeID ?? selectedModeID
-        let modePrompt = modeStore.resolvedPrompt(for: effectiveMode)
-
-        pipeline.selectedSTT = effectiveSTT
-        pipeline.selectedLLM = effectiveLLM
+        pipeline.selectedSTT = selectedSTT
+        pipeline.selectedLLM = selectedLLM
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
 
-        // A non-empty `customSystemPrompt` predates Dictation Modes and
-        // still acts as a global override when the user has opted into it.
-        // Otherwise use the resolved mode prompt.
-        pipeline.systemPrompt = customSystemPrompt.isEmpty ? modePrompt : customSystemPrompt
-        pipeline.activeModeID = effectiveMode
-        pipeline.activeRuleSummary = rule.map { "\($0.appDisplayName): \($0.summary)" }
+        // `customSystemPrompt` is the single user-editable override. When
+        // empty, the pipeline falls back to the built-in cleanup prompt.
+        pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
     }
 
     var sttLanguageSelection: STTLanguageSelection {
