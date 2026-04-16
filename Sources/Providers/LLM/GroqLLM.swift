@@ -23,6 +23,8 @@ struct GroqLLM: LLMProvider {
         )
     }
 
+    var endpointOrigin: URL? { inner.endpointOrigin }
+
     func complete(request: LLMRequest) async throws -> LLMResponse {
         try await inner.complete(request: request)
     }

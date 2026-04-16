@@ -33,6 +33,7 @@ final class DictationPipeline: ObservableObject {
     private let recorder: AudioRecorder
     private let registry: ProviderRegistry
     private let historyStore: PipelineHistoryStore
+    private let httpClient: ProviderHTTPClient?
 
     var selectedSTT: STTProviderID = .apple
     var selectedLLM: LLMProviderID = .anthropic
@@ -55,11 +56,13 @@ final class DictationPipeline: ObservableObject {
     init(
         recorder: AudioRecorder,
         registry: ProviderRegistry,
-        historyStore: PipelineHistoryStore
+        historyStore: PipelineHistoryStore,
+        httpClient: ProviderHTTPClient? = nil
     ) {
         self.recorder = recorder
         self.registry = registry
         self.historyStore = historyStore
+        self.httpClient = httpClient
     }
 
     var canStartRecording: Bool {
@@ -318,6 +321,15 @@ final class DictationPipeline: ObservableObject {
             phase = .transcribing
             guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
                 throw STTError.missingAPIKey(provider: selectedSTT)
+            }
+
+            // Warm the LLM connection in parallel with STT. By the time the
+            // transcript lands, the TLS handshake to the cleanup endpoint is
+            // already done, which saves ~200–500 ms on cold paths.
+            if let client = httpClient,
+               let llmProvider = registry.makeLLMProvider(for: selectedLLM),
+               let origin = llmProvider.endpointOrigin {
+                client.warmConnection(to: origin)
             }
 
             let rawTranscript = try await sttProvider.transcribe(

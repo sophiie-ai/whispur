@@ -27,6 +27,8 @@ struct OpenAILLM: LLMProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
+    var endpointOrigin: URL? { URL(string: baseURL) }
+
     func complete(request: LLMRequest) async throws -> LLMResponse {
         guard let url = URL(string: "\(baseURL)/chat/completions") else {
             throw LLMError.apiError(provider: providerID, message: "Invalid endpoint URL.", statusCode: nil)

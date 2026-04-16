@@ -25,6 +25,10 @@ struct BedrockLLM: LLMProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
+    var endpointOrigin: URL? {
+        URL(string: "https://bedrock-runtime.\(region).amazonaws.com")
+    }
+
     func complete(request: LLMRequest) async throws -> LLMResponse {
         let encodedModel = modelID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? modelID
         guard let url = URL(string: "https://bedrock-runtime.\(region).amazonaws.com/model/\(encodedModel)/invoke") else {

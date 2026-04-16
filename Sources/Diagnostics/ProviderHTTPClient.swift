@@ -17,9 +17,40 @@ final class ProviderHTTPClient {
     private let session: URLSession
     private let requestLog: ProviderRequestLog
 
-    init(session: URLSession = .shared, requestLog: ProviderRequestLog) {
-        self.session = session
+    init(session: URLSession? = nil, requestLog: ProviderRequestLog) {
+        self.session = session ?? Self.makeDefaultSession()
         self.requestLog = requestLog
+    }
+
+    /// Returns a URLSession tuned for dictation's hot path:
+    /// - HTTP/2 multiplexing via generous per-host connection budget
+    /// - Long request timeout (STT uploads of minutes-long audio)
+    /// - Waits on flaky networks instead of failing fast
+    /// - Keeps sockets warm between transcription and cleanup calls
+    private static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 300
+        configuration.waitsForConnectivity = true
+        configuration.httpMaximumConnectionsPerHost = 6
+        configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        return URLSession(configuration: configuration)
+    }
+
+    /// Opens a TCP/TLS connection to the given endpoint so the first real
+    /// request skips the handshake. Safe to call repeatedly; the session's
+    /// connection pool dedupes.
+    func warmConnection(to url: URL) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        // We don't care about the response — HEAD just forces the socket open.
+        // Provider endpoints return 404/405 for HEAD; that's fine.
+        let task = session.dataTask(with: request) { _, _, _ in }
+        task.priority = URLSessionTask.lowPriority
+        task.resume()
     }
 
     func send(

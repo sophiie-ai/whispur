@@ -58,7 +58,8 @@ final class AppState: ObservableObject {
         let pipeline = DictationPipeline(
             recorder: recorder,
             registry: registry,
-            historyStore: historyStore
+            historyStore: historyStore,
+            httpClient: httpClient
         )
         let sparkleUpdater = SparkleUpdater()
         let hotkeyManager = HotkeyManager()

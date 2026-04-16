@@ -62,6 +62,15 @@ protocol LLMProvider {
 
     /// Send a completion request and return the response.
     func complete(request: LLMRequest) async throws -> LLMResponse
+
+    /// Base host the provider talks to. The pipeline opens a TLS connection
+    /// to this endpoint during `.transcribing` so the cleanup call doesn't
+    /// pay for the handshake.
+    var endpointOrigin: URL? { get }
+}
+
+extension LLMProvider {
+    var endpointOrigin: URL? { nil }
 }
 
 // MARK: - Errors
