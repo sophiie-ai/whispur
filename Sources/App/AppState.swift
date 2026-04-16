@@ -83,19 +83,27 @@ final class AppState: ObservableObject {
         setupHotkeys()
         observePipeline()
         setupLearning()
-        hotkeyManager.start()
-        startPermissionMonitoring()
 
         overlayManager.bind(
             to: pipeline,
             onStop: { [weak self] in self?.stopDictation() },
             onCancel: { [weak self] in self?.cancelDictation() }
         )
-        Self.migrateLegacyLanguagesPreferenceIfNeeded()
 
         syncPipelineConfig()
         refreshPermissionSnapshot()
-        sparkleUpdater.checkForUpdatesInBackground()
+
+        // Defer everything non-critical until after the menu bar paints.
+        // Installing the CGEventTap, the legacy-preferences migration, and
+        // the Sparkle update check all touch the filesystem / event system
+        // and would otherwise add ~30–100 ms before the icon appears.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            Self.migrateLegacyLanguagesPreferenceIfNeeded()
+            self.hotkeyManager.start()
+            self.startPermissionMonitoring()
+            self.sparkleUpdater.checkForUpdatesInBackground()
+        }
     }
 
     /// One-shot migration of the prior multi-language CSV setting
