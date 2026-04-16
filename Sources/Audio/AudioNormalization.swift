@@ -67,13 +67,27 @@ enum AudioNormalization {
         var readError: Error?
         var conversionError: NSError?
 
+        // Reuse the same input and output buffers for every convert iteration
+        // — allocating fresh AVAudioPCMBuffers each loop shows up in profiles
+        // on long recordings. Their underlying storage is filled in-place by
+        // the converter / file reader, so reuse is safe.
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFormat,
+            frameCapacity: outputFrameCapacity
+        ) else {
+            throw AudioNormalizationError.preparationFailed("Could not allocate the normalized audio buffer.")
+        }
+
+        guard let inputBuffer = AVAudioPCMBuffer(
+            pcmFormat: inputFormat,
+            frameCapacity: inputFrameCapacity
+        ) else {
+            throw AudioNormalizationError.preparationFailed("Could not allocate the source audio buffer.")
+        }
+
         while true {
-            guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: outputFormat,
-                frameCapacity: outputFrameCapacity
-            ) else {
-                throw AudioNormalizationError.preparationFailed("Could not allocate the normalized audio buffer.")
-            }
+            // Reset output buffer for the new conversion pass.
+            outputBuffer.frameLength = 0
 
             let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
                 if reachedEndOfInput {
@@ -89,14 +103,6 @@ enum AudioNormalization {
                 }
 
                 let framesToRead = AVAudioFrameCount(min(Int64(inputFrameCapacity), remainingFrames))
-                guard let inputBuffer = AVAudioPCMBuffer(
-                    pcmFormat: inputFormat,
-                    frameCapacity: framesToRead
-                ) else {
-                    readError = AudioNormalizationError.preparationFailed("Could not allocate the source audio buffer.")
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
 
                 do {
                     try inputFile.read(into: inputBuffer, frameCount: framesToRead)

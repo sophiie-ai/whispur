@@ -19,10 +19,13 @@ final class AudioRecorder: ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
-    private let fileQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-file")
+    private let fileQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-file", qos: .userInitiated)
 
     private var readyFired = false
     private var smoothedLevel: Float = 0
+    /// Level updates are throttled to ~30 Hz on the main thread; the tap
+    /// callback runs at ~47 Hz so publishing every sample is wasteful.
+    private var lastLevelPublishTime: CFAbsoluteTime = 0
 
     static func requestMicrophoneAccess() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -96,6 +99,8 @@ final class AudioRecorder: ObservableObject {
         audioEngine?.stop()
         audioEngine = nil
 
+        // Drain any pending async writes before releasing the file handle so
+        // the last buffer actually lands on disk.
         fileQueue.sync {
             audioFile = nil
         }
@@ -103,6 +108,7 @@ final class AudioRecorder: ObservableObject {
         readyFired = false
         smoothedLevel = 0
         audioLevel = 0
+        lastLevelPublishTime = 0
 
         logger.info("Recording stopped")
         return tempFileURL
@@ -128,8 +134,12 @@ final class AudioRecorder: ObservableObject {
             }
         }
 
-        fileQueue.sync {
-            guard let audioFile else { return }
+        // Hand the buffer off to the writer queue async so the audio tap
+        // callback never stalls on disk I/O. `fileQueue` is serial and
+        // flushed synchronously in `stopRecording`, so ordering is preserved
+        // and no write is lost.
+        fileQueue.async { [weak self] in
+            guard let self, let audioFile = self.audioFile else { return }
             do {
                 try audioFile.write(from: buffer)
             } catch {
@@ -144,8 +154,16 @@ final class AudioRecorder: ObservableObject {
             smoothedLevel = (smoothedLevel * 0.7) + (scaledLevel * 0.3)
         }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.audioLevel = self?.smoothedLevel ?? 0
+        // Throttle UI publishes to ~30 Hz. The tap fires at ~47 Hz; the
+        // waveform and level meter can't visually distinguish anything
+        // faster, so batching cuts main-thread dispatch overhead.
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastLevelPublishTime >= 1.0 / 30.0 {
+            lastLevelPublishTime = now
+            let published = smoothedLevel
+            DispatchQueue.main.async { [weak self] in
+                self?.audioLevel = published
+            }
         }
     }
 
