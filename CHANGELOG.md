@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/sophiie-ai/whispur/compare/v0.11.1...v0.11.2) (2026-04-16)
+
+
+### Bug Fixes
+
+* honor cancellation during paste to prevent stale clipboard paste ([52ead24](https://github.com/sophiie-ai/whispur/commit/52ead24fa75e4a5e2b19c056b09788d93269f6b3))
+
 ## [0.11.1](https://github.com/sophiie-ai/whispur/compare/v0.11.0...v0.11.1) (2026-04-15)
 
 
