@@ -39,8 +39,6 @@ struct RecordingOverlay: View {
                             leading: AnyView(ActivityDotsView(color: .blue))
                         )
 
-                        EscapeHintChip()
-
                         Button(action: onCancel) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10, weight: .bold))
@@ -49,7 +47,7 @@ struct RecordingOverlay: View {
                                 .background(Circle().fill(Color.white.opacity(0.18)))
                         }
                         .buttonStyle(.plain)
-                        .help("Cancel (discard)")
+                        .help("Cancel (esc)")
                     }
                 }
             case .done(let text):
@@ -85,32 +83,14 @@ struct RecordingOverlay: View {
         let silence = pipeline.isHearingSilence
         let isHold = pipeline.activeTriggerMode == .hold
         return HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill((silence ? Color.orange : Color.red).opacity(0.22))
-                    .frame(width: 24, height: 24)
-                    .scaleEffect(pipeline.audioLevel > 0.04 ? 1.16 : 0.94)
-                    .animation(.easeInOut(duration: 0.14), value: pipeline.audioLevel)
-
-                Circle()
-                    .fill(silence ? Color.orange : Color.red)
-                    .frame(width: 9, height: 9)
-            }
-
-            Text(silence
-                ? "No audio"
-                : (isHold ? "Listening" : "Recording"))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: true, vertical: false)
+            CompactWaveformView(samples: pipeline.audioSamples, silence: silence)
+                .opacity(silence ? 0.5 : 1)
+                .animation(.easeInOut(duration: 0.2), value: silence)
+                .accessibilityLabel(silence
+                    ? "No audio detected"
+                    : (isHold ? "Listening" : "Recording"))
 
             Spacer(minLength: 6)
-
-            CompactWaveformView(samples: pipeline.audioSamples)
-                .opacity(silence ? 0.35 : 1)
-                .animation(.easeInOut(duration: 0.2), value: silence)
-
-            EscapeHintChip()
 
             Button(action: onCancel) {
                 Image(systemName: "xmark")
@@ -120,7 +100,7 @@ struct RecordingOverlay: View {
                     .background(Circle().fill(Color.white.opacity(0.18)))
             }
             .buttonStyle(.plain)
-            .help("Cancel (discard recording)")
+            .help("Cancel (esc)")
 
             if !isHold {
                 Button(action: onStop) {
@@ -188,12 +168,17 @@ struct RecordingOverlay: View {
 
 private struct CompactWaveformView: View {
     let samples: [Float]
+    let silence: Bool
 
-    // One gradient shading reused across all capsules — the prior ForEach
-    // built a new LinearGradient per bar per frame (~1.3k gradients/sec
-    // during recording). Canvas draws ~30× faster and keeps CPU cool.
-    private static let fillShading = GraphicsContext.Shading.linearGradient(
-        Gradient(colors: [.white.opacity(0.92), .orange.opacity(0.85)]),
+    // Two precomputed shadings — one for active recording, one for silence.
+    // Built once at load to avoid per-frame gradient allocation.
+    private static let activeShading = GraphicsContext.Shading.linearGradient(
+        Gradient(colors: [.red.opacity(0.95), .orange.opacity(0.9)]),
+        startPoint: CGPoint(x: 0, y: 0),
+        endPoint: CGPoint(x: 0, y: 26)
+    )
+    private static let silenceShading = GraphicsContext.Shading.linearGradient(
+        Gradient(colors: [.orange.opacity(0.75), .orange.opacity(0.55)]),
         startPoint: CGPoint(x: 0, y: 0),
         endPoint: CGPoint(x: 0, y: 26)
     )
@@ -206,6 +191,7 @@ private struct CompactWaveformView: View {
             let spacing: CGFloat = 2
             let totalWidth = CGFloat(count) * barWidth + CGFloat(count - 1) * spacing
             var x = max(0, (size.width - totalWidth) / 2)
+            let shading = silence ? Self.silenceShading : Self.activeShading
             for sample in samples {
                 let normalized = max(0.06, CGFloat(sample))
                 let h = 3 + normalized * 22
@@ -216,35 +202,12 @@ private struct CompactWaveformView: View {
                     height: h
                 )
                 let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: Self.fillShading)
+                context.fill(path, with: shading)
                 x += barWidth + spacing
             }
         }
         .frame(width: CGFloat(samples.count) * 4 - 2, height: 26)
         .animation(.easeOut(duration: 0.08), value: samples)
-    }
-}
-
-private struct EscapeHintChip: View {
-    var body: some View {
-        HStack(spacing: 4) {
-            Text("esc")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.white.opacity(0.14))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
-                )
-            Text("cancel")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-        }
-        .foregroundStyle(.white.opacity(0.6))
-        .accessibilityLabel("Press Escape to cancel")
     }
 }
 
