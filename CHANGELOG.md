@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.12.0](https://github.com/sophiie-ai/whispur/compare/v0.11.2...v0.12.0) (2026-04-16)
+
+
+### Features
+
+* **learning:** non-modal toast for vocabulary suggestions ([9ac55a6](https://github.com/sophiie-ai/whispur/commit/9ac55a64d33761677ced369fcca145a9008e2b62))
+* **modes:** dictation modes with per-mode cleanup prompts ([e31e05e](https://github.com/sophiie-ai/whispur/commit/e31e05e773689835b3da161cae45411c1c6163fa))
+* **rules:** per-app provider overrides ([a0c3d00](https://github.com/sophiie-ai/whispur/commit/a0c3d00e5c741dfd484b63deed9572e630fccdad))
+
+
+### Performance
+
+* **app:** defer non-critical launch work off init ([b24c09f](https://github.com/sophiie-ai/whispur/commit/b24c09ff0232ea09300c0c866f842800c2fe1187))
+* **audio:** async tap writes, reusable buffers, throttled level ([b08c412](https://github.com/sophiie-ai/whispur/commit/b08c412452c2d3cd146125e5d299d384064a19a2))
+* **input:** trim paste latency ([3b42c51](https://github.com/sophiie-ai/whispur/commit/3b42c512b7e91edc74dd390d23fae42950b0ffb8))
+* **providers:** persistent URLSession with LLM connection warmup ([2faf94e](https://github.com/sophiie-ai/whispur/commit/2faf94e982993e99783909f26070877a27d50bad))
+* **ui:** draw recording waveform via Canvas ([fcd140c](https://github.com/sophiie-ai/whispur/commit/fcd140c8033dc1163f65312f0cbdb915151b98ce))
+
 ## [0.11.2](https://github.com/sophiie-ai/whispur/compare/v0.11.1...v0.11.2) (2026-04-16)
 
 
