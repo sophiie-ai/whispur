@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/sophiie-ai/whispur/compare/v0.13.0...v0.13.1) (2026-04-16)
+
+
+### Bug Fixes
+
+* **prompts:** reject question-shaped dictation more firmly ([a22e563](https://github.com/sophiie-ai/whispur/commit/a22e5634938112df35db972328606111c45ada0a))
+
 ## [0.13.0](https://github.com/sophiie-ai/whispur/compare/v0.12.0...v0.13.0) (2026-04-16)
 
 
