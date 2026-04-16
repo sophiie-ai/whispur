@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
+    @AppStorage("selectedDictationMode") var selectedModeID: DictationModeID = .general
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
@@ -34,6 +35,7 @@ final class AppState: ObservableObject {
     let overlayManager: OverlayPanelManager
     let sparkleUpdater: SparkleUpdater
     let learning: TranscriptLearning
+    let modeStore: DictationModeStore
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
@@ -65,6 +67,7 @@ final class AppState: ObservableObject {
         let hotkeyManager = HotkeyManager()
         let overlayManager = OverlayPanelManager()
         let learning = TranscriptLearning()
+        let modeStore = DictationModeStore()
 
         self.keychain = keychain
         self.registry = registry
@@ -76,6 +79,7 @@ final class AppState: ObservableObject {
         self.overlayManager = overlayManager
         self.providerRequestLog = providerRequestLog
         self.learning = learning
+        self.modeStore = modeStore
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
@@ -412,13 +416,20 @@ final class AppState: ObservableObject {
     }
 
     private func syncPipelineConfig() {
+        let modePrompt = modeStore.resolvedPrompt(for: selectedModeID)
+
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
-        pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
+
+        // A non-empty `customSystemPrompt` predates Dictation Modes and
+        // still acts as a global override when the user has opted into it.
+        // Otherwise use the resolved mode prompt.
+        pipeline.systemPrompt = customSystemPrompt.isEmpty ? modePrompt : customSystemPrompt
+        pipeline.activeModeID = selectedModeID
     }
 
     var sttLanguageSelection: STTLanguageSelection {
