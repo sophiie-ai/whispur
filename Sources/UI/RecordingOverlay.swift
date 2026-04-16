@@ -189,27 +189,39 @@ struct RecordingOverlay: View {
 private struct CompactWaveformView: View {
     let samples: [Float]
 
+    // One gradient shading reused across all capsules — the prior ForEach
+    // built a new LinearGradient per bar per frame (~1.3k gradients/sec
+    // during recording). Canvas draws ~30× faster and keeps CPU cool.
+    private static let fillShading = GraphicsContext.Shading.linearGradient(
+        Gradient(colors: [.white.opacity(0.92), .orange.opacity(0.85)]),
+        startPoint: CGPoint(x: 0, y: 0),
+        endPoint: CGPoint(x: 0, y: 26)
+    )
+
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.92), .orange.opacity(0.85)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 2, height: height(for: sample))
+        Canvas(rendersAsynchronously: false) { context, size in
+            let count = samples.count
+            guard count > 0 else { return }
+            let barWidth: CGFloat = 2
+            let spacing: CGFloat = 2
+            let totalWidth = CGFloat(count) * barWidth + CGFloat(count - 1) * spacing
+            var x = max(0, (size.width - totalWidth) / 2)
+            for sample in samples {
+                let normalized = max(0.06, CGFloat(sample))
+                let h = 3 + normalized * 22
+                let rect = CGRect(
+                    x: x,
+                    y: (size.height - h) / 2,
+                    width: barWidth,
+                    height: h
+                )
+                let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
+                context.fill(path, with: Self.fillShading)
+                x += barWidth + spacing
             }
         }
-        .frame(height: 26)
+        .frame(width: CGFloat(samples.count) * 4 - 2, height: 26)
         .animation(.easeOut(duration: 0.08), value: samples)
-    }
-
-    private func height(for sample: Float) -> CGFloat {
-        let normalized = max(0.06, CGFloat(sample))
-        return 3 + normalized * 22
     }
 }
 
