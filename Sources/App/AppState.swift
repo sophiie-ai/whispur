@@ -38,6 +38,8 @@ final class AppState: ObservableObject {
     let learning: TranscriptLearning
     let modeStore: DictationModeStore
     let appRules: AppProviderRulesStore
+    let learningSuggestions: LearningSuggestionCenter
+    private let learningToastPanel: LearningToastPanelManager
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
@@ -71,6 +73,8 @@ final class AppState: ObservableObject {
         let learning = TranscriptLearning()
         let modeStore = DictationModeStore()
         let appRules = AppProviderRulesStore()
+        let learningSuggestions = LearningSuggestionCenter()
+        let learningToastPanel = LearningToastPanelManager()
 
         self.keychain = keychain
         self.registry = registry
@@ -84,6 +88,8 @@ final class AppState: ObservableObject {
         self.learning = learning
         self.modeStore = modeStore
         self.appRules = appRules
+        self.learningSuggestions = learningSuggestions
+        self.learningToastPanel = learningToastPanel
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
@@ -137,10 +143,15 @@ final class AppState: ObservableObject {
 
     private func setupLearning() {
         learning.isEnabled = learnFromEdits
+        learning.suggestionCenter = learningSuggestions
         learning.onLearnTerm = { [weak self] _, toTerm in
             guard let self else { return }
             self.appendToVocabulary(toTerm)
         }
+        learningSuggestions.onAccept = { [weak self] suggestion in
+            self?.appendToVocabulary(suggestion.to)
+        }
+        learningToastPanel.bind(to: learningSuggestions)
         pipeline.onPasteCompleted = { [weak self] pasted in
             guard let self, self.learnFromEdits else { return }
             self.learning.captureAfterPaste(pastedText: pasted)

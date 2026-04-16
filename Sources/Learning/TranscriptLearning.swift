@@ -28,6 +28,11 @@ final class TranscriptLearning {
     /// True iff the feature is enabled. Callers read this before capturing.
     var isEnabled: Bool = false
 
+    /// When non-nil, learning suggestions are enqueued on this center and
+    /// rendered as a non-modal toast instead of a blocking NSAlert. Set by
+    /// AppState during wiring.
+    weak var suggestionCenter: LearningSuggestionCenter?
+
     // MARK: - Capture (right after paste)
 
     func captureAfterPaste(pastedText: String) {
@@ -102,9 +107,21 @@ final class TranscriptLearning {
 
         // Cap at 3 — more than that usually means the user rewrote the
         // sentence for style, not corrected STT.
-        for sub in substitutions.prefix(3) {
-            if await promptToLearn(from: sub.from, to: sub.to) {
-                onLearnTerm?(sub.from, sub.to)
+        let capped = substitutions.prefix(3)
+
+        // Prefer the non-blocking toast when a suggestion center is wired
+        // up. The old NSAlert path remains as a fallback so background
+        // learning keeps working in tests or unwired instantiations.
+        if let center = suggestionCenter {
+            let suggestions = capped.map {
+                VocabularySuggestion(from: $0.from, to: $0.to)
+            }
+            center.present(suggestions)
+        } else {
+            for sub in capped {
+                if await promptToLearn(from: sub.from, to: sub.to) {
+                    onLearnTerm?(sub.from, sub.to)
+                }
             }
         }
     }
