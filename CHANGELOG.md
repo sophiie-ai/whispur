@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/sophiie-ai/whispur/compare/v0.12.0...v0.13.0) (2026-04-16)
+
+
+### Features
+
+* **prompts:** harden default cleanup prompt ([a1f0b3e](https://github.com/sophiie-ai/whispur/commit/a1f0b3e8ec3c80f9165f512d345528e781134671))
+
 ## [0.12.0](https://github.com/sophiie-ai/whispur/compare/v0.11.2...v0.12.0) (2026-04-16)
 
 
