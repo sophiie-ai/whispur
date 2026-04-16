@@ -368,8 +368,13 @@ final class DictationPipeline: ObservableObject {
                 return
             }
 
+            guard !Task.isCancelled else { throw CancellationError() }
+
             phase = .pasting
             await TextInjector.paste(finalTranscript, preserveClipboard: preserveClipboard)
+
+            guard !Task.isCancelled else { throw CancellationError() }
+
             onPasteCompleted?(finalTranscript)
 
             let result = PipelineResult(

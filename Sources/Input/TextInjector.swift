@@ -10,6 +10,11 @@ enum TextInjector {
         // Wait for modifier keys to be released (Fn, etc.)
         await waitForKeyRelease()
 
+        guard !Task.isCancelled else {
+            logger.info("Paste cancelled before clipboard write")
+            return
+        }
+
         let pasteboard = NSPasteboard.general
 
         // Snapshot current clipboard
@@ -33,6 +38,16 @@ enum TextInjector {
 
         // Wait 30ms for app focus to return
         try? await Task.sleep(for: .milliseconds(30))
+
+        // If cancelled after clipboard write but before paste, restore and bail.
+        guard !Task.isCancelled else {
+            logger.info("Paste cancelled before simulating Cmd+V — restoring clipboard")
+            if let savedItems {
+                pasteboard.clearContents()
+                pasteboard.writeObjects(savedItems)
+            }
+            return
+        }
 
         // Simulate Cmd+V
         simulatePaste()
