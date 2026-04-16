@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     @AppStorage("selectedDictationMode") var selectedModeID: DictationModeID = .general
+    @AppStorage("appRulesEnabled") var appRulesEnabled: Bool = true
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
@@ -36,6 +37,7 @@ final class AppState: ObservableObject {
     let sparkleUpdater: SparkleUpdater
     let learning: TranscriptLearning
     let modeStore: DictationModeStore
+    let appRules: AppProviderRulesStore
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
@@ -68,6 +70,7 @@ final class AppState: ObservableObject {
         let overlayManager = OverlayPanelManager()
         let learning = TranscriptLearning()
         let modeStore = DictationModeStore()
+        let appRules = AppProviderRulesStore()
 
         self.keychain = keychain
         self.registry = registry
@@ -80,6 +83,7 @@ final class AppState: ObservableObject {
         self.providerRequestLog = providerRequestLog
         self.learning = learning
         self.modeStore = modeStore
+        self.appRules = appRules
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
@@ -416,10 +420,17 @@ final class AppState: ObservableObject {
     }
 
     private func syncPipelineConfig() {
-        let modePrompt = modeStore.resolvedPrompt(for: selectedModeID)
+        // Resolve the active context right before dictation. The frontmost
+        // app + selected mode win over the global provider/prompt defaults,
+        // and the user can still disable rules globally from settings.
+        let rule = appRulesEnabled ? appRules.currentRule() : nil
+        let effectiveSTT = rule?.sttOverride ?? selectedSTT
+        let effectiveLLM = rule?.llmOverride ?? selectedLLM
+        let effectiveMode = rule?.modeID ?? selectedModeID
+        let modePrompt = modeStore.resolvedPrompt(for: effectiveMode)
 
-        pipeline.selectedSTT = selectedSTT
-        pipeline.selectedLLM = selectedLLM
+        pipeline.selectedSTT = effectiveSTT
+        pipeline.selectedLLM = effectiveLLM
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
@@ -429,7 +440,8 @@ final class AppState: ObservableObject {
         // still acts as a global override when the user has opted into it.
         // Otherwise use the resolved mode prompt.
         pipeline.systemPrompt = customSystemPrompt.isEmpty ? modePrompt : customSystemPrompt
-        pipeline.activeModeID = selectedModeID
+        pipeline.activeModeID = effectiveMode
+        pipeline.activeRuleSummary = rule.map { "\($0.appDisplayName): \($0.summary)" }
     }
 
     var sttLanguageSelection: STTLanguageSelection {

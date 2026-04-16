@@ -12,6 +12,10 @@ struct MenuBarView: View {
             actionCard
             modePicker
 
+            if let ruleHint = activeRuleHint {
+                activeRuleCard(ruleHint)
+            }
+
             if appState.showSetupGuide && (!appState.isReadyForDailyUse || !appState.hasCompletedFirstDictation) {
                 setupCard
             }
@@ -65,6 +69,26 @@ struct MenuBarView: View {
 
             PreferenceBadge(title: statusBadgeTitle, tone: statusBadgeTone)
         }
+    }
+
+    private var activeRuleHint: String? {
+        appState.pipeline.activeRuleSummary
+    }
+
+    private func activeRuleCard(_ hint: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "app.badge.checkmark")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var modePicker: some View {
