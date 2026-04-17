@@ -439,7 +439,48 @@ final class DictationPipeline: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard trimmed.uppercased() != "EMPTY" else { return nil }
+        if isKnownSilenceHallucination(trimmed) { return nil }
         return trimmed
+    }
+
+    /// Whisper (and other STT providers trained on subtitled video) confidently
+    /// emit a small set of canned phrases when given silence or near-silence —
+    /// "Thanks for watching!", "[Music]", "Subtitles by the Amara.org community".
+    /// If the *entire* transcript matches one of these, treat it as silence.
+    /// Matching is whole-transcript only so real speech that happens to contain
+    /// "thank you" mid-sentence still passes through.
+    private static let knownSilenceHallucinations: Set<String> = [
+        "thank you for watching",
+        "thanks for watching",
+        "thank you for watching!",
+        "thanks for watching!",
+        "thank you",
+        "thank you so much",
+        "thank you so much for watching",
+        "thanks",
+        "you",
+        "bye",
+        "goodbye",
+        "please subscribe",
+        "like and subscribe",
+        "don't forget to subscribe",
+        "thanks for listening",
+        "thank you for listening",
+        "subtitles by the amara.org community",
+        "music",
+        "applause",
+        "silence",
+    ]
+
+    private func isKnownSilenceHallucination(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
+        let stripped = String(lowered.unicodeScalars.filter { allowed.contains($0) })
+        let collapsed = stripped
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return false }
+        return Self.knownSilenceHallucinations.contains(collapsed)
     }
 
     private func playSound(_ sound: NSSound?) {
