@@ -304,8 +304,7 @@ final class DictationPipeline: ObservableObject {
         if peakLevel < Self.voiceActivityPeakThreshold {
             logger.info("Skipping STT: peak level \(peakLevel) below voice-activity threshold")
             try? FileManager.default.removeItem(at: recordedURL)
-            phase = .done("No speech detected.")
-            scheduleResetToIdle(after: .seconds(1))
+            dismissForNoSpeech()
             return
         }
 
@@ -338,8 +337,7 @@ final class DictationPipeline: ObservableObject {
                 vocabulary: customVocabulary
             )
             guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {
-                phase = .done("No speech detected.")
-                scheduleResetToIdle(after: .seconds(1))
+                dismissForNoSpeech()
                 return
             }
 
@@ -375,8 +373,7 @@ final class DictationPipeline: ObservableObject {
             }
 
             guard let finalTranscript = normalizedTranscriptText(from: cleanedTranscript) else {
-                phase = .done("No speech detected.")
-                scheduleResetToIdle(after: .seconds(1))
+                dismissForNoSpeech()
                 return
             }
 
@@ -481,6 +478,16 @@ final class DictationPipeline: ObservableObject {
             .joined(separator: " ")
         guard !collapsed.isEmpty else { return false }
         return Self.knownSilenceHallucinations.contains(collapsed)
+    }
+
+    /// Close the overlay immediately and play a soft chime when the
+    /// recording had no speech. Distinct from the tink→pop start/stop cues
+    /// so the user knows the trigger registered but nothing was pasted.
+    private func dismissForNoSpeech() {
+        playSound(.bottle)
+        cancelResetTask()
+        activeTriggerMode = .hold
+        phase = .idle
     }
 
     private func playSound(_ sound: NSSound?) {
