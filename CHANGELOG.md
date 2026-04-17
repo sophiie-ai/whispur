@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.3](https://github.com/sophiie-ai/whispur/compare/v0.13.2...v0.13.3) (2026-04-17)
+
+
+### Bug Fixes
+
+* **pipeline:** dismiss overlay silently on no speech ([21811a9](https://github.com/sophiie-ai/whispur/commit/21811a988c8ed81b65488bc65457f85a8fd0f0b8))
+
 ## [0.13.2](https://github.com/sophiie-ai/whispur/compare/v0.13.1...v0.13.2) (2026-04-17)
 
 
