@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/sophiie-ai/whispur/compare/v0.13.1...v0.13.2) (2026-04-17)
+
+
+### Bug Fixes
+
+* **pipeline:** filter known Whisper silence hallucinations ([a4ed421](https://github.com/sophiie-ai/whispur/commit/a4ed4210e9abe1faa6e56a67b265ee081acdb5ab))
+
 ## [0.13.1](https://github.com/sophiie-ai/whispur/compare/v0.13.0...v0.13.1) (2026-04-16)
 
 
