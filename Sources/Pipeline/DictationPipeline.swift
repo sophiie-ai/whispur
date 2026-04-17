@@ -20,15 +20,28 @@ final class DictationPipeline: ObservableObject {
     @Published private(set) var isHearingSilence: Bool = false
 
     private var silentSampleCount: Int = 0
-    private var peakAudioLevel: Float = 0
     private static let silenceLevelThreshold: Float = 0.05
     private static let silenceTickThreshold: Int = 60  // ~1.3s at ~47Hz
-    /// A recording whose peak level never crosses this is treated as silent.
-    /// STT providers (Whisper especially) hallucinate confident-sounding text
-    /// on silent audio ("Thanks for watching!"), so we skip processing entirely.
-    /// Keep this well below `silenceLevelThreshold` (0.05) so quiet speech
-    /// still passes; this only catches sessions where the mic captured nothing.
-    private static let voiceActivityPeakThreshold: Float = 0.02
+
+    // Voice-activity gate thresholds (applied to raw per-buffer RMS captured
+    // by AudioRecorder). STT providers — Whisper especially — hallucinate
+    // confident-sounding text on silent audio ("Thanks for watching!"), so
+    // we skip STT entirely when a recording doesn't contain enough speech.
+    //
+    // The gate combines three signals so a single loud click or steady hum
+    // doesn't get mistaken for speech:
+    //   1. Total duration must exceed `minRecordingSeconds`.
+    //   2. An adaptive threshold is derived from the quietest observed
+    //      buffer (noise floor) so quiet rooms and noisy cafés are handled
+    //      differently. `absoluteFloorRMS` prevents a dead channel from
+    //      passing via 0 × multiplier == 0.
+    //   3. The cumulative time spent above that threshold must exceed
+    //      `minVoicedSeconds`; a single spike can beat the threshold once
+    //      but not for long enough to be speech.
+    private static let minRecordingSeconds: Double = 0.3
+    private static let minVoicedSeconds: Double = 0.3
+    private static let noiseFloorMultiplier: Float = 3.0
+    private static let absoluteFloorRMS: Float = 0.005
 
     private let recorder: AudioRecorder
     private let registry: ProviderRegistry
@@ -168,7 +181,7 @@ final class DictationPipeline: ObservableObject {
 
         recorder.onRecordingReady = nil
 
-        guard let recordedURL = recorder.stopRecording() else {
+        guard let stopped = recorder.stopRecording() else {
             resetAudioSamples()
             presentError("No audio was captured.")
             return
@@ -176,11 +189,10 @@ final class DictationPipeline: ObservableObject {
 
         playSound(.pop)
 
-        let capturedPeak = peakAudioLevel
         resetAudioSamples()
         processingTask?.cancel()
         processingTask = Task { [weak self] in
-            await self?.processRecording(at: recordedURL, peakLevel: capturedPeak)
+            await self?.processRecording(at: stopped.url, metrics: stopped.metrics)
         }
     }
 
@@ -289,7 +301,7 @@ final class DictationPipeline: ObservableObject {
         logger.info("Recording session started")
     }
 
-    private func processRecording(at recordedURL: URL, peakLevel: Float) async {
+    private func processRecording(at recordedURL: URL, metrics: RecordingMetrics) async {
         defer {
             processingTask = nil
         }
@@ -298,11 +310,11 @@ final class DictationPipeline: ObservableObject {
             recorder.cleanup()
         }
 
-        // Skip STT entirely if the whole recording was below the voice-activity floor.
-        // Providers confidently hallucinate on silent audio (Whisper's famous
-        // "Thanks for watching!"); don't paste anything if the user didn't speak.
-        if peakLevel < Self.voiceActivityPeakThreshold {
-            logger.info("Skipping STT: peak level \(peakLevel) below voice-activity threshold")
+        // Skip STT entirely if the recording doesn't contain enough speech.
+        // See `minRecordingSeconds` / `noiseFloorMultiplier` comments above for
+        // rationale. Providers hallucinate confidently on silent audio, so
+        // gating aggressively here saves both a request and a bad paste.
+        if !recordingHasSpeech(metrics: metrics) {
             try? FileManager.default.removeItem(at: recordedURL)
             dismissForNoSpeech()
             return
@@ -480,6 +492,42 @@ final class DictationPipeline: ObservableObject {
         return Self.knownSilenceHallucinations.contains(collapsed)
     }
 
+    /// Decide whether a finished recording is worth sending to STT.
+    ///
+    /// Three gates, all must pass: total duration, per-buffer adaptive
+    /// threshold, cumulative voiced time. The noise floor is the minimum RMS
+    /// observed across the recording (excluding the very first buffer, which
+    /// can be a zero-fill during engine warm-up). In a silent room this is
+    /// near zero; in a café it's the ambient hum, so the threshold adapts.
+    private func recordingHasSpeech(metrics: RecordingMetrics) -> Bool {
+        guard metrics.totalDurationSeconds >= Self.minRecordingSeconds else {
+            logger.info("Skipping STT: recording too short (\(metrics.totalDurationSeconds)s)")
+            return false
+        }
+
+        let series = metrics.buffers.dropFirst()
+        guard !series.isEmpty, metrics.sampleRate > 0 else {
+            logger.info("Skipping STT: no buffer metrics available")
+            return false
+        }
+
+        let noiseFloor = series.map(\.rms).min() ?? 0
+        let threshold = max(noiseFloor * Self.noiseFloorMultiplier, Self.absoluteFloorRMS)
+
+        let voicedFrames = series.reduce(Int64(0)) { acc, buffer in
+            buffer.rms > threshold ? acc + Int64(buffer.frameCount) : acc
+        }
+        let voicedSeconds = Double(voicedFrames) / metrics.sampleRate
+
+        if voicedSeconds < Self.minVoicedSeconds {
+            logger.info(
+                "Skipping STT: voiced=\(voicedSeconds)s threshold=\(threshold) noiseFloor=\(noiseFloor)"
+            )
+            return false
+        }
+        return true
+    }
+
     /// Close the overlay immediately and play a soft chime when the
     /// recording had no speech. Distinct from the tink→pop start/stop cues
     /// so the user knows the trigger registered but nothing was pasted.
@@ -523,7 +571,6 @@ final class DictationPipeline: ObservableObject {
     private func resetAudioSamples() {
         audioSamples = Array(repeating: 0, count: Self.waveformSampleCount)
         silentSampleCount = 0
-        peakAudioLevel = 0
         isHearingSilence = false
     }
 
@@ -539,9 +586,6 @@ final class DictationPipeline: ObservableObject {
         audioSamples = samples
 
         if case .recording = phase {
-            if clamped > peakAudioLevel {
-                peakAudioLevel = clamped
-            }
             if clamped < Self.silenceLevelThreshold {
                 silentSampleCount += 1
                 if silentSampleCount >= Self.silenceTickThreshold && !isHearingSilence {

@@ -27,6 +27,10 @@ final class AudioRecorder: ObservableObject {
     /// callback runs at ~47 Hz so publishing every sample is wasteful.
     private var lastLevelPublishTime: CFAbsoluteTime = 0
 
+    private var metricSampleRate: Double = 0
+    private var metricTotalFrames: Int64 = 0
+    private var bufferMetrics: [BufferMetric] = []
+
     static func requestMicrophoneAccess() async -> Bool {
         await withCheckedContinuation { continuation in
             AVCaptureDevice.requestAccess(for: .audio) { granted in
@@ -67,6 +71,9 @@ final class AudioRecorder: ObservableObject {
         audioEngine = engine
         audioFile = file
         tempFileURL = tempURL
+        metricSampleRate = inputFormat.sampleRate
+        metricTotalFrames = 0
+        bufferMetrics.removeAll(keepingCapacity: true)
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
             self?.handleIncomingBuffer(buffer)
@@ -90,11 +97,13 @@ final class AudioRecorder: ObservableObject {
         )
     }
 
-    func stopRecording() -> URL? {
+    func stopRecording() -> (url: URL, metrics: RecordingMetrics)? {
         guard isRecording else { return nil }
 
         isRecording = false
 
+        // removeTap guarantees no further tap callbacks, so bufferMetrics is
+        // safe to read on the calling thread after this returns.
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
@@ -105,13 +114,20 @@ final class AudioRecorder: ObservableObject {
             audioFile = nil
         }
 
+        let metrics = RecordingMetrics(
+            sampleRate: metricSampleRate,
+            totalFrames: metricTotalFrames,
+            buffers: bufferMetrics
+        )
+
         readyFired = false
         smoothedLevel = 0
         audioLevel = 0
         lastLevelPublishTime = 0
 
         logger.info("Recording stopped")
-        return tempFileURL
+        guard let url = tempFileURL else { return nil }
+        return (url, metrics)
     }
 
     func cleanup() {
@@ -126,6 +142,10 @@ final class AudioRecorder: ObservableObject {
         guard buffer.frameLength > 0 else { return }
 
         let rms = rmsLevel(for: buffer)
+
+        let frameCount = Int(buffer.frameLength)
+        metricTotalFrames &+= Int64(frameCount)
+        bufferMetrics.append(BufferMetric(frameCount: frameCount, rms: rms))
 
         if !readyFired && rms > 0 {
             readyFired = true
@@ -190,6 +210,24 @@ final class AudioRecorder: ObservableObject {
         }
 
         return 0
+    }
+}
+
+/// Per-buffer RMS captured during recording.
+struct BufferMetric {
+    let frameCount: Int
+    let rms: Float
+}
+
+/// Raw voice-activity data collected while recording. Used by the pipeline to
+/// decide whether the recording contains enough real speech to send to STT.
+struct RecordingMetrics {
+    let sampleRate: Double
+    let totalFrames: Int64
+    let buffers: [BufferMetric]
+
+    var totalDurationSeconds: Double {
+        sampleRate > 0 ? Double(totalFrames) / sampleRate : 0
     }
 }
 
