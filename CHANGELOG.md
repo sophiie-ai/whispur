@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.4](https://github.com/sophiie-ai/whispur/compare/v0.13.3...v0.13.4) (2026-04-17)
+
+
+### Bug Fixes
+
+* **pipeline:** tighten pre-STT voice-activity gate ([2260202](https://github.com/sophiie-ai/whispur/commit/2260202687cee556aec5acbaff4d039b8d326301))
+
 ## [0.13.3](https://github.com/sophiie-ai/whispur/compare/v0.13.2...v0.13.3) (2026-04-17)
 
 
