@@ -11,6 +11,8 @@ final class AppState: ObservableObject {
     /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
+    /// CoreAudio device UID for the preferred input. Empty = follow the system default.
+    @AppStorage("preferredAudioInputUID") var preferredAudioInputUID: String = ""
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
