@@ -57,6 +57,13 @@ struct ProvidersSettingsView: View {
                                     keychain: appState.keychain
                                 )
                             }
+                            if provider == .openai {
+                                BaseURLField(
+                                    label: "Custom Base URL (optional)",
+                                    storageKey: "openaiSTTBaseURL",
+                                    placeholder: "https://api.openai.com/v1"
+                                )
+                            }
                         }
                     }
                 }
@@ -93,6 +100,13 @@ struct ProvidersSettingsView: View {
                                 label: key.displayName,
                                 key: key,
                                 keychain: appState.keychain
+                            )
+                        }
+                        if provider == .openai {
+                            BaseURLField(
+                                label: "Custom Base URL (optional)",
+                                storageKey: "openaiLLMBaseURL",
+                                placeholder: "https://api.openai.com/v1"
                             )
                         }
                     }

@@ -22,6 +22,9 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
+            if let override = Self.baseURLOverride(forKey: "openaiSTTBaseURL") {
+                return OpenAISTT(apiKey: key, httpClient: httpClient, baseURL: override)
+            }
             return OpenAISTT(apiKey: key, httpClient: httpClient)
         case .groqWhisper:
             guard let key = keychain.get(.groqAPIKey) else { return nil }
@@ -48,6 +51,9 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
+            if let override = Self.baseURLOverride(forKey: "openaiLLMBaseURL") {
+                return OpenAILLM(apiKey: key, httpClient: httpClient, baseURL: override)
+            }
             return OpenAILLM(apiKey: key, httpClient: httpClient)
         case .anthropic:
             guard let key = keychain.get(.anthropicAPIKey) else { return nil }
@@ -67,5 +73,19 @@ final class ProviderRegistry {
     /// Returns provider IDs that have their API keys configured.
     func availableLLMProviders() -> [LLMProviderID] {
         LLMProviderID.allCases.filter { keychain.hasKeysFor(llm: $0) }
+    }
+
+    /// Reads an OpenAI-compatible base URL override from UserDefaults.
+    /// Trims whitespace and a trailing slash so callers can append `/chat/completions` etc.
+    private static func baseURLOverride(forKey key: String) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http"
+        else { return nil }
+        if trimmed.hasSuffix("/") { trimmed.removeLast() }
+        return trimmed
     }
 }

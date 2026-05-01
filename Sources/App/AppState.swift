@@ -11,6 +11,10 @@ final class AppState: ObservableObject {
     /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
+    /// Empty = use the official OpenAI endpoint. Set to point STT/LLM at an
+    /// OpenAI-compatible gateway (Azure OpenAI, internal proxy, Ollama, etc.).
+    @AppStorage("openaiSTTBaseURL") var openaiSTTBaseURL: String = ""
+    @AppStorage("openaiLLMBaseURL") var openaiLLMBaseURL: String = ""
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
