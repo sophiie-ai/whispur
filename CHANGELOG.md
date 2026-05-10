@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/sophiie-ai/whispur/compare/v0.13.4...v0.14.0) (2026-05-10)
+
+
+### Features
+
+* allow custom OpenAI-compatible base URL for STT and LLM ([#30](https://github.com/sophiie-ai/whispur/issues/30)) ([e9c9a48](https://github.com/sophiie-ai/whispur/commit/e9c9a485644448df35af7e8475e4decee08df0d2))
+* let users pick which microphone Whispur records from ([#29](https://github.com/sophiie-ai/whispur/issues/29)) ([c12e61a](https://github.com/sophiie-ai/whispur/commit/c12e61a81ccf03bab25600c681dfb85a503e747a))
+
 ## [0.13.4](https://github.com/sophiie-ai/whispur/compare/v0.13.3...v0.13.4) (2026-04-17)
 
 
