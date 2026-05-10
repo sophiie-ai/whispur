@@ -1,5 +1,7 @@
 import AVFoundation
+import AudioToolbox
 import Combine
+import CoreAudio
 import Foundation
 import os
 
@@ -53,6 +55,7 @@ final class AudioRecorder: ObservableObject {
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
+        applyPreferredInputDevice(to: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
@@ -136,6 +139,28 @@ final class AudioRecorder: ObservableObject {
         }
         tempFileURL = nil
         audioFile = nil
+    }
+
+    private func applyPreferredInputDevice(to inputNode: AVAudioInputNode) {
+        let uid = UserDefaults.standard.string(forKey: "preferredAudioInputUID") ?? ""
+        guard !uid.isEmpty,
+              var deviceID = AudioDevice.resolveDeviceID(forUID: uid),
+              let audioUnit = inputNode.audioUnit
+        else { return }
+
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status != noErr {
+            logger.error("Failed to set preferred input device (uid=\(uid, privacy: .public) status=\(status, privacy: .public))")
+        } else {
+            logger.info("Using preferred input device uid=\(uid, privacy: .public) id=\(deviceID, privacy: .public)")
+        }
     }
 
     private func handleIncomingBuffer(_ buffer: AVAudioPCMBuffer) {

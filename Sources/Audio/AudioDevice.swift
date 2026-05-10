@@ -89,4 +89,11 @@ struct AudioDevice: Identifiable, Hashable {
             )
         }
     }
+
+    /// Resolve a CoreAudio device UID back to its current AudioDeviceID.
+    /// Returns nil if the device is not currently connected.
+    static func resolveDeviceID(forUID uid: String) -> AudioDeviceID? {
+        guard !uid.isEmpty else { return nil }
+        return availableInputDevices().first(where: { $0.uid == uid })?.id
+    }
 }
