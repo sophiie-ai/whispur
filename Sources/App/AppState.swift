@@ -15,6 +15,8 @@ final class AppState: ObservableObject {
     /// OpenAI-compatible gateway (Azure OpenAI, internal proxy, Ollama, etc.).
     @AppStorage("openaiSTTBaseURL") var openaiSTTBaseURL: String = ""
     @AppStorage("openaiLLMBaseURL") var openaiLLMBaseURL: String = ""
+    /// CoreAudio device UID for the preferred input. Empty = follow the system default.
+    @AppStorage("preferredAudioInputUID") var preferredAudioInputUID: String = ""
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""

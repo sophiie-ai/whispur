@@ -113,6 +113,10 @@ struct GeneralSettingsView: View {
                     }
                 }
 
+                DetailRow("Input device", detail: "Pick which microphone Whispur records from. \"System default\" follows the macOS Sound setting.") {
+                    AudioInputDevicePicker(appState: appState)
+                }
+
                 Divider()
 
                 DetailRow("Shortcut monitoring", detail: "Whispur keeps the global shortcut listener active in the background.") {
@@ -177,5 +181,37 @@ struct GeneralSettingsView: View {
             get: { appState.toggleShortcut },
             set: { appState.setToggleShortcut($0) }
         )
+    }
+}
+
+private struct AudioInputDevicePicker: View {
+    @ObservedObject var appState: AppState
+    @State private var devices: [AudioDevice] = []
+
+    private static let systemDefaultTag = ""
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Picker("Input device", selection: $appState.preferredAudioInputUID) {
+                Text("System default").tag(Self.systemDefaultTag)
+                if !devices.isEmpty {
+                    Divider()
+                    ForEach(devices) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 240)
+
+            if !appState.preferredAudioInputUID.isEmpty,
+               !devices.contains(where: { $0.uid == appState.preferredAudioInputUID }) {
+                Text("Saved device is not connected — recording will use the system default.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { devices = AudioDevice.availableInputDevices() }
     }
 }
