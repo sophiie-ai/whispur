@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/sophiie-ai/whispur/compare/v0.14.0...v0.14.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* harden OpenAI provider settings ([#33](https://github.com/sophiie-ai/whispur/issues/33)) ([1bb4f00](https://github.com/sophiie-ai/whispur/commit/1bb4f0067b3dfcee14cec49ae2e2d9bd1587e7e3))
+* run cleanup for Japanese transcripts ([#32](https://github.com/sophiie-ai/whispur/issues/32)) ([00efb64](https://github.com/sophiie-ai/whispur/commit/00efb64d220439a00f504345a044a8b9522ed324))
+
 ## [0.14.0](https://github.com/sophiie-ai/whispur/compare/v0.13.4...v0.14.0) (2026-05-10)
 
 
