@@ -63,6 +63,11 @@ struct ProvidersSettingsView: View {
                                     storageKey: "openaiSTTBaseURL",
                                     placeholder: "https://api.openai.com/v1"
                                 )
+                                ProviderTextField(
+                                    label: "Custom Model (optional)",
+                                    storageKey: "openaiSTTModel",
+                                    placeholder: "whisper-1"
+                                )
                             }
                         }
                     }
@@ -107,6 +112,11 @@ struct ProvidersSettingsView: View {
                                 label: "Custom Base URL (optional)",
                                 storageKey: "openaiLLMBaseURL",
                                 placeholder: "https://api.openai.com/v1"
+                            )
+                            ProviderTextField(
+                                label: "Custom Model (optional)",
+                                storageKey: "openaiLLMModel",
+                                placeholder: "gpt-4o-mini"
                             )
                         }
                     }

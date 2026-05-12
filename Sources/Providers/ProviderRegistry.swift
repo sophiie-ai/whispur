@@ -22,8 +22,15 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
-            if let override = Self.baseURLOverride(forKey: "openaiSTTBaseURL") {
-                return OpenAISTT(apiKey: key, httpClient: httpClient, baseURL: override)
+            let baseURL = Self.baseURLOverride(forKey: "openaiSTTBaseURL")
+            let model = Self.textOverride(forKey: "openaiSTTModel")
+            if baseURL != nil || model != nil {
+                return OpenAISTT(
+                    apiKey: key,
+                    httpClient: httpClient,
+                    baseURL: baseURL ?? "https://api.openai.com/v1",
+                    model: model ?? "whisper-1"
+                )
             }
             return OpenAISTT(apiKey: key, httpClient: httpClient)
         case .groqWhisper:
@@ -51,8 +58,15 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
-            if let override = Self.baseURLOverride(forKey: "openaiLLMBaseURL") {
-                return OpenAILLM(apiKey: key, httpClient: httpClient, baseURL: override)
+            let baseURL = Self.baseURLOverride(forKey: "openaiLLMBaseURL")
+            let model = Self.textOverride(forKey: "openaiLLMModel")
+            if baseURL != nil || model != nil {
+                return OpenAILLM(
+                    apiKey: key,
+                    httpClient: httpClient,
+                    baseURL: baseURL ?? "https://api.openai.com/v1",
+                    model: model ?? "gpt-4o-mini"
+                )
             }
             return OpenAILLM(apiKey: key, httpClient: httpClient)
         case .anthropic:
@@ -87,5 +101,11 @@ final class ProviderRegistry {
         else { return nil }
         if trimmed.hasSuffix("/") { trimmed.removeLast() }
         return trimmed
+    }
+
+    private static func textOverride(forKey key: String) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

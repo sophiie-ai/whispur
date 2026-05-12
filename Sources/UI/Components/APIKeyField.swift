@@ -9,6 +9,22 @@ struct APIKeyField: View {
     @State private var value: String = ""
     @State private var isSaved: Bool = false
     @State private var isRevealed: Bool = false
+    @State private var hasStoredValue: Bool = false
+    @FocusState private var isFocused: Bool
+
+    private static let maskedValue = "••••••••••••••••"
+
+    private var trimmedValue: String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isMaskedStoredValue: Bool {
+        hasStoredValue && value == Self.maskedValue
+    }
+
+    private var canSave: Bool {
+        !trimmedValue.isEmpty && !isMaskedStoredValue
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -26,6 +42,7 @@ struct APIKeyField: View {
                 }
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.caption, design: .monospaced))
+                .focused($isFocused)
 
                 Button {
                     isRevealed.toggle()
@@ -35,21 +52,24 @@ struct APIKeyField: View {
                 .buttonStyle(.borderless)
 
                 Button(isSaved ? "Saved" : "Save") {
-                    if !value.isEmpty {
-                        keychain.set(key, value: value)
+                    if canSave {
+                        keychain.set(key, value: trimmedValue)
+                        hasStoredValue = true
+                        value = Self.maskedValue
                         withAnimation { isSaved = true }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             isSaved = false
                         }
                     }
                 }
-                .disabled(value.isEmpty)
+                .disabled(!canSave)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
 
-                if keychain.has(key) {
+                if hasStoredValue {
                     Button {
                         keychain.delete(key)
+                        hasStoredValue = false
                         value = ""
                     } label: {
                         Image(systemName: "trash")
@@ -60,8 +80,14 @@ struct APIKeyField: View {
             }
         }
         .onAppear {
-            if keychain.has(key) {
-                value = "••••••••••••••••"
+            hasStoredValue = keychain.has(key)
+            value = hasStoredValue ? Self.maskedValue : ""
+        }
+        .onChange(of: isFocused) { _, focused in
+            if focused && isMaskedStoredValue {
+                value = ""
+            } else if !focused && hasStoredValue && value.isEmpty {
+                value = Self.maskedValue
             }
         }
     }
