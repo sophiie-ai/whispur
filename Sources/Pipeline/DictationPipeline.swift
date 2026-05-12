@@ -358,8 +358,7 @@ final class DictationPipeline: ObservableObject {
 
             // Skip LLM cleanup for too-short transcripts — they're almost always noise
             // and an LLM will hallucinate conversational replies instead of cleaning text.
-            let wordCount = normalizedRawTranscript.split { $0.isWhitespace }.count
-            let looksLikeSpeech = normalizedRawTranscript.count >= 8 && wordCount >= 2
+            let looksLikeSpeech = shouldRunCleanup(for: normalizedRawTranscript)
 
             if looksLikeSpeech, let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
                 phase = .cleaningTranscript
@@ -450,6 +449,26 @@ final class DictationPipeline: ObservableObject {
         guard trimmed.uppercased() != "EMPTY" else { return nil }
         if isKnownSilenceHallucination(trimmed) { return nil }
         return trimmed
+    }
+
+    private func shouldRunCleanup(for transcript: String) -> Bool {
+        guard transcript.count >= 8 else { return false }
+
+        let wordCount = transcript.split { $0.isWhitespace }.count
+        if wordCount >= 2 { return true }
+
+        return transcript.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3040 ... 0x30FF, // Hiragana and Katakana
+                 0x3400 ... 0x4DBF, // CJK Unified Ideographs Extension A
+                 0x4E00 ... 0x9FFF, // CJK Unified Ideographs
+                 0xF900 ... 0xFAFF, // CJK Compatibility Ideographs
+                 0xFF66 ... 0xFF9F: // Halfwidth Katakana
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     /// Whisper (and other STT providers trained on subtitled video) confidently
