@@ -69,6 +69,18 @@ struct ProvidersSettingsView: View {
                                     placeholder: "whisper-1"
                                 )
                             }
+                            if provider == .openaiRealtime {
+                                BaseURLField(
+                                    label: "Custom Base URL (optional)",
+                                    storageKey: "openaiSTTBaseURL",
+                                    placeholder: "https://api.openai.com/v1"
+                                )
+                                ProviderTextField(
+                                    label: "Custom Transcription Model (optional)",
+                                    storageKey: "openaiRealtimeSTTModel",
+                                    placeholder: "gpt-realtime-whisper"
+                                )
+                            }
                         }
                     }
                 }
@@ -170,6 +182,8 @@ private struct STTLanguagePicker: View {
 
     private func footnote(for provider: STTProviderID, selection: STTLanguageSelection) -> String {
         switch (provider, selection) {
+        case (.openaiRealtime, .auto):
+            return "OpenAI Realtime Whisper will stream transcript deltas and auto-detect the language on each recording."
         case (.deepgram, .auto):
             return "Deepgram will use nova-3's multilingual mode (English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch)."
         case (.apple, .auto):

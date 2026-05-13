@@ -31,10 +31,21 @@ struct ShortcutModifiers: OptionSet, Codable, Hashable, Sendable {
 struct ShortcutBinding: Codable, Equatable, Hashable {
     let keyCode: UInt16?
     let modifiers: ShortcutModifiers
+    /// Modifier key codes that must be physically pressed for this binding.
+    ///
+    /// `ShortcutModifiers` intentionally treats left/right modifier keys as
+    /// the same logical modifier. This extra set lets a shortcut opt into a
+    /// side-specific key, such as Right Shift.
+    let requiredModifierKeyCodes: Set<UInt16>
 
-    init(keyCode: UInt16?, modifiers: ShortcutModifiers) {
+    init(
+        keyCode: UInt16?,
+        modifiers: ShortcutModifiers,
+        requiredModifierKeyCodes: Set<UInt16> = []
+    ) {
         self.keyCode = keyCode
         self.modifiers = modifiers
+        self.requiredModifierKeyCodes = requiredModifierKeyCodes
     }
 
     /// Function key only (hold to talk default).
@@ -55,6 +66,13 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
     /// Command + Shift + Space.
     static let commandShiftSpace = ShortcutBinding(keyCode: UInt16(kVK_Space), modifiers: [.command, .shift])
 
+    /// Command + Right Shift + Slash.
+    static let commandRightShiftSlash = ShortcutBinding(
+        keyCode: UInt16(kVK_ANSI_Slash),
+        modifiers: [.command, .shift],
+        requiredModifierKeyCodes: [UInt16(kVK_RightShift)]
+    )
+
     /// F5 key.
     static let f5 = ShortcutBinding(keyCode: UInt16(kVK_F5), modifiers: [])
 
@@ -62,7 +80,7 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
     static let holdPresets: [ShortcutBinding] = [.fnKey, .rightOption, .controlSpace, .f5]
 
     /// Built-in preset shortcuts for toggle recording.
-    static let togglePresets: [ShortcutBinding] = [.commandFn, .optionSpace, .commandShiftSpace, .f5]
+    static let togglePresets: [ShortcutBinding] = [.commandRightShiftSlash, .commandFn, .optionSpace, .commandShiftSpace, .f5]
 
     var displayName: String {
         var parts: [String] = []
@@ -91,6 +109,8 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
             return "Option + Space"
         case .commandShiftSpace:
             return "Command + Shift + Space"
+        case .commandRightShiftSlash:
+            return "Command + Right Shift + /"
         case .f5:
             return "F5"
         default:
@@ -100,12 +120,16 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
 
     var storageValue: String {
         let keyValue = keyCode.map(String.init) ?? "x"
-        return "\(modifiers.rawValue):\(keyValue)"
+        let requiredCodes = requiredModifierKeyCodes
+            .sorted()
+            .map(String.init)
+            .joined(separator: ",")
+        return "\(modifiers.rawValue):\(keyValue):\(requiredCodes)"
     }
 
     init?(storageValue: String) {
-        let parts = storageValue.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2, let modifiersRaw = UInt(parts[0]) else { return nil }
+        let parts = storageValue.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard (parts.count == 2 || parts.count == 3), let modifiersRaw = UInt(parts[0]) else { return nil }
 
         let keyCode: UInt16?
         if parts[1] == "x" {
@@ -116,13 +140,27 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
             return nil
         }
 
-        self.init(keyCode: keyCode, modifiers: ShortcutModifiers(rawValue: modifiersRaw))
+        var requiredModifierKeyCodes: Set<UInt16> = []
+        if parts.count == 3, !parts[2].isEmpty {
+            let codes = parts[2].split(separator: ",").map(String.init)
+            for code in codes {
+                guard let parsed = UInt16(code) else { return nil }
+                requiredModifierKeyCodes.insert(parsed)
+            }
+        }
+
+        self.init(
+            keyCode: keyCode,
+            modifiers: ShortcutModifiers(rawValue: modifiersRaw),
+            requiredModifierKeyCodes: requiredModifierKeyCodes
+        )
     }
 
     private static func keyCodeName(_ code: UInt16) -> String {
         switch Int(code) {
         case kVK_F5: return "F5"
         case kVK_RightOption: return "Right \u{2325}"
+        case kVK_ANSI_Slash: return "/"
         case kVK_Space: return "Space"
         case kVK_Return: return "\u{21A9}"
         default: return "Key(\(code))"

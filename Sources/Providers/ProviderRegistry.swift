@@ -20,6 +20,8 @@ final class ProviderRegistry {
 
     func makeSTTProvider(for id: STTProviderID) -> (any STTProvider)? {
         switch id {
+        case .openaiRealtime:
+            return nil
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
             let baseURL = Self.baseURLOverride(forKey: "openaiSTTBaseURL")
@@ -45,6 +47,22 @@ final class ProviderRegistry {
         case .apple:
             return AppleSTT()
         }
+    }
+
+    func makeOpenAIRealtimeTranscriptionSession(
+        onPartialTranscript: @escaping @Sendable (String) -> Void,
+        onError: @escaping @Sendable (String) -> Void
+    ) -> OpenAIRealtimeTranscriptionSession? {
+        guard let key = keychain.get(.openaiAPIKey) else { return nil }
+        let baseURL = Self.baseURLOverride(forKey: "openaiSTTBaseURL") ?? "https://api.openai.com/v1"
+        let transcriptionModel = Self.textOverride(forKey: "openaiRealtimeSTTModel") ?? "gpt-realtime-whisper"
+        return OpenAIRealtimeTranscriptionSession(
+            apiKey: key,
+            baseURL: baseURL,
+            transcriptionModel: transcriptionModel,
+            onPartialTranscript: onPartialTranscript,
+            onError: onError
+        )
     }
 
     /// Returns provider IDs that have their API keys configured.

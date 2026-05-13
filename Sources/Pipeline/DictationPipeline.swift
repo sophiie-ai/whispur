@@ -14,7 +14,9 @@ final class DictationPipeline: ObservableObject {
     @Published private(set) var audioLevel: Float = 0
     @Published private(set) var audioSamples: [Float] = Array(repeating: 0, count: DictationPipeline.waveformSampleCount)
     @Published private(set) var lastResult: PipelineResult?
+    @Published private(set) var lastErrorMessage: String?
     @Published private(set) var activeTriggerMode: RecordingTriggerMode = .hold
+    @Published private(set) var liveTranscript: String = ""
     /// True when we haven't heard audible input for ~1.3s while recording.
     /// Use this to prompt the user to check their mic/input device.
     @Published private(set) var isHearingSilence: Bool = false
@@ -65,6 +67,7 @@ final class DictationPipeline: ObservableObject {
     private var microphoneRequestTask: Task<Void, Never>?
     private var processingTask: Task<Void, Never>?
     private var resetTask: Task<Void, Never>?
+    private var realtimeSession: OpenAIRealtimeTranscriptionSession?
 
     init(
         recorder: AudioRecorder,
@@ -190,7 +193,16 @@ final class DictationPipeline: ObservableObject {
         playSound(.pop)
 
         resetAudioSamples()
+        recorder.onAudioBuffer = nil
         processingTask?.cancel()
+
+        if selectedSTT == .openaiRealtime {
+            processingTask = Task { [weak self] in
+                await self?.processRealtimeRecording(metrics: stopped.metrics, recordedURL: stopped.url)
+            }
+            return
+        }
+
         processingTask = Task { [weak self] in
             await self?.processRecording(at: stopped.url, metrics: stopped.metrics)
         }
@@ -209,10 +221,17 @@ final class DictationPipeline: ObservableObject {
         audioLevelCancellable = nil
 
         recorder.onRecordingReady = nil
+        recorder.onAudioBuffer = nil
+        let session = realtimeSession
+        Task {
+            await session?.cancel()
+        }
+        realtimeSession = nil
         _ = recorder.stopRecording()
         recorder.cleanup()
 
         audioLevel = 0
+        liveTranscript = ""
         resetAudioSamples()
         activeTriggerMode = .hold
         phase = .idle
@@ -220,6 +239,7 @@ final class DictationPipeline: ObservableObject {
 
     func presentError(_ message: String) {
         logger.error("Pipeline error: \(message, privacy: .public)")
+        lastErrorMessage = message
         phase = .error(message)
         scheduleResetToIdle()
     }
@@ -233,7 +253,11 @@ final class DictationPipeline: ObservableObject {
 
         switch status {
         case .authorized:
-            beginRecording()
+            if selectedSTT == .openaiRealtime {
+                await beginRealtimeRecording()
+            } else {
+                beginRecording()
+            }
         case .notDetermined:
             phase = .requestingMicrophonePermission
             // The system permission dialog can linger indefinitely if the user
@@ -252,7 +276,11 @@ final class DictationPipeline: ObservableObject {
 
             switch granted {
             case .some(true):
-                beginRecording()
+                if selectedSTT == .openaiRealtime {
+                    await beginRealtimeRecording()
+                } else {
+                    beginRecording()
+                }
             case .some(false):
                 presentError("Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone.")
             case .none:
@@ -267,6 +295,7 @@ final class DictationPipeline: ObservableObject {
 
     private func beginRecording() {
         guard !recorder.isRecording else { return }
+        recorder.onAudioBuffer = nil
 
         // Move out of `.idle` before touching the recorder so stop events are
         // never dropped even if the user stops immediately.
@@ -299,6 +328,119 @@ final class DictationPipeline: ObservableObject {
             }
 
         logger.info("Recording session started")
+    }
+
+    private func beginRealtimeRecording() async {
+        guard !recorder.isRecording else { return }
+
+        phase = .starting
+        liveTranscript = ""
+
+        guard let session = registry.makeOpenAIRealtimeTranscriptionSession(
+            onPartialTranscript: { [weak self] text in
+                Task { @MainActor in
+                    self?.liveTranscript = text
+                }
+            },
+            onError: { [weak self] message in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.cancel()
+                    self.presentError(message)
+                }
+            }
+        ) else {
+            presentError("\(selectedSTT.displayName) is not configured. Add an OpenAI API key or switch providers.")
+            return
+        }
+
+        realtimeSession = session
+
+        do {
+            try await session.connect(
+                language: sttLanguageSelection,
+                vocabulary: customVocabulary
+            )
+        } catch {
+            realtimeSession = nil
+            presentError(error.localizedDescription)
+            return
+        }
+
+        recorder.onRecordingReady = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                guard case .starting = self.phase else { return }
+
+                self.phase = .recording
+                self.playSound(.tink)
+            }
+        }
+
+        do {
+            try recorder.startRecording()
+            recorder.onAudioBuffer = { buffer in
+                Task {
+                    await session.appendAudioBuffer(buffer)
+                }
+            }
+        } catch {
+            await realtimeSession?.cancel()
+            realtimeSession = nil
+            presentError(error.localizedDescription)
+            return
+        }
+
+        resetAudioSamples()
+        audioLevelCancellable = recorder.$audioLevel
+            .receive(on: RunLoop.main)
+            .sink { [weak self] level in
+                guard let self else { return }
+                self.audioLevel = level
+                self.pushAudioSample(level)
+            }
+
+        logger.info("Realtime recording session started")
+    }
+
+    private func processRealtimeRecording(metrics: RecordingMetrics, recordedURL: URL) async {
+        defer {
+            processingTask = nil
+            realtimeSession = nil
+            recorder.cleanup()
+            try? FileManager.default.removeItem(at: recordedURL)
+        }
+
+        guard recordingHasSpeech(metrics: metrics) else {
+            await realtimeSession?.cancel()
+            dismissForNoSpeech()
+            return
+        }
+
+        do {
+            phase = .transcribing
+            guard let session = realtimeSession else {
+                throw STTError.apiError(provider: .openaiRealtime, message: "Realtime session was not available.", statusCode: nil)
+            }
+
+            let rawTranscript = try await session.finish()
+            guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {
+                dismissForNoSpeech()
+                return
+            }
+
+            try await finishDictation(rawTranscript: normalizedRawTranscript)
+        } catch is CancellationError {
+            logger.info("Realtime processing cancelled")
+            phase = .idle
+        } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                logger.info("Realtime processing cancelled")
+                phase = .idle
+            } else {
+                presentError(error.localizedDescription)
+            }
+        }
     }
 
     private func processRecording(at recordedURL: URL, metrics: RecordingMetrics) async {
@@ -353,64 +495,7 @@ final class DictationPipeline: ObservableObject {
                 return
             }
 
-            var cleanedTranscript = normalizedRawTranscript
-            var llmModel: String?
-
-            // Skip LLM cleanup for too-short transcripts — they're almost always noise
-            // and an LLM will hallucinate conversational replies instead of cleaning text.
-            let looksLikeSpeech = shouldRunCleanup(for: normalizedRawTranscript)
-
-            if looksLikeSpeech, let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
-                phase = .cleaningTranscript
-
-                do {
-                    let response = try await llmProvider.complete(
-                        request: LLMRequest(
-                            systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
-                            userMessage: normalizedRawTranscript
-                        )
-                    )
-
-                    if let normalizedCleanedTranscript = normalizedTranscriptText(from: response.text) {
-                        cleanedTranscript = normalizedCleanedTranscript
-                    } else {
-                        cleanedTranscript = ""
-                    }
-
-                    llmModel = response.model
-                } catch {
-                    logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
-                }
-            }
-
-            guard let finalTranscript = normalizedTranscriptText(from: cleanedTranscript) else {
-                dismissForNoSpeech()
-                return
-            }
-
-            guard !Task.isCancelled else { throw CancellationError() }
-
-            phase = .pasting
-            await TextInjector.paste(finalTranscript, preserveClipboard: preserveClipboard)
-
-            guard !Task.isCancelled else { throw CancellationError() }
-
-            onPasteCompleted?(finalTranscript)
-
-            let result = PipelineResult(
-                rawTranscript: normalizedRawTranscript,
-                cleanedText: finalTranscript,
-                sttProvider: selectedSTT,
-                llmProvider: selectedLLM,
-                llmModel: llmModel,
-                timestamp: Date()
-            )
-
-            lastResult = result
-            historyStore.add(result)
-
-            phase = .done(finalTranscript)
-            scheduleResetToIdle(after: .milliseconds(1200))
+            try await finishDictation(rawTranscript: normalizedRawTranscript)
 
             logger.info("Pipeline finished successfully")
         } catch is CancellationError {
@@ -427,6 +512,69 @@ final class DictationPipeline: ObservableObject {
                 presentError(error.localizedDescription)
             }
         }
+    }
+
+    private func finishDictation(rawTranscript normalizedRawTranscript: String) async throws {
+        var cleanedTranscript = normalizedRawTranscript
+        var llmModel: String?
+
+        // Skip LLM cleanup for too-short transcripts — they're almost always noise
+        // and an LLM will hallucinate conversational replies instead of cleaning text.
+        let looksLikeSpeech = shouldRunCleanup(for: normalizedRawTranscript)
+
+        if looksLikeSpeech, let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
+            phase = .cleaningTranscript
+
+            do {
+                let response = try await llmProvider.complete(
+                    request: LLMRequest(
+                        systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
+                        userMessage: normalizedRawTranscript
+                    )
+                )
+
+                if let normalizedCleanedTranscript = normalizedTranscriptText(from: response.text) {
+                    cleanedTranscript = normalizedCleanedTranscript
+                } else {
+                    cleanedTranscript = ""
+                }
+
+                llmModel = response.model
+            } catch {
+                logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        guard let finalTranscript = normalizedTranscriptText(from: cleanedTranscript) else {
+            dismissForNoSpeech()
+            return
+        }
+
+        guard !Task.isCancelled else { throw CancellationError() }
+
+        phase = .pasting
+        await TextInjector.paste(finalTranscript, preserveClipboard: preserveClipboard)
+
+        guard !Task.isCancelled else { throw CancellationError() }
+
+        liveTranscript = ""
+        onPasteCompleted?(finalTranscript)
+
+        let result = PipelineResult(
+            rawTranscript: normalizedRawTranscript,
+            cleanedText: finalTranscript,
+            sttProvider: selectedSTT,
+            llmProvider: selectedLLM,
+            llmModel: llmModel,
+            timestamp: Date()
+        )
+
+        lastResult = result
+        lastErrorMessage = nil
+        historyStore.add(result)
+
+        phase = .done(finalTranscript)
+        scheduleResetToIdle(after: .milliseconds(1200))
     }
 
     private func buildSystemPrompt(vocabulary: [String]) -> String {
