@@ -428,6 +428,10 @@ final class HotkeyManager {
             return false
         }
 
+        guard state.pressedModifierKeyCodes.isSuperset(of: binding.requiredModifierKeyCodes) else {
+            return false
+        }
+
         if binding.keyCode == nil {
             return true
         }

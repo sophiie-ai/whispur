@@ -24,6 +24,7 @@ final class WhispurTests: XCTestCase {
     func testShortcutBindingStorageRoundTrip() {
         let cases: [ShortcutBinding] = [
             .fnKey, .commandFn, .rightOption, .controlSpace, .optionSpace, .commandShiftSpace, .f5,
+            .commandRightShiftSlash,
         ]
         for binding in cases {
             let storage = binding.storageValue
@@ -37,6 +38,12 @@ final class WhispurTests: XCTestCase {
         XCTAssertNil(ShortcutBinding(storageValue: "garbage"))
         XCTAssertNil(ShortcutBinding(storageValue: "abc:def"))
         XCTAssertNil(ShortcutBinding(storageValue: "1:notanumber"))
+        XCTAssertNil(ShortcutBinding(storageValue: "9:44:notanumber"))
+    }
+
+    func testShortcutBindingReadsLegacyStorageFormat() {
+        let decoded = ShortcutBinding(storageValue: "9:44")
+        XCTAssertEqual(decoded, ShortcutBinding(keyCode: 44, modifiers: [.command, .shift]))
     }
 
     func testShortcutBindingDisplayNameIncludesModifiers() {
@@ -44,6 +51,8 @@ final class WhispurTests: XCTestCase {
         XCTAssertTrue(ShortcutBinding.commandFn.displayName.contains("\u{2318}"))
         XCTAssertTrue(ShortcutBinding.controlSpace.displayName.contains("^"))
         XCTAssertTrue(ShortcutBinding.controlSpace.displayName.contains("Space"))
+        XCTAssertTrue(ShortcutBinding.commandRightShiftSlash.menuTitle.contains("Right Shift"))
+        XCTAssertTrue(ShortcutBinding.commandRightShiftSlash.menuTitle.contains("/"))
     }
 
     // MARK: - RequestsStatusFilter
@@ -94,6 +103,32 @@ final class WhispurTests: XCTestCase {
 
         let missingKey = STTError.missingAPIKey(provider: .deepgram)
         XCTAssertTrue(missingKey.errorDescription?.contains("Deepgram") ?? false)
+    }
+
+    // MARK: - OpenAI realtime transcription
+
+    func testOpenAIRealtimeTranscriptionURLUsesTranscriptionIntent() {
+        let url = OpenAIRealtimeTranscriptionSession.realtimeURL(baseURL: "https://api.openai.com/v1")
+        XCTAssertEqual(url?.absoluteString, "wss://api.openai.com/v1/realtime?intent=transcription")
+    }
+
+    func testOpenAIRealtimeTranscriptionPayloadUsesManualCommit() {
+        let payload = OpenAIRealtimeTranscriptionSession.sessionUpdatePayload(
+            transcriptionModel: "gpt-realtime-whisper",
+            language: .single(code: "en-US"),
+            vocabulary: ["Whispur"]
+        )
+
+        XCTAssertEqual(payload["type"] as? String, "session.update")
+        let session = payload["session"] as? [String: Any]
+        XCTAssertEqual(session?["type"] as? String, "transcription")
+
+        let audio = session?["audio"] as? [String: Any]
+        let input = audio?["input"] as? [String: Any]
+        let transcription = input?["transcription"] as? [String: Any]
+        XCTAssertEqual(transcription?["model"] as? String, "gpt-realtime-whisper")
+        XCTAssertEqual(transcription?["language"] as? String, "en")
+        XCTAssertTrue(input?["turn_detection"] is NSNull)
     }
 
     // MARK: - ShortcutModifiers from CGEventFlags

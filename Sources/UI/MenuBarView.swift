@@ -35,6 +35,11 @@ struct MenuBarView: View {
                 )
             }
 
+            if let errorMessage = appState.pipeline.lastErrorMessage,
+               !appState.pipeline.canStopRecording {
+                lastErrorCard(errorMessage)
+            }
+
             providersCard
             shortcutsCard
 
@@ -235,6 +240,30 @@ struct MenuBarView: View {
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    private func lastErrorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Last Error")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message, forType: .string)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
+
+            Text(message)
+                .font(.caption)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private var footerButtons: some View {
         HStack {
             Button("About") {
@@ -359,4 +388,3 @@ struct MenuBarView: View {
         }
     }
 }
-

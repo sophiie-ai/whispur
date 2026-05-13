@@ -75,6 +75,7 @@ make run
 | --- | --- | --- |
 | Apple Speech Recognition | Available | On-device and local |
 | OpenAI Whisper | Available | Cloud STT via API key |
+| OpenAI Realtime Whisper | Available | Streaming cloud STT via API key |
 | Deepgram | Available | Cloud STT via API key |
 | ElevenLabs Scribe | Available | Cloud STT via API key |
 

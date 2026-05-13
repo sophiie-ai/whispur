@@ -49,9 +49,9 @@ final class AppState: ObservableObject {
 
     init() {
         let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
-        let loadedToggleShortcut = Self.loadOptionalShortcut(forKey: "toggleShortcut", fallback: .commandFn)
+        let loadedToggleShortcut = Self.loadOptionalShortcut(forKey: "toggleShortcut", fallback: .commandRightShiftSlash)
         let sanitizedToggleShortcut = loadedToggleShortcut == loadedHoldShortcut
-            ? ShortcutBinding.commandFn
+            ? ShortcutBinding.commandRightShiftSlash
             : loadedToggleShortcut
 
         _holdShortcut = Published(initialValue: loadedHoldShortcut)

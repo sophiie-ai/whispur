@@ -28,7 +28,17 @@ struct RecordingOverlay: View {
                 }
             case .recording:
                 overlayShell {
-                    recordingRow
+                    VStack(alignment: .leading, spacing: 8) {
+                        recordingRow
+                        if !pipeline.liveTranscript.isEmpty {
+                            Text(pipeline.liveTranscript)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.74))
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
                 overlayShell {

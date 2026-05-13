@@ -17,6 +17,9 @@ final class AudioRecorder: ObservableObject {
 
     /// Fires once when the first non-silent buffer arrives.
     var onRecordingReady: (() -> Void)?
+    /// Receives every microphone buffer while recording. Callers must return
+    /// quickly; this runs on Core Audio's realtime tap callback.
+    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
 
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
@@ -139,6 +142,7 @@ final class AudioRecorder: ObservableObject {
         }
         tempFileURL = nil
         audioFile = nil
+        onAudioBuffer = nil
     }
 
     private func applyPreferredInputDevice(to inputNode: AVAudioInputNode) {
@@ -192,6 +196,10 @@ final class AudioRecorder: ObservableObject {
             }
         }
 
+        if let streamingCopy = buffer.deepCopy() {
+            onAudioBuffer?(streamingCopy)
+        }
+
         let scaledLevel = min(rms * 12, 1)
         if scaledLevel > smoothedLevel {
             smoothedLevel = (smoothedLevel * 0.25) + (scaledLevel * 0.75)
@@ -235,6 +243,26 @@ final class AudioRecorder: ObservableObject {
         }
 
         return 0
+    }
+}
+
+private extension AVAudioPCMBuffer {
+    func deepCopy() -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameLength) else {
+            return nil
+        }
+        copy.frameLength = frameLength
+
+        let sourceBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audioBufferList))
+        let destinationBuffers = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        for index in 0..<sourceBuffers.count {
+            guard let source = sourceBuffers[index].mData,
+                  let destination = destinationBuffers[index].mData
+            else { continue }
+            memcpy(destination, source, Int(sourceBuffers[index].mDataByteSize))
+            destinationBuffers[index].mDataByteSize = sourceBuffers[index].mDataByteSize
+        }
+        return copy
     }
 }
 
