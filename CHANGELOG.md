@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/sophiie-ai/whispur/compare/v0.14.1...v0.15.0) (2026-05-17)
+
+
+### Features
+
+* stats-first menu bar with shareable weekly recap ([#38](https://github.com/sophiie-ai/whispur/issues/38)) ([597dcac](https://github.com/sophiie-ai/whispur/commit/597dcac1558a0f8b496e4aedd0f93a56a9bcedea))
+
 ## [0.14.1](https://github.com/sophiie-ai/whispur/compare/v0.14.0...v0.14.1) (2026-05-12)
 
 
