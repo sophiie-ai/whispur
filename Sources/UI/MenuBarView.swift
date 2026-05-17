@@ -6,9 +6,12 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage("settings.selectedTab") private var selectedTabRaw = SettingsTab.setup.rawValue
 
+    @State private var isPresentingRecap = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            statsStrip
             actionCard
 
             if appState.showSetupGuide && (!appState.isReadyForDailyUse || !appState.hasCompletedFirstDictation) {
@@ -35,18 +38,20 @@ struct MenuBarView: View {
                 )
             }
 
-            providersCard
-            shortcutsCard
-
             if let preview = appState.lastTranscriptPreview,
                !appState.pipeline.canStopRecording {
                 lastTranscriptCard(preview)
             }
 
+            settingsStrip
+
             footerButtons
         }
         .padding(16)
         .frame(width: 370)
+        .sheet(isPresented: $isPresentingRecap) {
+            ShareRecapView(stats: appState.stats)
+        }
     }
 
     private var header: some View {
@@ -64,6 +69,88 @@ struct MenuBarView: View {
 
             PreferenceBadge(title: statusBadgeTitle, tone: statusBadgeTone)
         }
+    }
+
+    @ViewBuilder
+    private var statsStrip: some View {
+        if appState.stats.totalWords > 0 {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(appState.stats.totalWords.formatted(.number))
+                        .font(.system(.title2, design: .rounded).weight(.semibold))
+                        .monospacedDigit()
+                    Text("words")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if appState.stats.currentStreak > 0 {
+                        HStack(spacing: 4) {
+                            Text("🔥")
+                            Text("\(appState.stats.currentStreak)d streak")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.orange)
+                    }
+                }
+
+                weekSparkline
+
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(savedSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        isPresentingRecap = true
+                    } label: {
+                        Label("Share recap", systemImage: "square.and.arrow.up")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(.purple)
+                }
+            }
+            .padding(14)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private var weekSparkline: some View {
+        let days = appState.stats.lastSevenDays
+        let maxValue = max(1, days.map(\.words).max() ?? 1)
+
+        return HStack(alignment: .bottom, spacing: 4) {
+            ForEach(days) { day in
+                let height = max(4, CGFloat(day.words) / CGFloat(maxValue) * 22)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(day.words > 0 ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.08))
+                    .frame(height: height)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: 24)
+    }
+
+    private var savedSummary: String {
+        let week = appState.stats.minutesSavedThisWeek
+        if week > 0 {
+            return "~\(week) min saved typing this week"
+        }
+        let total = appState.stats.minutesSavedAllTime
+        if total > 0 {
+            return "~\(total) min saved typing"
+        }
+        return "Dictate to start tracking your time saved."
     }
 
     private var actionCard: some View {
@@ -120,58 +207,63 @@ struct MenuBarView: View {
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var providersCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Providers")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Edit") {
-                    openSettings(tab: .providers)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            }
-
-            providerRow(
-                title: "Speech",
+    private var settingsStrip: some View {
+        HStack(spacing: 10) {
+            providerChip(
+                icon: "waveform",
                 value: appState.selectedSTT.displayName,
-                configured: appState.isSelectedSTTConfigured
+                configured: appState.isSelectedSTTConfigured,
+                tab: .providers
             )
 
-            providerRow(
-                title: "Cleanup",
+            providerChip(
+                icon: "sparkles",
                 value: appState.selectedLLM.displayName,
                 configured: appState.isSelectedLLMConfigured,
-                fallbackText: "Raw transcripts still paste when cleanup credentials are missing."
+                tab: .providers
             )
+
+            Spacer(minLength: 0)
+
+            Button {
+                openSettings(tab: .general)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "command")
+                    Text(appState.holdShortcut.menuTitle)
+                }
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 4)
     }
 
-    private var shortcutsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Shortcuts")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Edit") {
-                    openSettings(tab: .general)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
+    private func providerChip(
+        icon: String,
+        value: String,
+        configured: Bool,
+        tab: SettingsTab
+    ) -> some View {
+        Button {
+            openSettings(tab: tab)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                Text(value)
+                    .lineLimit(1)
+                Image(systemName: configured ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundStyle(configured ? .green : .orange)
             }
-
-            HStack(spacing: 10) {
-                ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
-                ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
-            }
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.06), in: Capsule())
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .buttonStyle(.plain)
     }
 
     private func warningCard(
@@ -217,19 +309,13 @@ struct MenuBarView: View {
                 .lineLimit(5)
                 .textSelection(.enabled)
 
-            HStack(spacing: 8) {
-                Button("Paste Again") {
-                    appState.pasteLastTranscript()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-
-                Button("Copy") {
-                    appState.copyLastTranscript()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            Button {
+                appState.copyLastTranscript()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
         .padding(14)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -259,36 +345,6 @@ struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .font(.caption)
-    }
-
-    private func providerRow(
-        title: String,
-        value: String,
-        configured: Bool,
-        fallbackText: String? = nil
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Image(systemName: configured ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .foregroundStyle(configured ? .green : .orange)
-                    .font(.caption)
-            }
-
-            Text(value)
-                .font(.subheadline)
-
-            if !configured, let fallbackText {
-                Text(fallbackText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func openSettings(tab: SettingsTab) {
@@ -359,4 +415,3 @@ struct MenuBarView: View {
         }
     }
 }
-

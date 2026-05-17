@@ -34,6 +34,7 @@ final class AppState: ObservableObject {
     let recorder: AudioRecorder
     let hotkeyManager: HotkeyManager
     let historyStore: PipelineHistoryStore
+    let stats: DictationStats
     let providerRequestLog: ProviderRequestLog
     let keychain: KeychainManager
     let registry: ProviderRegistry
@@ -46,6 +47,8 @@ final class AppState: ObservableObject {
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
     private var phaseCancellable: AnyCancellable?
+    private var statsCancellable: AnyCancellable?
+    private var lastCountedResultID: UUID?
 
     init() {
         let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
@@ -63,6 +66,7 @@ final class AppState: ObservableObject {
         let registry = ProviderRegistry(keychain: keychain, httpClient: httpClient)
         let recorder = AudioRecorder()
         let historyStore = PipelineHistoryStore()
+        let stats = DictationStats()
         let pipeline = DictationPipeline(
             recorder: recorder,
             registry: registry,
@@ -80,6 +84,8 @@ final class AppState: ObservableObject {
         self.registry = registry
         self.recorder = recorder
         self.historyStore = historyStore
+        self.stats = stats
+        self.lastCountedResultID = historyStore.items.first?.id
         self.pipeline = pipeline
         self.sparkleUpdater = sparkleUpdater
         self.hotkeyManager = hotkeyManager
@@ -317,14 +323,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    func pasteLastTranscript() {
-        guard let transcript = lastTranscriptPreview else { return }
-
-        Task {
-            await TextInjector.paste(transcript, preserveClipboard: preserveClipboard)
-        }
-    }
-
     func copyLastTranscript() {
         guard let transcript = lastTranscriptPreview else { return }
         NSPasteboard.general.clearContents()
@@ -438,6 +436,16 @@ final class AppState: ObservableObject {
                 if case .requestingMicrophonePermission = phase {
                     self.refreshPermissionSnapshot()
                 }
+            }
+
+        statsCancellable = pipeline.$lastResult
+            .compactMap { $0 }
+            .sink { [weak self] result in
+                guard let self else { return }
+                guard self.lastCountedResultID != result.id else { return }
+                self.lastCountedResultID = result.id
+                let words = result.cleanedText.whitespaceWordCount
+                self.stats.record(wordCount: words, at: result.timestamp)
             }
     }
 
