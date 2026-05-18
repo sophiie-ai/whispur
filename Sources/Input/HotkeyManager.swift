@@ -32,7 +32,7 @@ final class HotkeyManager {
     /// Short taps within this window are ignored so macOS can handle its own
     /// Fn behaviors (emoji picker, dictation) without racing our overlay.
     /// Chorded bindings with an explicit keyCode activate immediately.
-    nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.5
+    nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.33
 
     @Published private(set) var isAccessibilityGranted = false
     @Published private(set) var isMonitoring = false
