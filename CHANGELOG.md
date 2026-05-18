@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/sophiie-ai/whispur/compare/v0.15.0...v0.15.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* cancel hold arm when modifier is used as a chord ([#40](https://github.com/sophiie-ai/whispur/issues/40)) ([ea407aa](https://github.com/sophiie-ai/whispur/commit/ea407aa5442123bad5855ce58720a764f6f2c928))
+
 ## [0.15.0](https://github.com/sophiie-ai/whispur/compare/v0.14.1...v0.15.0) (2026-05-17)
 
 
