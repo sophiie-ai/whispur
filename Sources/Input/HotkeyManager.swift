@@ -32,7 +32,7 @@ final class HotkeyManager {
     /// Short taps within this window are ignored so macOS can handle its own
     /// Fn behaviors (emoji picker, dictation) without racing our overlay.
     /// Chorded bindings with an explicit keyCode activate immediately.
-    nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.18
+    nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.33
 
     @Published private(set) var isAccessibilityGranted = false
     @Published private(set) var isMonitoring = false
@@ -46,6 +46,10 @@ final class HotkeyManager {
         var pressedKeyCodes: Set<UInt16> = []
         var holdActive = false
         var holdArming = false
+        // Set when a chord key was pressed during a bare-modifier arm window,
+        // signalling the modifier is being used as a chord (e.g. Fn+Delete).
+        // Blocks re-arming until the modifier is fully released.
+        var holdSuppressed = false
         var toggleActive = false
     }
     private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
@@ -104,6 +108,7 @@ final class HotkeyManager {
             state.pressedKeyCodes.removeAll()
             state.holdActive = false
             state.holdArming = false
+            state.holdSuppressed = false
             state.toggleActive = false
         }
         isMonitoring = false
@@ -305,6 +310,23 @@ final class HotkeyManager {
                 return true
             }
         }
+        // Bare-modifier hold (e.g. Fn alone): if another key is pressed while
+        // the modifier is held, treat it as a chord (e.g. Fn+Delete) and veto
+        // both the pending arm and any re-arm until the modifier is released.
+        if holdBinding.keyCode == nil {
+            let cancelledArm = stateLock.withLock { state -> Bool in
+                guard Self.bindingIsActive(holdBinding, state: state) else { return false }
+                let wasArming = state.holdArming
+                state.holdArming = false
+                state.holdSuppressed = true
+                return wasArming
+            }
+            if cancelledArm {
+                holdArmTimer?.cancel()
+                holdArmTimer = nil
+                logger.info("Hold arm cancelled — chord key pressed (keyCode=\(keyCode))")
+            }
+        }
         evaluateBindings()
         return false
     }
@@ -334,7 +356,7 @@ final class HotkeyManager {
 
             if useThreshold {
                 if holdNowMatches {
-                    if !state.holdActive && !state.holdArming {
+                    if !state.holdActive && !state.holdArming && !state.holdSuppressed {
                         state.holdArming = true
                         action = .arm
                     }
@@ -347,6 +369,9 @@ final class HotkeyManager {
                         state.holdActive = false
                         events.append(.holdDeactivated)
                     }
+                    // Modifier fully released — clear suppression so the next
+                    // clean press can arm again.
+                    state.holdSuppressed = false
                 }
             } else {
                 if holdNowMatches && !state.holdActive {
