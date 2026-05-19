@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         logger.info("Whispur terminating")
+        // If the user quits while a recording is in flight, the pipeline's
+        // stop/cancel paths never run — restore here so the system output
+        // isn't left ducked after the app is gone.
+        appState?.pipeline.restoreSystemAudioIfNeeded()
     }
 
     func connect(appState: AppState) {

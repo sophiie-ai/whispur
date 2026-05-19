@@ -55,6 +55,14 @@ final class DictationPipeline: ObservableObject {
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
+    /// When true, duck the system default output device while recording.
+    /// The reduction amount comes from `systemAudioReductionPercent`.
+    var muteSystemAudioWhileRecording: Bool = false
+    /// 0...100. 0 = no ducking, 100 = full mute. Only consulted when
+    /// `muteSystemAudioWhileRecording` is true.
+    var systemAudioReductionPercent: Int = 100
+
+    private let systemAudioMuter = SystemAudioMuter()
 
     /// Fires with the final pasted text right after `TextInjector.paste`
     /// returns. Used by the learning module to snapshot the focused field
@@ -182,10 +190,13 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = nil
 
         guard let stopped = recorder.stopRecording() else {
+            systemAudioMuter.restore()
             resetAudioSamples()
             presentError("No audio was captured.")
             return
         }
+
+        systemAudioMuter.restore()
 
         playSound(.pop)
 
@@ -211,11 +222,19 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = nil
         _ = recorder.stopRecording()
         recorder.cleanup()
+        systemAudioMuter.restore()
 
         audioLevel = 0
         resetAudioSamples()
         activeTriggerMode = .hold
         phase = .idle
+    }
+
+    /// Safety net for the app lifecycle: invoked when the app is about to
+    /// terminate so the user isn't left with a ducked output if they quit
+    /// while a recording is in flight.
+    func restoreSystemAudioIfNeeded() {
+        systemAudioMuter.restore()
     }
 
     func presentError(_ message: String) {
@@ -287,6 +306,10 @@ final class DictationPipeline: ObservableObject {
         } catch {
             presentError(error.localizedDescription)
             return
+        }
+
+        if muteSystemAudioWhileRecording {
+            systemAudioMuter.mute(reductionPercent: systemAudioReductionPercent)
         }
 
         resetAudioSamples()

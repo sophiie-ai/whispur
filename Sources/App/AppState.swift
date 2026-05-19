@@ -23,6 +23,12 @@ final class AppState: ObservableObject {
     @AppStorage("customVocabulary") var customVocabulary: String = ""
     @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
+    @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
+    /// 0...100. How much to reduce the system output volume by while
+    /// recording. 100 = full mute (the original behavior); lower values
+    /// just duck playback so background audio is still audible. Only
+    /// consulted when `muteSystemAudioWhileRecording` is true.
+    @AppStorage("systemAudioReductionPercent") var systemAudioReductionPercent: Int = 100
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
     @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
 
@@ -456,6 +462,8 @@ final class AppState: ObservableObject {
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
+        pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
+        pipeline.systemAudioReductionPercent = systemAudioReductionPercent
 
         // `customSystemPrompt` is the single user-editable override. When
         // empty, the pipeline falls back to the built-in cleanup prompt.
