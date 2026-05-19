@@ -55,7 +55,12 @@ final class DictationPipeline: ObservableObject {
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
+    /// When true, duck the system default output device while recording.
+    /// The reduction amount comes from `systemAudioReductionPercent`.
     var muteSystemAudioWhileRecording: Bool = false
+    /// 0...100. 0 = no ducking, 100 = full mute. Only consulted when
+    /// `muteSystemAudioWhileRecording` is true.
+    var systemAudioReductionPercent: Int = 100
 
     private let systemAudioMuter = SystemAudioMuter()
 
@@ -225,6 +230,13 @@ final class DictationPipeline: ObservableObject {
         phase = .idle
     }
 
+    /// Safety net for the app lifecycle: invoked when the app is about to
+    /// terminate so the user isn't left with a ducked output if they quit
+    /// while a recording is in flight.
+    func restoreSystemAudioIfNeeded() {
+        systemAudioMuter.restore()
+    }
+
     func presentError(_ message: String) {
         logger.error("Pipeline error: \(message, privacy: .public)")
         phase = .error(message)
@@ -297,7 +309,7 @@ final class DictationPipeline: ObservableObject {
         }
 
         if muteSystemAudioWhileRecording {
-            systemAudioMuter.mute()
+            systemAudioMuter.mute(reductionPercent: systemAudioReductionPercent)
         }
 
         resetAudioSamples()

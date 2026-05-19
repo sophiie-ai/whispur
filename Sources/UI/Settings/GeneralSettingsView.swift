@@ -138,9 +138,25 @@ struct GeneralSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Preserve clipboard contents after paste", isOn: $appState.preserveClipboard)
                 Toggle("Play start and stop sounds", isOn: $appState.soundEnabled)
-                Toggle("Mute system audio while recording", isOn: $appState.muteSystemAudioWhileRecording)
+                Toggle("Quiet system audio while recording", isOn: $appState.muteSystemAudioWhileRecording)
 
-                Text("Mutes the Mac's output the moment recording starts and restores it when dictation ends. Background audio keeps playing — it just won't bleed into the mic.")
+                if appState.muteSystemAudioWhileRecording {
+                    HStack(spacing: 12) {
+                        Slider(
+                            value: systemAudioReductionBinding,
+                            in: 0...100,
+                            step: 5
+                        )
+                        .controlSize(.small)
+
+                        Text(systemAudioReductionLabel)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 80, alignment: .trailing)
+                    }
+                }
+
+                Text("Reduces the Mac's output volume the moment recording starts and restores it when dictation ends. Background audio keeps playing — it just won't bleed into the mic. 100% silences output entirely; lower values just duck it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -187,6 +203,20 @@ struct GeneralSettingsView: View {
             get: { appState.toggleShortcut },
             set: { appState.setToggleShortcut($0) }
         )
+    }
+
+    private var systemAudioReductionBinding: Binding<Double> {
+        Binding(
+            get: { Double(appState.systemAudioReductionPercent) },
+            set: { appState.systemAudioReductionPercent = Int($0.rounded()) }
+        )
+    }
+
+    private var systemAudioReductionLabel: String {
+        let percent = appState.systemAudioReductionPercent
+        if percent >= 100 { return "Full mute" }
+        if percent == 0 { return "No change" }
+        return "-\(percent)%"
     }
 }
 
