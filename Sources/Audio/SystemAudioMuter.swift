@@ -114,23 +114,23 @@ final class SystemAudioMuter {
         return deviceID
     }
 
-    /// Returns every output element on the device that exposes a settable
-    /// `kAudioDevicePropertyVolumeScalar`, along with its current value.
+    /// Returns the output elements we'll drive to apply the requested
+    /// reduction. Per Apple's QA1016, a device may expose master-only,
+    /// per-channel-only, both, or neither volume control. When a device
+    /// exposes both, we prefer the master element — driving both planes
+    /// would stack independent gain stages and over-attenuate (a 50%
+    /// reduction on each becomes 75% combined). When master isn't settable,
+    /// we fall back to every per-channel element the device reports.
     ///
-    /// We always probe element 0 (the master/main element — some devices
-    /// expose only a master volume), then derive the per-channel element
-    /// count from `kAudioDevicePropertyStreamConfiguration` instead of
-    /// hard-coding a maximum. Aggregate and multichannel devices can expose
-    /// more than 8 channels, so a fixed upper bound silently leaks them.
-    /// Per Apple's QA1016, a device may expose master-only, per-channel-only,
-    /// both, or neither, so we capture whichever ones we find.
+    /// Channel count is derived from `kAudioDevicePropertyStreamConfiguration`
+    /// instead of hard-coding a maximum, so aggregate or multichannel
+    /// devices with more than eight outputs are covered.
     private static func settableVolumeElements(deviceID: AudioDeviceID) -> [ChannelLevel] {
-        var results: [ChannelLevel] = []
-
         if let masterVolume = readVolume(deviceID: deviceID, element: kAudioObjectPropertyElementMain) {
-            results.append(ChannelLevel(element: kAudioObjectPropertyElementMain, previousVolume: masterVolume))
+            return [ChannelLevel(element: kAudioObjectPropertyElementMain, previousVolume: masterVolume)]
         }
 
+        var results: [ChannelLevel] = []
         let channelCount = outputChannelCount(deviceID: deviceID)
         if channelCount > 0 {
             for channel in 1...channelCount {
