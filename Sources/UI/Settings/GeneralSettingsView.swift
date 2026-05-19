@@ -138,6 +138,12 @@ struct GeneralSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Preserve clipboard contents after paste", isOn: $appState.preserveClipboard)
                 Toggle("Play start and stop sounds", isOn: $appState.soundEnabled)
+                Toggle("Mute system audio while recording", isOn: $appState.muteSystemAudioWhileRecording)
+
+                Text("Mutes the Mac's output the moment recording starts and restores it when dictation ends. Background audio keeps playing — it just won't bleed into the mic.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Deep context", isOn: $appState.deepContextEnabled)
 
                 Text("Deep context is reserved for future capture-aware cleanup. The setting stays here so the interaction model is already in place.")

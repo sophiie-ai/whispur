@@ -55,6 +55,9 @@ final class DictationPipeline: ObservableObject {
     var systemPrompt: String = Prompts.defaultCleanup
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
+    var muteSystemAudioWhileRecording: Bool = false
+
+    private let systemAudioMuter = SystemAudioMuter()
 
     /// Fires with the final pasted text right after `TextInjector.paste`
     /// returns. Used by the learning module to snapshot the focused field
@@ -182,10 +185,13 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = nil
 
         guard let stopped = recorder.stopRecording() else {
+            systemAudioMuter.restore()
             resetAudioSamples()
             presentError("No audio was captured.")
             return
         }
+
+        systemAudioMuter.restore()
 
         playSound(.pop)
 
@@ -211,6 +217,7 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = nil
         _ = recorder.stopRecording()
         recorder.cleanup()
+        systemAudioMuter.restore()
 
         audioLevel = 0
         resetAudioSamples()
@@ -287,6 +294,10 @@ final class DictationPipeline: ObservableObject {
         } catch {
             presentError(error.localizedDescription)
             return
+        }
+
+        if muteSystemAudioWhileRecording {
+            systemAudioMuter.mute()
         }
 
         resetAudioSamples()

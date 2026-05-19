@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     @AppStorage("customVocabulary") var customVocabulary: String = ""
     @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
+    @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
     @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
 
@@ -456,6 +457,7 @@ final class AppState: ObservableObject {
         pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
+        pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
 
         // `customSystemPrompt` is the single user-editable override. When
         // empty, the pipeline falls back to the built-in cleanup prompt.
