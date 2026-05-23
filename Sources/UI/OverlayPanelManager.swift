@@ -13,7 +13,7 @@ final class OverlayPanelManager {
     private var currentStyle: OverlayStyle = .standard
 
     private static let standardSize = CGSize(width: 430, height: 96)
-    private static let compactSize = CGSize(width: 96, height: 40)
+    private static let compactSize = CGSize(width: 88, height: 38)
 
     func bind(
         to pipeline: DictationPipeline,

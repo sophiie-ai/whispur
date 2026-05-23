@@ -255,20 +255,16 @@ private struct CompactRecordingOverlay: View {
 
     var body: some View {
         content
-            .frame(width: 84, height: 28)
+            .frame(width: 76, height: 26)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.black.opacity(0.55))
-                }
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.black.opacity(0.88))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.28), radius: 10, y: 4)
+            .shadow(color: .black.opacity(0.32), radius: 10, y: 4)
             .opacity(pulse ? 0.75 : 1.0)
             .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
             .onAppear { pulse = isProcessing }
@@ -284,7 +280,7 @@ private struct CompactRecordingOverlay: View {
         switch pipeline.phase {
         case .recording:
             MiniWaveformView(samples: pipeline.audioSamples, silence: pipeline.isHearingSilence)
-                .frame(width: 68, height: 18)
+                .frame(width: 56, height: 16)
         case .requestingMicrophonePermission, .starting,
                 .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
             CompactDotsView(color: pipeline.phase == .requestingMicrophonePermission ? .orange : .white)
@@ -317,14 +313,14 @@ private struct MiniWaveformView: View {
     var body: some View {
         Canvas(rendersAsynchronously: false) { context, size in
             guard !samples.isEmpty else { return }
-            // Render a downsampled tail of the buffer so the pill stays
-            // legible at small widths. Pick ~16 bars regardless of source count.
-            let targetBars = 16
+            // Downsample to a chunky bar set so the pill reads as a
+            // recognizable waveform glyph rather than a noisy strip.
+            let targetBars = 10
             let step = max(1, samples.count / targetBars)
             let tail = stride(from: 0, to: samples.count, by: step).map { samples[$0] }
             let count = tail.count
-            let barWidth: CGFloat = 1.5
-            let spacing: CGFloat = 1.5
+            let barWidth: CGFloat = 2.5
+            let spacing: CGFloat = 2
             let totalWidth = CGFloat(count) * barWidth + CGFloat(max(count - 1, 0)) * spacing
             var x = max(0, (size.width - totalWidth) / 2)
             let baseColor: Color = silence ? .orange : .white
