@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/sophiie-ai/whispur/compare/v0.15.1...v0.16.0) (2026-05-23)
+
+
+### Features
+
+* add compact recording overlay option ([#44](https://github.com/sophiie-ai/whispur/issues/44)) ([3ea1d7c](https://github.com/sophiie-ai/whispur/commit/3ea1d7cb861ac05b8adc78a15d95f0d41e29cd0a))
+* mute system audio while recording ([#42](https://github.com/sophiie-ai/whispur/issues/42)) ([7d2fb55](https://github.com/sophiie-ai/whispur/commit/7d2fb55b0b3e92fbbce3e130d0cca857001ab38a))
+
 ## [0.15.1](https://github.com/sophiie-ai/whispur/compare/v0.15.0...v0.15.1) (2026-05-18)
 
 
