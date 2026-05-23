@@ -10,6 +10,7 @@ struct GeneralSettingsView: View {
                 shortcutsCard
                 permissionsCard
                 behaviorCard
+                appearanceCard
                 aboutCard
             }
             .padding(24)
@@ -163,6 +164,29 @@ struct GeneralSettingsView: View {
                 Toggle("Deep context", isOn: $appState.deepContextEnabled)
 
                 Text("Deep context is reserved for future capture-aware cleanup. The setting stays here so the interaction model is already in place.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var appearanceCard: some View {
+        PreferenceCard(
+            "Appearance",
+            detail: "Choose how the recording indicator looks while you dictate.",
+            icon: "rectangle.on.rectangle"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Recording indicator", selection: $appState.overlayStyle) {
+                    ForEach(OverlayStyle.allCases) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(appState.overlayStyle == .compact
+                    ? "A small pill at the bottom of the screen shows only a waveform while recording. No stop or cancel buttons — use your shortcut or Esc."
+                    : "The full overlay at the top of the screen shows status, waveform, and stop/cancel controls.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

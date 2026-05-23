@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
+    @AppStorage("overlayStyle") var overlayStyle: OverlayStyle = .standard
     /// 0...100. How much to reduce the system output volume by while
     /// recording. 100 = full mute (the original behavior); lower values
     /// just duck playback so background audio is still audible. Only
@@ -110,6 +111,7 @@ final class AppState: ObservableObject {
 
         overlayManager.bind(
             to: pipeline,
+            styleProvider: { [weak self] in self?.overlayStyle ?? .standard },
             onStop: { [weak self] in self?.stopDictation() },
             onCancel: { [weak self] in self?.cancelDictation() }
         )

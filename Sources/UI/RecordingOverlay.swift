@@ -1,11 +1,39 @@
 import SwiftUI
 
+/// Visual treatment of the recording overlay panel. `standard` keeps the
+/// top-centered status overlay with controls; `compact` is a minimal
+/// bottom-centered pill with waveform-only feedback.
+enum OverlayStyle: String, CaseIterable, Identifiable {
+    case standard
+    case compact
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .standard: return "Standard"
+        case .compact: return "Compact"
+        }
+    }
+}
+
 struct RecordingOverlay: View {
     @ObservedObject var pipeline: DictationPipeline
+    var style: OverlayStyle = .standard
     let onStop: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
+        switch style {
+        case .standard:
+            standardBody
+        case .compact:
+            CompactRecordingOverlay(pipeline: pipeline)
+                .padding(6)
+        }
+    }
+
+    private var standardBody: some View {
         Group {
             switch pipeline.phase {
             case .idle:
@@ -218,6 +246,123 @@ private struct CompactWaveformView: View {
         }
         .frame(width: CGFloat(samples.count) * 4 - 2, height: 26)
         .animation(.easeOut(duration: 0.08), value: samples)
+    }
+}
+
+private struct CompactRecordingOverlay: View {
+    @ObservedObject var pipeline: DictationPipeline
+    @State private var pulse = false
+
+    var body: some View {
+        content
+            .frame(width: 84, height: 28)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.black.opacity(0.55))
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.28), radius: 10, y: 4)
+            .opacity(pulse ? 0.75 : 1.0)
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+            .onAppear { pulse = isProcessing }
+            .onChange(of: isProcessing) { _, newValue in
+                pulse = newValue
+            }
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.18), value: pipeline.phase)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch pipeline.phase {
+        case .recording:
+            MiniWaveformView(samples: pipeline.audioSamples, silence: pipeline.isHearingSilence)
+                .frame(width: 68, height: 18)
+        case .requestingMicrophonePermission, .starting,
+                .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
+            CompactDotsView(color: pipeline.phase == .requestingMicrophonePermission ? .orange : .white)
+                .frame(maxWidth: .infinity)
+        case .error:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity)
+        case .idle, .done:
+            EmptyView()
+        }
+    }
+
+    private var isProcessing: Bool {
+        switch pipeline.phase {
+        case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting,
+                .starting, .requestingMicrophonePermission:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private struct MiniWaveformView: View {
+    let samples: [Float]
+    let silence: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: false) { context, size in
+            guard !samples.isEmpty else { return }
+            // Render a downsampled tail of the buffer so the pill stays
+            // legible at small widths. Pick ~16 bars regardless of source count.
+            let targetBars = 16
+            let step = max(1, samples.count / targetBars)
+            let tail = stride(from: 0, to: samples.count, by: step).map { samples[$0] }
+            let count = tail.count
+            let barWidth: CGFloat = 1.5
+            let spacing: CGFloat = 1.5
+            let totalWidth = CGFloat(count) * barWidth + CGFloat(max(count - 1, 0)) * spacing
+            var x = max(0, (size.width - totalWidth) / 2)
+            let baseColor: Color = silence ? .orange : .white
+            let shading = GraphicsContext.Shading.color(baseColor.opacity(silence ? 0.55 : 0.92))
+            for sample in tail {
+                let normalized = max(0.08, CGFloat(sample))
+                let h = 2 + normalized * (size.height - 2)
+                let rect = CGRect(
+                    x: x,
+                    y: (size.height - h) / 2,
+                    width: barWidth,
+                    height: h
+                )
+                let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
+                context.fill(path, with: shading)
+                x += barWidth + spacing
+            }
+        }
+        .animation(.easeOut(duration: 0.08), value: samples)
+    }
+}
+
+private struct CompactDotsView: View {
+    let color: Color
+    @State private var activeIndex = 0
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(color.opacity(activeIndex == index ? 0.95 : 0.3))
+                    .frame(width: 4, height: 4)
+            }
+        }
+        .onReceive(timer) { _ in
+            activeIndex = (activeIndex + 1) % 3
+        }
     }
 }
 
