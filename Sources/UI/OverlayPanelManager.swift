@@ -30,8 +30,16 @@ final class OverlayPanelManager {
             .sink { [weak self] phase in
                 guard let self else { return }
 
+                // Compact mode skips the success confirmation: the moment
+                // dictation completes, the pill disappears so the user is
+                // not left looking at an empty black shell while the
+                // pipeline settles back to .idle.
+                let style = self.styleProvider?() ?? .standard
+
                 switch phase {
                 case .idle:
+                    self.hide()
+                case .done where style == .compact:
                     self.hide()
                 case .requestingMicrophonePermission,
                         .starting,
