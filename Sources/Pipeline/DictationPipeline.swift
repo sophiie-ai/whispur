@@ -390,12 +390,20 @@ final class DictationPipeline: ObservableObject {
                     let response = try await llmProvider.complete(
                         request: LLMRequest(
                             systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
-                            userMessage: normalizedRawTranscript
+                            userMessage: wrapForCleanup(normalizedRawTranscript)
                         )
                     )
 
                     if let normalizedCleanedTranscript = normalizedTranscriptText(from: response.text) {
-                        cleanedTranscript = normalizedCleanedTranscript
+                        if looksLikeAssistantResponse(
+                            cleaned: normalizedCleanedTranscript,
+                            raw: normalizedRawTranscript
+                        ) {
+                            logger.warning("LLM cleanup looks like an assistant reply; falling back to raw transcript")
+                            cleanedTranscript = normalizedRawTranscript
+                        } else {
+                            cleanedTranscript = normalizedCleanedTranscript
+                        }
                     } else {
                         cleanedTranscript = ""
                     }
@@ -466,6 +474,16 @@ final class DictationPipeline: ObservableObject {
         """
     }
 
+    /// Wrap the raw transcript in tags so the LLM treats it as data, not as
+    /// instructions addressed to it. The system prompt tells the model to
+    /// ignore the contents of the wrapper for any directive purpose. If the
+    /// transcript happens to contain a literal closing tag, neutralize it so
+    /// the model can't see a premature close.
+    private func wrapForCleanup(_ transcript: String) -> String {
+        let safe = transcript.replacingOccurrences(of: "</dictation-to-clean>", with: "<\u{200B}/dictation-to-clean>")
+        return "<dictation-to-clean>\n\(safe)\n</dictation-to-clean>"
+    }
+
     private func normalizedTranscriptText(from text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -522,6 +540,48 @@ final class DictationPipeline: ObservableObject {
         "applause",
         "silence",
     ]
+
+    /// Sentence starters that strongly suggest the LLM answered the dictation
+    /// instead of cleaning it. Matched case-insensitively against the start of
+    /// the cleaned text, with the trailing space included to avoid clipping
+    /// real words ("I'll" matches "i'll ", not "i'll" inside "I'll-be-there").
+    private static let assistantReplyPrefixes: [String] = [
+        "i will ", "i'll ", "i would ", "i'd ", "i am ", "i'm ", "i can ",
+        "i can't ", "i cannot ", "i don't ", "i do not ", "i need ", "i notice ",
+        "as an ai", "as a language model", "as a large language",
+        "sure, ", "sure! ", "certainly", "of course",
+        "here's ", "here is ", "here are ",
+        "sorry, ", "apologies", "my apologies",
+        "the best way ", "you can ", "you could ", "you should ",
+        "to do ", "to answer ", "great question",
+        "it seems", "it looks like", "it sounds like",
+    ]
+
+    /// Returns true when the cleaned text looks like an assistant reply to the
+    /// transcript rather than a cleanup of it. We only fall back when the
+    /// cleaned output starts with an assistant-style opener AND the raw
+    /// transcript did not start the same way — otherwise legitimate dictation
+    /// like "I'll send it tomorrow" would be wrongly flagged.
+    private func looksLikeAssistantResponse(cleaned: String, raw: String) -> Bool {
+        let normalizedCleaned = cleaned
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let normalizedRaw = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let cleanedStarts = Self.assistantReplyPrefixes.first { normalizedCleaned.hasPrefix($0) }
+        guard let prefix = cleanedStarts else { return false }
+        if normalizedRaw.hasPrefix(prefix) { return false }
+
+        // Length sanity: an assistant reply usually expands well past the raw
+        // transcript. A small overage can come from punctuation/casing fixes,
+        // so require the cleaned text to be noticeably longer before treating
+        // an opener match as evidence of an answer.
+        let rawLength = max(normalizedRaw.count, 1)
+        let ratio = Double(normalizedCleaned.count) / Double(rawLength)
+        return ratio >= 1.4
+    }
 
     private func isKnownSilenceHallucination(_ text: String) -> Bool {
         let lowered = text.lowercased()
