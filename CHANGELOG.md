@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/sophiie-ai/whispur/compare/v0.16.0...v0.16.1) (2026-05-26)
+
+
+### Bug Fixes
+
+* **pipeline:** harden LLM cleanup against assistant replies ([#45](https://github.com/sophiie-ai/whispur/issues/45)) ([848617d](https://github.com/sophiie-ai/whispur/commit/848617ddc26453b810393eabc3daa3d6a01bff7b))
+
 ## [0.16.0](https://github.com/sophiie-ai/whispur/compare/v0.15.1...v0.16.0) (2026-05-23)
 
 
