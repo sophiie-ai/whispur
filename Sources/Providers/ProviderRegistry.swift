@@ -59,28 +59,24 @@ final class ProviderRegistry {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
             let baseURL = Self.baseURLOverride(forKey: "openaiLLMBaseURL")
-            let model = Self.textOverride(forKey: "openaiLLMModel")
-            if baseURL != nil || model != nil {
-                return OpenAILLM(
-                    apiKey: key,
-                    httpClient: httpClient,
-                    baseURL: baseURL ?? "https://api.openai.com/v1",
-                    model: model ?? "gpt-4o-mini"
-                )
-            }
-            return OpenAILLM(apiKey: key, httpClient: httpClient)
+            return OpenAILLM(
+                apiKey: key,
+                httpClient: httpClient,
+                baseURL: baseURL ?? "https://api.openai.com/v1",
+                model: Self.modelOverride(for: id)
+            )
         case .anthropic:
             guard let key = keychain.get(.anthropicAPIKey) else { return nil }
-            return AnthropicLLM(apiKey: key, httpClient: httpClient)
+            return AnthropicLLM(apiKey: key, httpClient: httpClient, model: Self.modelOverride(for: id))
         case .groq:
             guard let key = keychain.get(.groqAPIKey) else { return nil }
-            return GroqLLM(apiKey: key, httpClient: httpClient)
+            return GroqLLM(apiKey: key, httpClient: httpClient, model: Self.modelOverride(for: id))
         case .bedrock:
             guard let key = keychain.get(.awsBedrockAPIKey),
                   let region = keychain.get(.awsRegion)?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !region.isEmpty
             else { return nil }
-            return BedrockLLM(apiKey: key, region: region, httpClient: httpClient)
+            return BedrockLLM(apiKey: key, region: region, httpClient: httpClient, modelID: Self.modelOverride(for: id))
         }
     }
 
@@ -101,6 +97,11 @@ final class ProviderRegistry {
         else { return nil }
         if trimmed.hasSuffix("/") { trimmed.removeLast() }
         return trimmed
+    }
+
+    /// The user's custom model for an LLM provider, or its default.
+    static func modelOverride(for id: LLMProviderID) -> String {
+        textOverride(forKey: id.customModelStorageKey) ?? id.defaultModel
     }
 
     private static func textOverride(forKey key: String) -> String? {

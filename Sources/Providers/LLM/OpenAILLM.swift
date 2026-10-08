@@ -16,7 +16,7 @@ struct OpenAILLM: LLMProvider {
         httpClient: ProviderHTTPClient,
         baseURL: String = "https://api.openai.com/v1",
         providerID: LLMProviderID = .openai,
-        model: String = "gpt-4o-mini",
+        model: String = LLMProviderID.openai.defaultModel,
         timeoutSeconds: TimeInterval = 20
     ) {
         self.apiKey = apiKey

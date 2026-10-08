@@ -15,7 +15,7 @@ struct BedrockLLM: LLMProvider {
         apiKey: String,
         region: String,
         httpClient: ProviderHTTPClient,
-        modelID: String = "anthropic.claude-sonnet-4-20250514-v1:0",
+        modelID: String = LLMProviderID.bedrock.defaultModel,
         timeoutSeconds: TimeInterval = 20
     ) {
         self.apiKey = apiKey
