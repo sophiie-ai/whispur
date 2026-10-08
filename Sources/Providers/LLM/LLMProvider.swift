@@ -26,6 +26,19 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .bedrock: [.awsBedrockAPIKey, .awsRegion]
         }
     }
+
+    /// Model used when the user hasn't set a custom one in Settings.
+    var defaultModel: String {
+        switch self {
+        case .openai: "gpt-4o-mini"
+        case .anthropic: "claude-sonnet-4-20250514"
+        case .groq: "llama-3.3-70b-versatile"
+        case .bedrock: "anthropic.claude-sonnet-4-20250514-v1:0"
+        }
+    }
+
+    /// UserDefaults key for the optional custom model override.
+    var customModelStorageKey: String { "\(rawValue)LLMModel" }
 }
 
 /// Input for an LLM completion request.

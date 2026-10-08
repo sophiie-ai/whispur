@@ -113,12 +113,12 @@ struct ProvidersSettingsView: View {
                                 storageKey: "openaiLLMBaseURL",
                                 placeholder: "https://api.openai.com/v1"
                             )
-                            ProviderTextField(
-                                label: "Custom Model (optional)",
-                                storageKey: "openaiLLMModel",
-                                placeholder: "gpt-4o-mini"
-                            )
                         }
+                        ProviderTextField(
+                            label: "Custom Model (optional)",
+                            storageKey: provider.customModelStorageKey,
+                            placeholder: provider.defaultModel
+                        )
                     }
                 }
             }

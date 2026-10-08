@@ -9,7 +9,7 @@ struct GroqLLM: LLMProvider {
     init(
         apiKey: String,
         httpClient: ProviderHTTPClient,
-        model: String = "llama-3.3-70b-versatile",
+        model: String = LLMProviderID.groq.defaultModel,
         timeoutSeconds: TimeInterval = 20
     ) {
         // Groq uses OpenAI-compatible API, so we delegate to OpenAILLM with a different base URL.
