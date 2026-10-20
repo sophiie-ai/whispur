@@ -66,6 +66,7 @@ make run
 - Toggle shortcut: Press once to start recording, press again to stop and process.
 - Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts.
 - Prompt tuning: Open `Settings` → `Prompts` to override the cleanup prompt or add domain vocabulary.
+- Cleanup model: Open `Settings` → `Providers` and set `Custom Model` on any cleanup provider to use a model other than the default.
 
 ## Provider Matrix
 

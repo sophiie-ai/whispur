@@ -13,6 +13,31 @@ final class WhispurTests: XCTestCase {
         XCTAssertEqual(llmRawValues.count, Set(llmRawValues).count, "Duplicate LLM provider IDs")
     }
 
+    func testLLMCustomModelStorageKeys() {
+        // Existing OpenAI overrides must keep working after the key was generalized.
+        XCTAssertEqual(LLMProviderID.openai.customModelStorageKey, "openaiLLMModel")
+        let keys = LLMProviderID.allCases.map(\.customModelStorageKey)
+        XCTAssertEqual(keys.count, Set(keys).count, "Duplicate custom model storage keys")
+    }
+
+    func testLLMModelOverrideFallsBackToDefault() {
+        let defaults = UserDefaults.standard
+        for provider in LLMProviderID.allCases {
+            let key = provider.customModelStorageKey
+            let saved = defaults.object(forKey: key)
+            defer { defaults.set(saved, forKey: key) }
+
+            defaults.removeObject(forKey: key)
+            XCTAssertEqual(ProviderRegistry.modelOverride(for: provider), provider.defaultModel)
+
+            defaults.set("  ", forKey: key)
+            XCTAssertEqual(ProviderRegistry.modelOverride(for: provider), provider.defaultModel)
+
+            defaults.set(" custom-model ", forKey: key)
+            XCTAssertEqual(ProviderRegistry.modelOverride(for: provider), "custom-model")
+        }
+    }
+
     func testKeychainKeys() {
         for provider in STTProviderID.allCases where provider.requiresAPIKey {
             XCTAssertFalse(provider.keychainKeys.isEmpty, "\(provider) requires API key but has no keychain keys")

@@ -12,7 +12,7 @@ struct AnthropicLLM: LLMProvider {
     init(
         apiKey: String,
         httpClient: ProviderHTTPClient,
-        model: String = "claude-sonnet-4-20250514",
+        model: String = LLMProviderID.anthropic.defaultModel,
         timeoutSeconds: TimeInterval = 20
     ) {
         self.apiKey = apiKey
