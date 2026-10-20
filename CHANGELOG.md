@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/sophiie-ai/whispur/compare/v0.16.1...v0.17.0) (2026-10-20)
+
+
+### Features
+
+* custom model override for every LLM cleanup provider ([#48](https://github.com/sophiie-ai/whispur/issues/48)) ([eb8c62f](https://github.com/sophiie-ai/whispur/commit/eb8c62f21f1816eaa2951ce0f88528d252517a3c))
+
 ## [0.16.1](https://github.com/sophiie-ai/whispur/compare/v0.16.0...v0.16.1) (2026-05-26)
 
 
