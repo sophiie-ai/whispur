@@ -110,25 +110,28 @@ final class LearningToastPanelManager {
 }
 
 private struct LearningToastView: View {
+    private typealias OnDark = SophiieTheme.Palette.OnDark
+
     @ObservedObject var center: LearningSuggestionCenter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(OnDark.accent)
                 Text("Learn from your edits?")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnDark.ink)
                 Spacer()
                 Button {
                     center.dismissAll()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(OnDark.inkSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss all")
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -138,27 +141,25 @@ private struct LearningToastView: View {
                 if center.pending.count > 3 {
                     Text("+\(center.pending.count - 3) more")
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(OnDark.muted)
                 }
             }
         }
         .padding(14)
         .background(
-            LinearGradient(
-                colors: [Color.black.opacity(0.94), Color.black.opacity(0.84)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            OnDark.background.opacity(0.97),
+            in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous)
+                .strokeBorder(OnDark.hairline, lineWidth: 1)
         )
     }
 }
 
 private struct SuggestionRow: View {
+    private typealias OnDark = SophiieTheme.Palette.OnDark
+
     let suggestion: VocabularySuggestion
     @ObservedObject var center: LearningSuggestionCenter
 
@@ -167,14 +168,14 @@ private struct SuggestionRow: View {
             HStack(spacing: 5) {
                 Text(suggestion.from)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .strikethrough(true, color: .white.opacity(0.4))
+                    .foregroundStyle(OnDark.muted)
+                    .strikethrough(true, color: OnDark.muted)
                 Image(systemName: "arrow.right")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(OnDark.muted)
                 Text(suggestion.to)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnDark.ink)
             }
             .lineLimit(1)
 
@@ -183,14 +184,13 @@ private struct SuggestionRow: View {
             Button("Add") {
                 center.accept(suggestion)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.sophiiePrimaryOnDark)
             .controlSize(.mini)
-            .tint(.orange)
 
             Button("Skip") {
                 center.dismiss(suggestion)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.sophiieSecondaryOnDark)
             .controlSize(.mini)
         }
     }
