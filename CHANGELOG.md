@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.18.0](https://github.com/sophiie-ai/whispur/compare/v0.17.0...v0.18.0) (2026-10-31)
+
+
+### Features
+
+* **brand:** new speak to cursor app icon ([#52](https://github.com/sophiie-ai/whispur/issues/52)) ([fa0955f](https://github.com/sophiie-ai/whispur/commit/fa0955fec76a5a2e59d99b7ed232eec2fbeb8df7))
+* **site:** revamp whispur.app with the Sophiie design system ([#50](https://github.com/sophiie-ai/whispur/issues/50)) ([5fd6fb5](https://github.com/sophiie-ai/whispur/commit/5fd6fb5f8a25790576e8e44c4f5165fad566ee8c))
+* **ui:** restyle the app with the Sophiie theme ([#51](https://github.com/sophiie-ai/whispur/issues/51)) ([e4a502e](https://github.com/sophiie-ai/whispur/commit/e4a502e85e576824749c5e74f5bf1fe1e3be7687))
+
 ## [0.17.0](https://github.com/sophiie-ai/whispur/compare/v0.16.1...v0.17.0) (2026-10-20)
 
 
