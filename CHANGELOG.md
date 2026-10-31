@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.19.0](https://github.com/sophiie-ai/whispur/compare/v0.18.0...v0.19.0) (2026-10-31)
+
+
+### Features
+
+* **ui:** redesign the settings header and provider key setup ([#56](https://github.com/sophiie-ai/whispur/issues/56)) ([ea745bc](https://github.com/sophiie-ai/whispur/commit/ea745bce8c7104ca963aa1c085bead982fda84b2))
+
+
+### Bug Fixes
+
+* **ui:** give the menu bar window a cohesive canvas and fix dark-mode contrast ([#55](https://github.com/sophiie-ai/whispur/issues/55)) ([cb87e4c](https://github.com/sophiie-ai/whispur/commit/cb87e4c4fff05e00b104d899affe4b50974d3a84))
+
 ## [0.18.0](https://github.com/sophiie-ai/whispur/compare/v0.17.0...v0.18.0) (2026-10-31)
 
 
