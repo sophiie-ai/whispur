@@ -2,126 +2,163 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Changelog — Whispur</title>
-  <meta name="description" content="Every release of Whispur, with links to the tagged builds on GitHub." />
-  <meta name="theme-color" content="#0b2433" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Whispur changelog: release notes for the Mac dictation app</title>
+  <meta name="description" content="Release notes for every Whispur version: new features, fixes and improvements to the free, open-source voice dictation app for macOS." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://whispur.app/changelog" />
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <meta property="og:title" content="Changelog — Whispur" />
-  <meta property="og:description" content="Every release of Whispur." />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Whispur changelog: release notes for the Mac dictation app" />
+  <meta property="og:description" content="Release notes for every Whispur version, the free, open-source voice dictation app for macOS." />
   <meta property="og:url" content="https://whispur.app/changelog" />
   <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Whispur changelog: release notes for the Mac dictation app" />
+  <meta name="twitter:description" content="Release notes for every Whispur version, the free, open-source voice dictation app for macOS." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
 
-  <style>
-    :root { color-scheme: dark light; --bg: #07141c; --fg: #e8f6fa; --fg-muted: #9bb5c0; --accent: #2ed1c3; --accent-2: #5fb8ff; --border: rgba(255,255,255,.08); --card: rgba(255,255,255,.04); }
-    @media (prefers-color-scheme: light) { :root { --bg:#f6fbfc; --fg:#0a1c24; --fg-muted:#4a6370; --border: rgba(10,28,36,.1); --card: rgba(10,28,36,.02); } }
-    * { box-sizing: border-box; }
-    body { margin:0; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif; line-height: 1.65; }
-    .container { max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
-    a { color: var(--accent); }
-    h1 { font-size: 2.5rem; letter-spacing: -.02em; margin: 0 0 .5rem; }
-    .muted { color: var(--fg-muted); }
-    .eyebrow { display:inline-block; padding: .35rem .75rem; border-radius: 999px; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; background: rgba(46,209,195,.12); color: var(--accent); border: 1px solid rgba(46,209,195,.25); margin-bottom: 1rem; }
-
-    .markdown h2 {
-      margin: 2.5rem 0 .5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-      font-size: 1.5rem;
-      letter-spacing: -.01em;
-    }
-    .markdown h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 1rem; }
-    .markdown h2 a { text-decoration: none; color: inherit; background: linear-gradient(135deg, #2ed1c3, #5fb8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .markdown h3 {
-      margin: 1.25rem 0 .5rem;
-      font-size: .85rem;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--fg-muted);
-      font-weight: 600;
-    }
-    .markdown ul { padding-left: 1.2rem; margin: .5rem 0 1rem; }
-    .markdown li { margin: .25rem 0; color: var(--fg); }
-    .markdown li::marker { color: var(--accent); }
-    .markdown code { background: var(--card); border: 1px solid var(--border); padding: .1rem .4rem; border-radius: 6px; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
-    .markdown p { margin: .5rem 0; }
-    .markdown a { color: var(--accent); }
-
-    .header-link { display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; color: inherit; margin-bottom: 2rem; }
-    .header-link img { border-radius: 6px; }
-
-    .loading, .error { color: var(--fg-muted); font-size: .95rem; padding: 2rem 0; text-align: center; }
-    .error { color: #ff7a7a; }
-
-    .cta {
-      margin-top: 3rem;
-      padding: 1.25rem 1.5rem;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: linear-gradient(135deg, rgba(46,209,195,.08), rgba(95,184,255,.08));
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .cta a {
-      display:inline-block;
-      padding: .5rem 1rem;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #2ed1c3, #5fb8ff);
-      color: #041018;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: .95rem;
-    }
-  </style>
+  <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Whispur", "item": "https://whispur.app/" },
+      { "@type": "ListItem", "position": 2, "name": "Changelog", "item": "https://whispur.app/changelog" }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <div class="container">
-    <a href="/" class="header-link">
-      <img src="/icon.png" alt="" width="28" height="28" />
-      <strong>Whispur</strong>
-    </a>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-    <span class="eyebrow">Changelog</span>
-    <h1>What's new in Whispur</h1>
-    <p class="muted">Every tagged release, with the commits that shipped in it. Pulled straight from the repo.</p>
-
-    <article id="changelog" class="markdown" aria-busy="true">
-      <p class="loading">Loading changelog…</p>
-    </article>
-
-    <div class="cta">
-      <span class="muted">Want to see future entries as they ship?</span>
-      <a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">Watch releases on GitHub</a>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div class="site-header__brand">
+        <a class="brand" href="/" aria-label="Whispur home">
+          <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" />
+          <span class="brand__name">Whispur</span>
+        </a>
+        <a class="brand__by" href="https://sophiie.ai" rel="noopener">
+          <span>by</span>
+          <img src="/brand/sophiie.svg" alt="Sophiie" width="82" height="14" />
+        </a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <ul class="site-nav__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#providers">Providers</a></li>
+          <li><a href="/#install">Install</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/changelog" aria-current="page">Changelog</a></li>
+        </ul>
+        <div class="site-nav__actions">
+          <a class="hp-btn hp-btn--secondary site-nav__github" href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a>
+          <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a>
+        </div>
+      </nav>
     </div>
-  </div>
+  </header>
+
+  <main id="main">
+    <div class="container container--narrow">
+      <div class="doc-hero">
+        <p class="eyebrow">Changelog</p>
+        <h1>What's new in Whispur</h1>
+        <p>Every tagged release and the changes that shipped in it, pulled straight from <a class="text-link" href="https://github.com/sophiie-ai/whispur/blob/main/CHANGELOG.md" rel="noopener">CHANGELOG.md</a> on GitHub.</p>
+      </div>
+
+      <article id="changelog" class="prose changelog" aria-busy="true" aria-live="polite">
+        <p class="status">Loading the changelog.</p>
+        <noscript><p class="status">The changelog needs JavaScript to render here. <a href="https://github.com/sophiie-ai/whispur/blob/main/CHANGELOG.md" rel="noopener">Read CHANGELOG.md on GitHub</a> or the <a href="/CHANGELOG.md">plain Markdown file</a>.</p></noscript>
+      </article>
+
+      <div class="callout">
+        <p>Whispur updates itself, but you can also follow every release on GitHub.</p>
+        <a class="hp-btn hp-btn--secondary hp-btn--arrow" href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">GitHub releases</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="brand" href="/" aria-label="Whispur home">
+            <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" loading="lazy" />
+            <span class="brand__name">Whispur</span>
+          </a>
+          <p>Free, open-source voice dictation for macOS.</p>
+          <a class="sophiie-mark" href="https://sophiie.ai" rel="noopener">
+            <span>A product by</span>
+            <img src="/brand/sophiie.svg" alt="Sophiie" width="94" height="16" loading="lazy" />
+          </a>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div class="footer-col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a></li>
+              <li><a href="/changelog">Changelog</a></li>
+              <li><a href="/#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Open source</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">All releases</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__bottom">
+        <p>&copy; 2026 Sophiie AI Pty Ltd</p>
+        <p>Released under the MIT License.</p>
+      </div>
+    </div>
+  </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
   <script>
-    (async function() {
-      const target = document.getElementById("changelog");
+    (async function () {
+      var target = document.getElementById("changelog");
       try {
-        const res = await fetch("/CHANGELOG.md", { cache: "no-cache" });
+        var res = await fetch("/CHANGELOG.md", { cache: "no-cache" });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        const md = await res.text();
-        // Strip the top-level "# Changelog" heading so the page heading isn't duplicated
-        const body = md.replace(/^#\s+Changelog\s*\n+/i, "");
+        var md = await res.text();
+        // Drop the top-level "# Changelog" heading so the page heading is not duplicated.
+        var body = md.replace(/^#\s+Changelog\s*\n+/i, "");
         target.innerHTML = marked.parse(body, { gfm: true, breaks: false });
-        target.setAttribute("aria-busy", "false");
-        // Make links open in new tab
-        target.querySelectorAll("a[href^='http']").forEach(a => {
-          a.setAttribute("target", "_blank");
+        target.querySelectorAll("a[href^='http']").forEach(function (a) {
           a.setAttribute("rel", "noopener");
         });
       } catch (err) {
-        target.innerHTML = '<p class="error">Could not load the changelog. <a href="https://github.com/sophiie-ai/whispur/blob/main/CHANGELOG.md" rel="noopener">Read it on GitHub</a>.</p>';
-        target.setAttribute("aria-busy", "false");
+        target.innerHTML = '<p class="status">Could not load the changelog. <a href="https://github.com/sophiie-ai/whispur/blob/main/CHANGELOG.md" rel="noopener">Read it on GitHub</a>.</p>';
       }
+      target.setAttribute("aria-busy", "false");
     })();
   </script>
   <script defer src="/_vercel/insights/script.js"></script>

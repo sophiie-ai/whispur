@@ -1,0 +1,45 @@
+# Whispur
+
+> Whispur is a free, open-source (MIT) voice dictation app for macOS, made by Sophiie AI. It lives in the menu bar: hold a shortcut (Fn by default), speak, and release. Whispur transcribes the audio, optionally cleans up the text with an LLM, and pastes it into the app you are using. You bring your own API keys; there is no account and no Whispur server. Requires macOS 14 Sonoma or later; the current release build runs on Apple silicon.
+
+Key facts:
+
+- Price: free. License: MIT. Publisher: Sophiie AI Pty Ltd (https://sophiie.ai).
+- Install: download the signed, Apple-notarized DMG. Homebrew is not available yet.
+- Speech to text: Apple speech recognition (built into macOS, no key, the default), OpenAI Whisper (whisper-1, custom OpenAI-compatible base URL supported), Groq (Whisper Large v3), Deepgram (Nova-3), ElevenLabs (Scribe v2).
+- Optional cleanup LLMs: Anthropic Claude (default Claude Sonnet 4), OpenAI (default GPT-4o mini, custom base URL supported), Groq (default Llama 3.3 70B), AWS Bedrock (Claude via a Bedrock API key). Every cleanup provider accepts a custom model name.
+- Shortcuts: hold Fn to talk; Command + Fn toggles hands-free recording; Esc cancels. Other presets can be chosen in Settings.
+- Privacy: API keys are stored in the macOS Keychain; audio and text go only to the providers you configure; the app has no telemetry. Updates come through Sparkle with EdDSA-signed releases.
+
+## Download and install
+
+- [Download Whispur.dmg (latest release)](https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg): direct link to the newest signed and notarized DMG
+- [All releases on GitHub](https://github.com/sophiie-ai/whispur/releases): every tagged build
+- [Install steps](https://whispur.app/llms-full.txt): 1) download the DMG, 2) drag Whispur to Applications and launch it, 3) allow Microphone and Accessibility access, then hold Fn and talk. The Apple engine also asks for Speech Recognition access on first use.
+- [Build from source](https://github.com/sophiie-ai/whispur#build-from-source): `brew install xcodegen create-dmg`, then `make all` and `make run`
+
+## Documentation
+
+- [README (raw Markdown)](https://raw.githubusercontent.com/sophiie-ai/whispur/main/README.md): features, setup, usage, provider matrix, development
+- [Full site content as Markdown](https://whispur.app/llms-full.txt): everything on whispur.app in one file, including the FAQ
+- [Changelog (Markdown)](https://whispur.app/CHANGELOG.md): release notes for every version
+- [Changelog page](https://whispur.app/changelog): the same release notes rendered as HTML
+- [Privacy](https://whispur.app/privacy): what the app and website do with audio, transcripts, keys and analytics
+
+## Source
+
+- [GitHub repository](https://github.com/sophiie-ai/whispur): Swift source, issues and pull requests
+- [License (MIT)](https://github.com/sophiie-ai/whispur/blob/main/LICENSE)
+- [Contributing guide](https://github.com/sophiie-ai/whispur/blob/main/CONTRIBUTING.md)
+
+## FAQ
+
+- [Is Whispur free?](https://whispur.app/#faq): yes, MIT licensed, no account or subscription; cloud providers bill you directly
+- [Does Whispur see my audio?](https://whispur.app/#faq): no, there is no backend; data goes only to the providers you configure
+- [Which Macs are supported?](https://whispur.app/#faq): macOS 14 Sonoma or later; the current release build runs on Apple silicon
+- [Is there a Homebrew cask?](https://whispur.app/#faq): not yet; use the DMG or build from source
+
+## Optional
+
+- [Sophiie](https://sophiie.ai): the company behind Whispur
+- [Update feed (Sparkle appcast)](https://whispur.app/appcast.xml): machine-readable latest version

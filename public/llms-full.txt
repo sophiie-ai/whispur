@@ -1,0 +1,121 @@
+# Whispur: free, open-source voice dictation app for Mac
+
+> Whispur is a voice dictation app that lives in your Mac menu bar. Hold a shortcut, talk, and let go: your words are transcribed, tidied up and pasted into whatever app you are using. Free, MIT licensed, made by Sophiie AI (https://sophiie.ai).
+
+- Website: https://whispur.app/
+- Download (latest DMG): https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg
+- Source code: https://github.com/sophiie-ai/whispur
+- Changelog: https://whispur.app/changelog (Markdown: https://whispur.app/CHANGELOG.md)
+- Privacy: https://whispur.app/privacy
+- Requirements: macOS 14 Sonoma or later. The current release build runs on Apple silicon.
+- Distribution: signed with a Developer ID certificate and notarized by Apple. Homebrew is not available yet.
+
+## Features
+
+### Hold to talk, or toggle
+Hold Fn to dictate and release to paste. Press Command + Fn for hands-free recording. Esc cancels.
+
+### Pastes where your cursor is
+Text lands in the app you are already using: email, Slack, your editor, a prompt box. Your clipboard is restored afterwards.
+
+### Five speech engines
+Apple speech recognition with no key needed, or OpenAI Whisper, Groq, Deepgram and ElevenLabs with your own API key.
+
+### Optional AI cleanup
+Run transcripts through Claude, OpenAI, Groq or AWS Bedrock to fix punctuation and misheard words. Edit the prompt and add your own vocabulary.
+
+### Bring your own keys
+No account, no subscription, no middleman. API keys live in the macOS Keychain and requests go straight to the provider you chose.
+
+### See every request
+The Activity tab shows raw and cleaned transcripts. The Requests tab lists every provider API call with its timing and any error.
+
+### Also included
+- Choose your microphone
+- Pick your dictation language
+- Quiet system audio while recording
+- Compact recording overlay
+- Learn corrections from your edits (opt-in)
+- Weekly dictation recap
+- Automatic updates
+
+## Providers
+
+Start with Apple speech recognition and no API key, or add a key for a cloud provider when you want more accuracy or cleanup.
+
+### Speech to text
+| Provider | Notes |
+| --- | --- |
+| Apple speech recognition | Built into macOS, no key, default |
+| OpenAI Whisper | whisper-1, or any OpenAI-compatible endpoint |
+| Groq | Whisper Large v3 |
+| Deepgram | Nova-3 |
+| ElevenLabs | Scribe v2 |
+
+### Optional cleanup
+| Provider | Notes |
+| --- | --- |
+| Anthropic Claude | Claude Sonnet 4 by default |
+| OpenAI | GPT-4o mini by default, custom base URL supported |
+| Groq | Llama 3.3 70B by default |
+| AWS Bedrock | Claude via a Bedrock API key |
+
+Every cleanup provider accepts a custom model name, so you can switch models without waiting for an update.
+
+## Install
+
+1. Download the DMG. Get the latest Whispur.dmg from GitHub Releases (https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg). It is signed and notarized by Apple, so it opens normally.
+2. Drag it to Applications. Launch Whispur. It runs from the menu bar, and Settings opens a setup checklist.
+3. Grant two permissions. Allow Microphone to record and Accessibility for the global shortcut and paste. Then hold Fn and talk. The Apple engine also asks for Speech Recognition access on first use.
+
+Build from source instead:
+
+```bash
+git clone https://github.com/sophiie-ai/whispur.git
+cd whispur
+brew install xcodegen create-dmg
+make all
+make run
+```
+
+## FAQ
+
+### Is Whispur really free?
+Yes. Whispur is MIT licensed, with no account and no subscription. Apple speech recognition works without an API key. If you choose a cloud provider, that provider bills you directly for your own usage.
+
+### Does Whispur see my audio or transcripts?
+No. Whispur has no backend server. Audio and transcripts go only to the speech and cleanup providers you configure, using your own API keys, which are stored in the macOS Keychain.
+
+### Which speech-to-text engines does Whispur support?
+Apple speech recognition built into macOS, OpenAI Whisper, Groq Whisper Large v3, Deepgram Nova-3 and ElevenLabs Scribe v2. The OpenAI provider also accepts a custom OpenAI-compatible base URL.
+
+### Which Macs are supported?
+Macs running macOS 14 Sonoma or later. The current release build runs on Apple silicon.
+
+### What is the default shortcut, and can I change it?
+Hold Fn to talk and release to paste. Press Command + Fn to start hands-free recording and press it again to stop. You can pick other shortcuts in Settings, and Esc cancels a recording.
+
+### How does AI cleanup work?
+Add an API key for Anthropic, OpenAI, Groq or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead.
+
+### How do updates work?
+Whispur updates itself through Sparkle. Every release is signed with an Apple Developer ID certificate, notarized by Apple, and checked against an EdDSA signature before it installs.
+
+### Can I install Whispur with Homebrew?
+Not yet. A Homebrew cask is planned but not published. For now, download the DMG or build from source.
+
+### Where is the source code?
+On GitHub at github.com/sophiie-ai/whispur. Issues and pull requests are welcome.
+
+## Privacy summary
+
+- No account and no backend server. Audio is recorded to a temporary file, converted to 16 kHz mono, and deleted after the dictation.
+- Apple speech recognition uses the framework built into macOS; depending on the Mac and language, macOS may process audio on the device or with Apple's speech service.
+- Cloud providers receive audio or text directly from your Mac with your API key.
+- Recent transcripts and a provider request log are kept locally and can be cleared in Settings.
+- The app has no telemetry. The website uses cookie-free Vercel Web Analytics and Speed Insights.
+- Full policy: https://whispur.app/privacy
+
+## About
+
+Whispur is made by Sophiie AI Pty Ltd (https://sophiie.ai). © 2026 Sophiie AI Pty Ltd. Released under the MIT License.

@@ -23,38 +23,40 @@ guard let ctx = CGContext(
     exit(1)
 }
 
-// Background gradient (deep teal → cyan)
-let locations: [CGFloat] = [0.0, 1.0]
-let colors = [
-    CGColor(red: 7/255, green: 20/255, blue: 28/255, alpha: 1),
-    CGColor(red: 17/255, green: 60/255, blue: 78/255, alpha: 1)
-]
-if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: locations) {
-    ctx.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: width, y: height), options: [])
+// Palette: Sophiie www design tokens (src/styles/global.css).
+func hex(_ v: UInt32, _ a: CGFloat = 1) -> CGColor {
+    CGColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a)
 }
+let surfacePrimary = hex(0xffffff)  // --color-surface-primary
+let midnight = hex(0x140934)        // --color-midnight / --color-text-primary
+let textMuted = hex(0x65696f)       // --color-text-muted
+let brandSky = 0x69c7fb as UInt32   // --color-brand-sky
+let glowSky = 0xc7efff as UInt32    // --color-what-we-do-glow
 
-// Accent radial glow (top-left)
-let glow = CGGradient(
-    colorsSpace: colorSpace,
-    colors: [
-        CGColor(red: 46/255, green: 209/255, blue: 195/255, alpha: 0.35),
-        CGColor(red: 46/255, green: 209/255, blue: 195/255, alpha: 0)
-    ] as CFArray,
-    locations: [0, 1]
-)!
-ctx.drawRadialGradient(glow, startCenter: CGPoint(x: 200, y: height - 120), startRadius: 0,
-                       endCenter: CGPoint(x: 200, y: height - 120), endRadius: 450, options: [])
+// Calm white canvas with a soft sky aura, like the site hero.
+ctx.setFillColor(surfacePrimary)
+ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
-let glow2 = CGGradient(
-    colorsSpace: colorSpace,
-    colors: [
-        CGColor(red: 95/255, green: 184/255, blue: 255/255, alpha: 0.25),
-        CGColor(red: 95/255, green: 184/255, blue: 255/255, alpha: 0)
-    ] as CFArray,
-    locations: [0, 1]
-)!
-ctx.drawRadialGradient(glow2, startCenter: CGPoint(x: width - 180, y: 180), startRadius: 0,
-                       endCenter: CGPoint(x: width - 180, y: 180), endRadius: 400, options: [])
+func aura(_ color: UInt32, _ alpha: CGFloat, center: CGPoint, radius: CGFloat) {
+    let g = CGGradient(colorsSpace: colorSpace, colors: [hex(color, alpha), hex(color, 0)] as CFArray, locations: [0, 1])!
+    ctx.drawRadialGradient(g, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
+}
+aura(glowSky, 0.9, center: CGPoint(x: 220, y: height / 2), radius: 420)
+aura(brandSky, 0.28, center: CGPoint(x: width - 140, y: 60), radius: 520)
+
+// Fonts: the site's self-hosted Schibsted Grotesk and Inter, with system fallbacks.
+for file in ["public/fonts/schibsted-grotesk-latin-wght-normal.woff2", "public/fonts/inter-latin-wght-normal.woff2"] {
+    CTFontManagerRegisterFontsForURL(URL(fileURLWithPath: file) as CFURL, .process, nil)
+}
+func font(_ family: String, size: CGFloat, weight: CGFloat) -> NSFont {
+    // Variable fonts: set the wght axis directly (0x77676874 is the "wght" tag).
+    let desc = NSFontDescriptor(fontAttributes: [
+        .family: family,
+        NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [0x77676874: weight],
+    ])
+    if let f = NSFont(descriptor: desc, size: size), f.familyName == family { return f }
+    return NSFont.systemFont(ofSize: size, weight: weight >= 600 ? .semibold : (weight >= 500 ? .medium : .regular))
+}
 
 // Draw app icon (left side, large)
 let iconPath = "Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png"
@@ -73,66 +75,40 @@ if let iconData = try? Data(contentsOf: URL(fileURLWithPath: iconPath)),
     ctx.setShadow(
         offset: CGSize(width: 0, height: -16),
         blur: 40,
-        color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.4)
+        color: hex(0x140934, 0.22)
     )
     ctx.draw(iconCG, in: iconRect)
     ctx.restoreGState()
 }
 
 // Text
-func drawText(_ text: String, at point: CGPoint, fontSize: CGFloat, weight: NSFont.Weight, color: CGColor, letterSpacing: CGFloat = 0) {
-    let font = NSFont.systemFont(ofSize: fontSize, weight: weight)
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineBreakMode = .byWordWrapping
-
+func drawText(_ text: String, at point: CGPoint, font: NSFont, color: CGColor, letterSpacing: CGFloat = 0) {
     let attrs: [NSAttributedString.Key: Any] = [
         .font: font,
-        .foregroundColor: NSColor(cgColor: color) ?? NSColor.white,
-        .kern: letterSpacing,
-        .paragraphStyle: paragraph
+        .foregroundColor: NSColor(cgColor: color) ?? NSColor.black,
+        .kern: letterSpacing
     ]
-    let attr = NSAttributedString(string: text, attributes: attrs)
-    let line = CTLineCreateWithAttributedString(attr)
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attrs))
     ctx.textPosition = point
     CTLineDraw(line, ctx)
 }
 
-// Flip coordinate system to draw text upright (CoreText y-up)
+let heading = "Schibsted Grotesk"
+let body = "Inter"
 let textX: CGFloat = 410
-drawText(
-    "Whispur",
-    at: CGPoint(x: textX, y: height - 260),
-    fontSize: 88,
-    weight: .bold,
-    color: CGColor(red: 232/255, green: 246/255, blue: 250/255, alpha: 1),
-    letterSpacing: -2
-)
+drawText("Whispur", at: CGPoint(x: textX, y: height - 262), font: font(heading, size: 92, weight: 650), color: midnight, letterSpacing: -2)
+drawText("Voice dictation for macOS.", at: CGPoint(x: textX, y: height - 328), font: font(heading, size: 40, weight: 550), color: midnight, letterSpacing: -1)
+drawText("Free and open source \u{00B7} Bring your own keys", at: CGPoint(x: textX, y: height - 384), font: font(body, size: 26, weight: 400), color: textMuted)
 
-drawText(
-    "Voice dictation for macOS.",
-    at: CGPoint(x: textX, y: height - 320),
-    fontSize: 36,
-    weight: .medium,
-    color: CGColor(red: 46/255, green: 209/255, blue: 195/255, alpha: 1),
-    letterSpacing: -0.5
-)
-
-drawText(
-    "Open source · Bring your own keys · Free",
-    at: CGPoint(x: textX, y: height - 380),
-    fontSize: 24,
-    weight: .regular,
-    color: CGColor(red: 155/255, green: 181/255, blue: 192/255, alpha: 1)
-)
-
-// URL footer
-drawText(
-    "whispur.app",
-    at: CGPoint(x: textX, y: 70),
-    fontSize: 22,
-    weight: .medium,
-    color: CGColor(red: 155/255, green: 181/255, blue: 192/255, alpha: 1)
-)
+// Footer: URL plus the Sophiie mark.
+drawText("whispur.app", at: CGPoint(x: textX, y: 72), font: font(body, size: 22, weight: 500), color: textMuted)
+if let logo = NSImage(contentsOfFile: "public/brand/sophiie.svg"),
+   let logoCG = logo.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+    let h: CGFloat = 28
+    let w = h * logo.size.width / logo.size.height
+    drawText("by", at: CGPoint(x: width - 90 - w - 36, y: 72), font: font(body, size: 22, weight: 400), color: textMuted)
+    ctx.draw(logoCG, in: CGRect(x: width - 90 - w, y: 66, width: w, height: h))
+}
 
 // Save to PNG
 guard let cgImage = ctx.makeImage() else {

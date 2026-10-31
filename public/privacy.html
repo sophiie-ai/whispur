@@ -2,72 +2,169 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy — Whispur</title>
-  <meta name="description" content="How Whispur handles your audio, transcripts, and API keys. Short version: it doesn't." />
-  <meta name="theme-color" content="#0b2433" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Whispur privacy: how the Mac dictation app handles your data</title>
+  <meta name="description" content="How Whispur handles your audio, transcripts and API keys. No account, no backend server, no app telemetry. Data goes only to the providers you choose." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://whispur.app/privacy" />
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <meta property="og:title" content="Privacy — Whispur" />
-  <meta property="og:description" content="How Whispur handles your audio, transcripts, and API keys." />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Whispur privacy: how the Mac dictation app handles your data" />
+  <meta property="og:description" content="How Whispur handles your audio, transcripts and API keys. No account, no backend server, no app telemetry. Data goes only to the providers you choose." />
   <meta property="og:url" content="https://whispur.app/privacy" />
   <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Whispur privacy: how the Mac dictation app handles your data" />
+  <meta name="twitter:description" content="How Whispur handles your audio, transcripts and API keys. No account, no backend server, no app telemetry. Data goes only to the providers you choose." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
 
-  <style>
-    :root { color-scheme: dark light; --bg: #07141c; --fg: #e8f6fa; --fg-muted: #9bb5c0; --accent: #2ed1c3; --border: rgba(255,255,255,.08); --card: rgba(255,255,255,.04); }
-    @media (prefers-color-scheme: light) { :root { --bg:#f6fbfc; --fg:#0a1c24; --fg-muted:#4a6370; --border: rgba(10,28,36,.1); --card: rgba(10,28,36,.02); } }
-    * { box-sizing: border-box; }
-    body { margin:0; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif; line-height: 1.65; }
-    .container { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
-    header { display:flex; align-items:center; gap:.6rem; text-decoration:none; color: inherit; margin-bottom: 3rem; }
-    h1 { font-size: 2.25rem; letter-spacing: -.02em; margin: 0 0 .5rem; }
-    h2 { margin-top: 2.5rem; font-size: 1.25rem; letter-spacing: -.01em; }
-    .muted { color: var(--fg-muted); }
-    a { color: var(--accent); }
-    ul { padding-left: 1.2rem; }
-    .eyebrow { color: var(--accent); font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; }
-  </style>
+  <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Whispur", "item": "https://whispur.app/" },
+      { "@type": "ListItem", "position": 2, "name": "Privacy", "item": "https://whispur.app/privacy" }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <div class="container">
-    <a href="/" style="display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; color: inherit; margin-bottom: 2rem;">
-      <img src="/icon.png" alt="" width="28" height="28" style="border-radius:6px;" />
-      <strong>Whispur</strong>
-    </a>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-    <span class="eyebrow">Privacy</span>
-    <h1>What Whispur does with your data</h1>
-    <p class="muted">Short version: nothing we don't need to, and nothing that leaves your Mac without your say-so.</p>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div class="site-header__brand">
+        <a class="brand" href="/" aria-label="Whispur home">
+          <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" />
+          <span class="brand__name">Whispur</span>
+        </a>
+        <a class="brand__by" href="https://sophiie.ai" rel="noopener">
+          <span>by</span>
+          <img src="/brand/sophiie.svg" alt="Sophiie" width="82" height="14" />
+        </a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <ul class="site-nav__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#providers">Providers</a></li>
+          <li><a href="/#install">Install</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/changelog">Changelog</a></li>
+        </ul>
+        <div class="site-nav__actions">
+          <a class="hp-btn hp-btn--secondary site-nav__github" href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a>
+          <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a>
+        </div>
+      </nav>
+    </div>
+  </header>
 
-    <h2>Audio</h2>
-    <p>When you hold your shortcut and talk, Whispur captures audio locally and normalizes it (16kHz mono PCM) for transcription. Audio is written to a temporary file in the system sandbox, transcribed, and deleted.</p>
-    <ul>
-      <li>If you picked the Apple speech engine — audio never leaves your Mac.</li>
-      <li>If you picked a cloud provider (OpenAI, Deepgram, ElevenLabs) — audio goes directly to that provider using your API key. Whispur has no intermediary server.</li>
-    </ul>
+  <main id="main">
+    <div class="container container--narrow">
+      <div class="doc-hero">
+        <p class="eyebrow">Privacy</p>
+        <h1>What Whispur does with your data</h1>
+        <p>Short version: Whispur has no account and no backend server. Your audio and text go only to the providers you choose, with your own keys.</p>
+      </div>
 
-    <h2>Transcripts</h2>
-    <p>Transcripts are pasted into the app you have focus on, and (if enabled) logged in a local Run Log you can clear at any time. Whispur never sends transcripts anywhere other than, optionally, the LLM cleanup provider you configured — again, directly to that provider, not to us.</p>
+      <article class="prose">
+        <h2>Audio</h2>
+        <p>When you hold your shortcut and talk, Whispur records to a temporary file on your Mac, converts it to 16 kHz mono audio for transcription, and deletes the temporary files once the dictation finishes. Recordings with no detectable speech are discarded without being sent anywhere.</p>
+        <ul>
+          <li><strong>Apple speech recognition:</strong> audio is handed to the speech recognition framework built into macOS. Whispur does not send it anywhere else. Depending on your Mac and language, macOS may process the request on the device or with Apple's speech service, under Apple's own privacy terms.</li>
+          <li><strong>Cloud providers</strong> (OpenAI, Groq, Deepgram, ElevenLabs, or an OpenAI-compatible endpoint you set): audio goes directly from your Mac to that provider using your API key. There is no Whispur server in between.</li>
+        </ul>
 
-    <h2>API keys</h2>
-    <p>API keys are stored in macOS Keychain and used only to authenticate requests to the provider you picked. We never see them.</p>
+        <h2>Transcripts</h2>
+        <p>Transcripts are pasted into the app you are using. If you configured a cleanup provider (Anthropic, OpenAI, Groq or AWS Bedrock), the transcript is sent directly to that provider first. Recent raw and cleaned transcripts are kept in a local Activity history on your Mac, which you can clear at any time in Settings.</p>
+        <p>The optional <strong>learn from edits</strong> setting is off by default. When you turn it on, Whispur re-reads the text field it just pasted into, using macOS Accessibility, to spot words you corrected and suggest them as custom vocabulary. That comparison happens on your Mac.</p>
 
-    <h2>Analytics &amp; telemetry</h2>
-    <p>The Whispur <strong>app</strong> does not phone home. The only network traffic it initiates is to the provider(s) you configure and to Sparkle's update feed.</p>
-    <p>The Whispur <strong>website</strong> (whispur.app) uses Vercel Web Analytics and Speed Insights — cookie-free, privacy-friendly, no personal data. They count page views and measure performance to help us improve the site. No tracking across sites, no selling data.</p>
+        <h2>API keys</h2>
+        <p>API keys are stored in the macOS Keychain and used only to authenticate requests to the provider they belong to. We never see them.</p>
 
-    <h2>Update checks</h2>
-    <p>The app checks <a href="https://whispur.app/appcast.xml" rel="noopener">whispur.app/appcast.xml</a> for new releases. The request includes a standard User-Agent and your app version — nothing identifying. Updates are cryptographically signed (EdDSA) before install.</p>
+        <h2>Request log</h2>
+        <p>The Requests tab in Settings keeps a local log of provider API calls, with timings and errors, so you can see exactly what was sent where. It stays on your Mac and can be cleared at any time.</p>
 
-    <h2>Source code</h2>
-    <p>Whispur is MIT-licensed. Read it, audit it, fork it — <a href="https://github.com/sophiie-ai/whispur" rel="noopener">github.com/sophiie-ai/whispur</a>.</p>
+        <h2>Analytics and telemetry</h2>
+        <p>The Whispur <strong>app</strong> does not phone home. The only network requests it makes are to the providers you configure and to the update feed.</p>
+        <p>The Whispur <strong>website</strong> (whispur.app) uses Vercel Web Analytics and Speed Insights, which are cookie-free and collect no personal data. They count page views and measure performance. Fonts are served from whispur.app, and the changelog page loads the open-source marked library from the jsDelivr CDN to render release notes.</p>
 
-    <h2>Contact</h2>
-    <p>Questions? Open an issue on GitHub or reach out via the Sophiie AI website.</p>
+        <h2>Update checks</h2>
+        <p>The app checks <a href="https://whispur.app/appcast.xml">whispur.app/appcast.xml</a> for new releases through Sparkle. The request carries a standard user agent and your app version, nothing that identifies you. Downloads are verified against an EdDSA signature before they install.</p>
 
-    <p class="muted" style="margin-top: 3rem; font-size:.9rem;">Last updated: 2026-04-12</p>
-  </div>
+        <h2>Source code</h2>
+        <p>Whispur is MIT licensed. Read it, audit it or fork it at <a href="https://github.com/sophiie-ai/whispur" rel="noopener">github.com/sophiie-ai/whispur</a>.</p>
+
+        <h2>Contact</h2>
+        <p>Questions? <a href="https://github.com/sophiie-ai/whispur/issues" rel="noopener">Open an issue on GitHub</a> or reach out through <a href="https://sophiie.ai" rel="noopener">sophiie.ai</a>.</p>
+
+        <p class="updated">Last updated: <time datetime="2026-10-31">31 October 2026</time></p>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="brand" href="/" aria-label="Whispur home">
+            <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" loading="lazy" />
+            <span class="brand__name">Whispur</span>
+          </a>
+          <p>Free, open-source voice dictation for macOS.</p>
+          <a class="sophiie-mark" href="https://sophiie.ai" rel="noopener">
+            <span>A product by</span>
+            <img src="/brand/sophiie.svg" alt="Sophiie" width="94" height="16" loading="lazy" />
+          </a>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div class="footer-col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a></li>
+              <li><a href="/changelog">Changelog</a></li>
+              <li><a href="/#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Open source</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">All releases</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__bottom">
+        <p>&copy; 2026 Sophiie AI Pty Ltd</p>
+        <p>Released under the MIT License.</p>
+      </div>
+    </div>
+  </footer>
+
   <script defer src="/_vercel/insights/script.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
