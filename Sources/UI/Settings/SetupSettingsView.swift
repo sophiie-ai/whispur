@@ -17,7 +17,7 @@ struct SetupSettingsView: View {
 
     private var heroCard: some View {
         PreferenceCard(
-            "Whispur Setup",
+            "Your Progress",
             detail: "Finish the core steps once, then dictation stays out of your way.",
             icon: "sparkles"
         ) {

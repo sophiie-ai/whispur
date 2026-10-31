@@ -1,8 +1,38 @@
 import SwiftUI
 
-/// Provider configuration: API keys and active provider selection.
+/// Initial expansion state for the Providers tab. The defaults are what the
+/// app uses; renders and tests can open specific rows.
+struct ProvidersLayout {
+    var expandedSTT: STTProviderID?
+    var expandedLLM: LLMProviderID?
+    var openAdvanced: Set<String> = []
+}
+
+/// Provider configuration: the active speech and cleanup providers up top,
+/// every other provider as a compact row that expands to set up its key.
 struct ProvidersSettingsView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var credentials: ProviderCredentials
+    @ObservedObject var tester: ProviderKeyTester
+
+    @State private var expandedSTT: STTProviderID?
+    @State private var expandedLLM: LLMProviderID?
+    @State private var openAdvanced: Set<String>
+    @FocusState private var focusedField: String?
+
+    init(
+        appState: AppState,
+        credentials: ProviderCredentials,
+        tester: ProviderKeyTester,
+        layout: ProvidersLayout = ProvidersLayout()
+    ) {
+        self.appState = appState
+        self.credentials = credentials
+        self.tester = tester
+        _expandedSTT = State(initialValue: layout.expandedSTT)
+        _expandedLLM = State(initialValue: layout.expandedLLM)
+        _openAdvanced = State(initialValue: layout.openAdvanced)
+    }
 
     var body: some View {
         ScrollView {
@@ -13,116 +43,171 @@ struct ProvidersSettingsView: View {
             }
             .padding(24)
         }
+        .onChange(of: appState.selectedSTT) { _, provider in
+            if expandedSTT == provider { expandedSTT = nil }
+            focusMissingKey(of: provider.setupDescriptor)
+        }
+        .onChange(of: appState.selectedLLM) { _, provider in
+            if expandedLLM == provider { expandedLLM = nil }
+            focusMissingKey(of: provider.setupDescriptor)
+        }
+    }
+
+    // MARK: - Speech
+
+    private var speechCard: some View {
+        PreferenceCard(
+            "Speech to Text",
+            detail: "Whispur sends each recording to the active provider.",
+            icon: "waveform.badge.mic"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                activePicker(title: "Speech provider") {
+                    Picker("Speech provider", selection: $appState.selectedSTT) {
+                        ForEach(STTProviderID.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                }
+
+                panel(for: appState.selectedSTT.setupDescriptor, style: .active, activeNote: nil)
+
+                otherProvidersLabel
+
+                VStack(spacing: 8) {
+                    ForEach(STTProviderID.allCases.filter { $0 != appState.selectedSTT }) { provider in
+                        panel(
+                            for: provider.setupDescriptor,
+                            style: .row(isExpanded: expandedSTT == provider),
+                            activeNote: nil,
+                            onToggle: {
+                                withSophiieAnimation {
+                                    expandedSTT = expandedSTT == provider ? nil : provider
+                                }
+                                if expandedSTT == provider { focusMissingKey(of: provider.setupDescriptor) }
+                            },
+                            onUse: { appState.selectedSTT = provider }
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private var languagesCard: some View {
         PreferenceCard(
             "Preferred Language",
-            detail: "Pick the language you speak. Whispur sends this as a hint to the selected STT provider. Auto-detect asks the provider to identify the language itself, which works best when you switch between languages.",
+            detail: "Pick the language you speak. Whispur sends this as a hint to the selected speech provider. Auto-detect asks the provider to identify the language itself, which works best when you switch between languages.",
             icon: "character.bubble"
         ) {
             STTLanguagePicker(appState: appState)
         }
     }
 
-    private var speechCard: some View {
+    // MARK: - Cleanup
+
+    private var cleanupCard: some View {
         PreferenceCard(
-            "Speech-to-Text",
-            detail: "Pick the transcription service Whispur should call after recording.",
-            icon: "waveform.badge.mic"
+            "Cleanup Model",
+            detail: "Adds punctuation, removes filler, and smooths dictation before paste.",
+            icon: "wand.and.stars"
         ) {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("Speech provider", selection: $appState.selectedSTT) {
-                    ForEach(STTProviderID.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
+            VStack(alignment: .leading, spacing: 12) {
+                activePicker(title: "Cleanup provider") {
+                    Picker("Cleanup provider", selection: $appState.selectedLLM) {
+                        ForEach(LLMProviderID.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
                     }
                 }
-                .pickerStyle(.menu)
-                .frame(width: 250)
 
-                ForEach(STTProviderID.allCases, id: \.self) { provider in
-                    ProviderConfigurationCard(
-                        name: provider.displayName,
-                        note: provider == .apple
-                            ? "Runs on-device and works without an API key."
-                            : "Configure credentials in Keychain before using this provider.",
-                        isActive: appState.selectedSTT == provider,
-                        isConfigured: !provider.requiresAPIKey || appState.keychain.hasKeysFor(stt: provider)
-                    ) {
-                        if provider.requiresAPIKey {
-                            ForEach(provider.keychainKeys, id: \.rawValue) { key in
-                                APIKeyField(
-                                    label: key.displayName,
-                                    key: key,
-                                    keychain: appState.keychain
-                                )
-                            }
-                            if provider == .openai {
-                                BaseURLField(
-                                    label: "Custom Base URL (optional)",
-                                    storageKey: "openaiSTTBaseURL",
-                                    placeholder: "https://api.openai.com/v1"
-                                )
-                                ProviderTextField(
-                                    label: "Custom Model (optional)",
-                                    storageKey: "openaiSTTModel",
-                                    placeholder: "whisper-1"
-                                )
-                            }
-                        }
+                let active = appState.selectedLLM.setupDescriptor
+                panel(
+                    for: active,
+                    style: .active,
+                    activeNote: credentials.status(for: active.keys).isReady
+                        ? nil
+                        : "Until a key is saved, Whispur pastes the raw transcript without cleanup."
+                )
+
+                otherProvidersLabel
+
+                VStack(spacing: 8) {
+                    ForEach(LLMProviderID.allCases.filter { $0 != appState.selectedLLM }) { provider in
+                        panel(
+                            for: provider.setupDescriptor,
+                            style: .row(isExpanded: expandedLLM == provider),
+                            activeNote: nil,
+                            onToggle: {
+                                withSophiieAnimation {
+                                    expandedLLM = expandedLLM == provider ? nil : provider
+                                }
+                                if expandedLLM == provider { focusMissingKey(of: provider.setupDescriptor) }
+                            },
+                            onUse: { appState.selectedLLM = provider }
+                        )
                     }
                 }
             }
         }
     }
 
-    private var cleanupCard: some View {
-        PreferenceCard(
-            "Cleanup Model",
-            detail: "Post-processing adds punctuation, removes filler, and smooths dictation before paste.",
-            icon: "wand.and.stars"
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("Cleanup provider", selection: $appState.selectedLLM) {
-                    ForEach(LLMProviderID.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 250)
+    // MARK: - Building blocks
 
-                ForEach(LLMProviderID.allCases, id: \.self) { provider in
-                    ProviderConfigurationCard(
-                        name: provider.displayName,
-                        note: appState.selectedLLM == provider && !appState.isSelectedLLMConfigured
-                            ? "Whispur will paste raw transcripts until credentials are added."
-                            : "Use this provider for transcript cleanup after transcription.",
-                        isActive: appState.selectedLLM == provider,
-                        isConfigured: appState.keychain.hasKeysFor(llm: provider)
-                    ) {
-                        ForEach(provider.keychainKeys, id: \.rawValue) { key in
-                            APIKeyField(
-                                label: key.displayName,
-                                key: key,
-                                keychain: appState.keychain
-                            )
-                        }
-                        if provider == .openai {
-                            BaseURLField(
-                                label: "Custom Base URL (optional)",
-                                storageKey: "openaiLLMBaseURL",
-                                placeholder: "https://api.openai.com/v1"
-                            )
-                        }
-                        ProviderTextField(
-                            label: "Custom Model (optional)",
-                            storageKey: provider.customModelStorageKey,
-                            placeholder: provider.defaultModel
-                        )
-                    }
-                }
-            }
+    private func activePicker<P: View>(title: String, @ViewBuilder picker: () -> P) -> some View {
+        HStack {
+            Text(title)
+                .font(SophiieTheme.Typography.label)
+                .foregroundStyle(SophiieTheme.Palette.ink)
+                .accessibilityHidden(true)
+            Spacer()
+            picker()
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 240)
         }
+    }
+
+    private var otherProvidersLabel: some View {
+        Text("OTHER PROVIDERS")
+            .font(SophiieTheme.Typography.captionStrong)
+            .tracking(SophiieTheme.Typography.eyebrowTracking)
+            .foregroundStyle(SophiieTheme.Palette.muted)
+            .padding(.top, 6)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func panel(
+        for descriptor: ProviderDescriptor,
+        style: ProviderSetupPanel.Style,
+        activeNote: String?,
+        onToggle: @escaping () -> Void = {},
+        onUse: (() -> Void)? = nil
+    ) -> some View {
+        ProviderSetupPanel(
+            descriptor: descriptor,
+            style: style,
+            activeNote: activeNote,
+            credentials: credentials,
+            tester: tester,
+            focus: $focusedField,
+            isAdvancedOpen: Binding(
+                get: { openAdvanced.contains(descriptor.id) },
+                set: { isOpen in
+                    if isOpen { openAdvanced.insert(descriptor.id) } else { openAdvanced.remove(descriptor.id) }
+                }
+            ),
+            onToggle: onToggle,
+            onUse: onUse
+        )
+    }
+
+    /// Moves focus to the first missing key of a provider the user just
+    /// picked or expanded, so they can paste straight away.
+    private func focusMissingKey(of descriptor: ProviderDescriptor) {
+        guard let missing = descriptor.keys.first(where: { !credentials.has($0) }) else { return }
+        let fieldID = ProviderSetupPanel.fieldID(descriptor: descriptor, key: missing)
+        DispatchQueue.main.async { focusedField = fieldID }
     }
 }
 
@@ -182,52 +267,3 @@ private struct STTLanguagePicker: View {
     }
 }
 
-private struct ProviderConfigurationCard<Content: View>: View {
-    let name: String
-    let note: String
-    let isActive: Bool
-    let isConfigured: Bool
-    let content: Content
-
-    init(
-        name: String,
-        note: String,
-        isActive: Bool,
-        isConfigured: Bool,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.name = name
-        self.note = note
-        self.isActive = isActive
-        self.isConfigured = isConfigured
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Text(name)
-                    .font(.headline)
-
-                if isActive {
-                    PreferenceBadge(title: "Active", tone: .good)
-                }
-
-                PreferenceBadge(
-                    title: isConfigured ? "Configured" : "Needs setup",
-                    tone: isConfigured ? .good : .warning
-                )
-
-                Spacer()
-            }
-
-            Text(note)
-                .font(.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-
-            content
-        }
-        .padding(16)
-        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
-    }
-}

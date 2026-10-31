@@ -20,6 +20,9 @@ struct WhispurApp: App {
             SettingsView(appState: appState)
                 .frame(minWidth: 860, minHeight: 620)
         }
+        // The brand canvas runs under a transparent title bar; the native
+        // traffic lights stay, and SettingsView keeps the strip draggable.
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 980, height: 680)
         .windowResizability(.contentSize)
 

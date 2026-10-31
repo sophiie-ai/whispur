@@ -129,6 +129,8 @@ enum SophiieTheme {
     enum Typography {
         static let display = Font.system(size: 28, weight: .semibold).monospacedDigit()
         static let title = Font.title3.weight(.semibold)
+        /// Page titles at the top of a window's detail pane.
+        static let pageTitle = Font.system(size: 22, weight: .semibold)
         static let heading = Font.headline
         static let body = Font.body
         static let label = Font.subheadline.weight(.medium)
@@ -231,6 +233,22 @@ extension View {
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(SophiieTheme.Palette.border, lineWidth: 1)
+            )
+    }
+
+    /// A text input: surface fill with a 3:1 control outline that thickens
+    /// to the brand colour while focused. Pair with `.textFieldStyle(.plain)`.
+    func sophiieField(isFocused: Bool) -> some View {
+        self
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(SophiieTheme.Palette.surface, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.control, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SophiieTheme.Radius.control, style: .continuous)
+                    .strokeBorder(
+                        isFocused ? SophiieTheme.Palette.brand : SophiieTheme.Palette.controlBorder,
+                        lineWidth: isFocused ? 2 : 1
+                    )
             )
     }
 
