@@ -14,24 +14,24 @@ struct BaseURLField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             HStack(spacing: 8) {
                 TextField(placeholder, text: $value)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(SophiieTheme.Typography.mono)
                     .autocorrectionDisabled(true)
                     .textContentType(.URL)
 
                 Button(isSaved ? "Saved" : "Save") {
                     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     UserDefaults.standard.set(trimmed, forKey: storageKey)
-                    withAnimation { isSaved = true }
+                    withSophiieAnimation { isSaved = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         isSaved = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
                 .controlSize(.small)
 
                 if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -40,7 +40,7 @@ struct BaseURLField: View {
                         UserDefaults.standard.removeObject(forKey: storageKey)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(SophiieTheme.Palette.danger)
                     }
                     .buttonStyle(.borderless)
                 }
@@ -66,23 +66,23 @@ struct ProviderTextField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             HStack(spacing: 8) {
                 TextField(placeholder, text: $value)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(SophiieTheme.Typography.mono)
                     .autocorrectionDisabled(true)
 
                 Button(isSaved ? "Saved" : "Save") {
                     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     UserDefaults.standard.set(trimmed, forKey: storageKey)
-                    withAnimation { isSaved = true }
+                    withSophiieAnimation { isSaved = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         isSaved = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
                 .controlSize(.small)
 
                 if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -91,7 +91,7 @@ struct ProviderTextField: View {
                         UserDefaults.standard.removeObject(forKey: storageKey)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(SophiieTheme.Palette.danger)
                     }
                     .buttonStyle(.borderless)
                 }

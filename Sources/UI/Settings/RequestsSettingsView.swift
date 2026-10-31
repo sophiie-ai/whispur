@@ -127,7 +127,7 @@ private struct RequestsHeaderRow: View {
             Spacer()
 
             Button("Clear Log", action: onClear)
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
                 .disabled(totalCount == 0)
         }
     }
@@ -190,7 +190,7 @@ private struct RequestsListPane: View {
                         ? "Make a provider-backed request and it will appear here with status, duration, and the provider response."
                         : "Adjust the filters to show matching requests.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(18)
@@ -215,7 +215,7 @@ private struct RequestsListPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
     }
 }
 
@@ -253,7 +253,7 @@ private struct RequestsInspectorPane: View {
 
                         Text("The inspector will show the sanitized request summary and the provider response preview.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                     }
                 }
             }
@@ -261,7 +261,7 @@ private struct RequestsInspectorPane: View {
             .padding(18)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
     }
 
     private func statusLabel(for entry: ProviderRequestLogEntry) -> String {

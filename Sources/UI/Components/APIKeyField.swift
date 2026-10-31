@@ -30,7 +30,7 @@ struct APIKeyField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             HStack(spacing: 8) {
                 Group {
@@ -41,7 +41,7 @@ struct APIKeyField: View {
                     }
                 }
                 .textFieldStyle(.roundedBorder)
-                .font(.system(.caption, design: .monospaced))
+                .font(SophiieTheme.Typography.mono)
                 .focused($isFocused)
 
                 Button {
@@ -56,14 +56,14 @@ struct APIKeyField: View {
                         keychain.set(key, value: trimmedValue)
                         hasStoredValue = true
                         value = Self.maskedValue
-                        withAnimation { isSaved = true }
+                        withSophiieAnimation { isSaved = true }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             isSaved = false
                         }
                     }
                 }
                 .disabled(!canSave)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
                 .controlSize(.small)
 
                 if hasStoredValue {
@@ -73,7 +73,7 @@ struct APIKeyField: View {
                         value = ""
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(SophiieTheme.Palette.danger)
                     }
                     .buttonStyle(.borderless)
                 }

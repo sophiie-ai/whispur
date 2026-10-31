@@ -50,9 +50,9 @@ private struct MenuBarStatusIcon: View {
                 MenuBarGlyphIcon(tint: .secondary)
                     .opacity(0.86)
             case .done:
-                MenuBarGlyphIcon(tint: .green)
+                MenuBarGlyphIcon(tint: SophiieTheme.Palette.success)
             case .error:
-                MenuBarGlyphIcon(tint: .orange)
+                MenuBarGlyphIcon(tint: SophiieTheme.Palette.warning)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .whispurOpenSettings)) { notification in
@@ -82,27 +82,32 @@ private struct MenuBarGlyphIcon: View {
 
 private struct PulsingMenuBarIcon: View {
     @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        MenuBarGlyphIcon(tint: .red)
+        MenuBarGlyphIcon(tint: SophiieTheme.Palette.danger)
             .scaleEffect(isAnimating ? 1.04 : 0.92)
             .opacity(isAnimating ? 1 : 0.72)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isAnimating)
+            .animation(
+                .timingCurve(0.2, 0, 0, 1, duration: 0.9).repeatForever(autoreverses: true),
+                value: isAnimating
+            )
             .onAppear {
-                isAnimating = true
+                isAnimating = !reduceMotion
             }
     }
 }
 
 private struct SpinningMenuBarIcon: View {
     @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        MenuBarGlyphIcon(tint: .blue)
+        MenuBarGlyphIcon(tint: SophiieTheme.Palette.interactive)
             .rotationEffect(.degrees(isAnimating ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isAnimating)
             .onAppear {
-                isAnimating = true
+                isAnimating = !reduceMotion
             }
     }
 }

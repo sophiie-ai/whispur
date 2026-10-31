@@ -56,7 +56,7 @@ struct GeneralSettingsView: View {
 
                 Text(appState.recordingSummary)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
         }
     }
@@ -79,13 +79,13 @@ struct GeneralSettingsView: View {
                             Button("Open Settings") {
                                 appState.openAccessibilitySettings()
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.sophiieSecondary)
                             .controlSize(.small)
                         } else {
                             Button("Grant Access") {
                                 appState.requestAccessibilityAccess()
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.sophiiePrimary)
                             .controlSize(.small)
                         }
                     }
@@ -102,13 +102,13 @@ struct GeneralSettingsView: View {
                             Button("Open Settings") {
                                 appState.openMicrophoneSettings()
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.sophiieSecondary)
                             .controlSize(.small)
                         } else {
                             Button("Allow") {
                                 appState.requestMicrophoneAccess()
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.sophiiePrimary)
                             .controlSize(.small)
                         }
                     }
@@ -152,20 +152,20 @@ struct GeneralSettingsView: View {
 
                         Text(systemAudioReductionLabel)
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                             .frame(minWidth: 80, alignment: .trailing)
                     }
                 }
 
-                Text("Reduces the Mac's output volume the moment recording starts and restores it when dictation ends. Background audio keeps playing — it just won't bleed into the mic. 100% silences output entirely; lower values just duck it.")
+                Text("Reduces the Mac's output volume the moment recording starts and restores it when dictation ends. Background audio keeps playing, it just won't bleed into the mic. 100% silences output entirely; lower values just duck it.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
 
                 Toggle("Deep context", isOn: $appState.deepContextEnabled)
 
                 Text("Deep context is reserved for future capture-aware cleanup. The setting stays here so the interaction model is already in place.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
         }
     }
@@ -185,10 +185,10 @@ struct GeneralSettingsView: View {
                 .pickerStyle(.segmented)
 
                 Text(appState.overlayStyle == .compact
-                    ? "A small pill at the bottom of the screen shows only a waveform while recording. No stop or cancel buttons — use your shortcut or Esc."
+                    ? "A small pill at the bottom of the screen shows only a waveform while recording. No stop or cancel buttons: use your shortcut or Esc."
                     : "The full overlay at the top of the screen shows status, waveform, and stop/cancel controls.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
         }
     }
@@ -202,14 +202,14 @@ struct GeneralSettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 DetailRow("Version") {
                     Text(AppVersion.description)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
 
                 if !appState.showSetupGuide {
                     Button("Show Setup Guide Again") {
                         appState.reopenSetupGuide()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.sophiieSecondary)
                 }
             }
         }
@@ -267,9 +267,9 @@ private struct AudioInputDevicePicker: View {
 
             if !appState.preferredAudioInputUID.isEmpty,
                !devices.contains(where: { $0.uid == appState.preferredAudioInputUID }) {
-                Text("Saved device is not connected — recording will use the system default.")
+                Text("Saved device is not connected, so recording will use the system default.")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
         }
         .onAppear { devices = AudioDevice.availableInputDevices() }

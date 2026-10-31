@@ -33,10 +33,12 @@ struct ShareRecapView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Share your recap")
-                        .font(.title3.weight(.semibold))
+                        .font(SophiieTheme.Typography.title)
+                        .tracking(SophiieTheme.Typography.titleTracking)
+                        .foregroundStyle(SophiieTheme.Palette.ink)
                     Text("A PNG you can drop into a tweet, LinkedIn post, or DM.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
                 Spacer()
                 Button {
@@ -44,14 +46,14 @@ struct ShareRecapView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
                 .buttonStyle(.plain)
             }
 
             RecapCard(snapshot: snapshot)
                 .frame(width: 360, height: 460)
-                .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 12)
+                .shadow(color: SophiieTheme.Shadow.tint.opacity(0.22), radius: 24, x: 0, y: 12)
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity)
 
@@ -64,7 +66,7 @@ struct ShareRecapView: View {
                     Label("Copy image", systemImage: "doc.on.doc")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
 
                 Button {
                     saveImage()
@@ -72,7 +74,7 @@ struct ShareRecapView: View {
                     Label("Save…", systemImage: "square.and.arrow.down")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
 
                 Button {
                     presentSharePicker()
@@ -80,11 +82,12 @@ struct ShareRecapView: View {
                     Label("Share…", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
             }
         }
         .padding(20)
         .frame(width: 440)
+        .tint(SophiieTheme.Palette.accent)
     }
 
     @ViewBuilder
@@ -95,11 +98,11 @@ struct ShareRecapView: View {
         case .copied:
             Label("Copied to clipboard.", systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(SophiieTheme.Palette.success)
         case .saved(let url):
             Label("Saved to \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(SophiieTheme.Palette.success)
         }
     }
 
@@ -182,6 +185,8 @@ struct RecapSnapshot {
 }
 
 private struct RecapCard: View {
+    private typealias OnDark = SophiieTheme.Palette.OnDark
+
     let snapshot: RecapSnapshot
 
     private var headline: String {
@@ -203,14 +208,14 @@ private struct RecapCard: View {
             let scale = proxy.size.width / 360
 
             ZStack(alignment: .topLeading) {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.08, green: 0.06, blue: 0.16),
-                        Color(red: 0.20, green: 0.10, blue: 0.32),
-                        Color(red: 0.36, green: 0.16, blue: 0.42)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                OnDark.background
+
+                // A single soft sky glow, like the site's hero, on solid midnight.
+                RadialGradient(
+                    colors: [SophiieTheme.Palette.sky.opacity(0.28), SophiieTheme.Palette.sky.opacity(0)],
+                    center: .topTrailing,
+                    startRadius: 0,
+                    endRadius: 320 * scale
                 )
 
                 VStack(alignment: .leading, spacing: 18 * scale) {
@@ -218,28 +223,31 @@ private struct RecapCard: View {
                         wordmark(scale: scale)
                         Spacer()
                         Text(headline.uppercased())
-                            .font(.system(size: 11 * scale, weight: .semibold, design: .rounded))
-                            .tracking(2 * scale)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .font(.system(size: 11 * scale, weight: .semibold))
+                            .tracking(SophiieTheme.Typography.eyebrowTracking * 2 * scale)
+                            .foregroundStyle(OnDark.inkSecondary)
                     }
 
                     Spacer(minLength: 4 * scale)
 
                     VStack(alignment: .leading, spacing: 6 * scale) {
                         Text(snapshot.words.formatted(.number))
-                            .font(.system(size: 96 * scale, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 96 * scale, weight: .semibold))
+                            .tracking(-3 * scale)
+                            .foregroundStyle(OnDark.ink)
                             .minimumScaleFactor(0.5)
                             .lineLimit(1)
 
                         Text("words dictated")
-                            .font(.system(size: 18 * scale, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.78))
+                            .font(.system(size: 18 * scale, weight: .medium))
+                            .foregroundStyle(OnDark.inkSecondary)
                     }
 
                     sparkline(scale: scale)
 
-                    Divider().background(Color.white.opacity(0.15))
+                    Rectangle()
+                        .fill(OnDark.hairline)
+                        .frame(height: 1)
 
                     HStack(spacing: 16 * scale) {
                         stat(value: "\(snapshot.streak)", caption: "day streak", emoji: snapshot.streak > 0 ? "🔥" : nil, scale: scale)
@@ -251,29 +259,30 @@ private struct RecapCard: View {
                     HStack {
                         Spacer()
                         Text("whispur.app")
-                            .font(.system(size: 14 * scale, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .font(.system(size: 14 * scale, weight: .semibold))
+                            .foregroundStyle(OnDark.accent)
                     }
                 }
                 .padding(28 * scale)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 28 * scale, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.overlay * scale, style: .continuous))
         }
     }
 
     private func wordmark(scale: CGFloat) -> some View {
         HStack(spacing: 8 * scale) {
-            RoundedRectangle(cornerRadius: 6 * scale)
-                .fill(.white.opacity(0.92))
+            RoundedRectangle(cornerRadius: SophiieTheme.Radius.small * scale, style: .continuous)
+                .fill(OnDark.ink)
                 .frame(width: 22 * scale, height: 22 * scale)
                 .overlay(
                     Image(systemName: "waveform")
                         .font(.system(size: 12 * scale, weight: .bold))
-                        .foregroundStyle(Color(red: 0.20, green: 0.10, blue: 0.32))
+                        .foregroundStyle(OnDark.background)
                 )
             Text("Whispur")
-                .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 18 * scale, weight: .semibold))
+                .tracking(-0.4 * scale)
+                .foregroundStyle(OnDark.ink)
         }
     }
 
@@ -284,12 +293,12 @@ private struct RecapCard: View {
             ForEach(snapshot.sparkline) { day in
                 let height = max(6 * scale, CGFloat(day.words) / CGFloat(maxValue) * 60 * scale)
                 VStack(spacing: 4 * scale) {
-                    RoundedRectangle(cornerRadius: 4 * scale)
-                        .fill(day.words > 0 ? Color.white.opacity(0.85) : Color.white.opacity(0.18))
+                    RoundedRectangle(cornerRadius: 4 * scale, style: .continuous)
+                        .fill(day.words > 0 ? OnDark.accent : OnDark.raised)
                         .frame(width: 22 * scale, height: height)
                     Text(day.label.prefix(1).uppercased())
-                        .font(.system(size: 10 * scale, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(.system(size: 10 * scale, weight: .medium))
+                        .foregroundStyle(OnDark.muted)
                 }
             }
         }
@@ -299,16 +308,17 @@ private struct RecapCard: View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             HStack(spacing: 6 * scale) {
                 Text(value)
-                    .font(.system(size: 28 * scale, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 28 * scale, weight: .semibold))
+                    .tracking(-0.8 * scale)
+                    .foregroundStyle(OnDark.ink)
                 if let emoji {
                     Text(emoji)
                         .font(.system(size: 22 * scale))
                 }
             }
             Text(caption)
-                .font(.system(size: 12 * scale, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.system(size: 12 * scale, weight: .medium))
+                .foregroundStyle(OnDark.inkSecondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }

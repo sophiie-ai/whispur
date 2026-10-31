@@ -18,13 +18,13 @@ struct ProviderRequestRow: View {
 
                 Text(entry.timestamp.formatted(date: .omitted, time: .shortened))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
                     .fixedSize()
             }
 
             Text("\(entry.httpMethod) \(entry.endpointURL)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
                 .lineLimit(2)
 
             Text(entry.errorMessage ?? responseSummary)
@@ -67,14 +67,14 @@ struct ProviderRequestDetailBlock: View {
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundStyle(tone == .critical ? Color.red : Color.secondary)
+                .foregroundStyle(tone == .critical ? SophiieTheme.Palette.danger : SophiieTheme.Palette.muted)
 
             Text(value)
-                .font(.system(.caption, design: .monospaced))
+                .font(SophiieTheme.Typography.mono)
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.small, style: .continuous))
         }
     }
 }

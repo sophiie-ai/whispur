@@ -11,43 +11,46 @@ struct AboutView: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .frame(width: 84, height: 84)
-                .shadow(color: .black.opacity(0.12), radius: 10, y: 6)
+                .shadow(color: SophiieTheme.Shadow.tint.opacity(0.14), radius: 10, y: 6)
 
             VStack(spacing: 6) {
                 Text("Whispur")
                     .font(.title2.weight(.semibold))
+                    .tracking(SophiieTheme.Typography.titleTracking)
+                    .foregroundStyle(SophiieTheme.Palette.ink)
 
                 Text("Menu-bar voice dictation for macOS")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
 
                 Text(versionLabel)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
 
             VStack(spacing: 10) {
                 Text("Whispur captures speech, transcribes it, optionally cleans it up, and pastes the result back into your current app.")
                     .font(.callout)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
 
                 Link(destination: repositoryURL) {
                     Label("GitHub Repository", systemImage: "link")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
             }
 
             Divider()
 
             Text(copyrightLabel)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
         .frame(width: 360)
+        .tint(SophiieTheme.Palette.accent)
     }
 
     private var versionLabel: String {

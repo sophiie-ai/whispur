@@ -11,17 +11,21 @@ struct SettingsView: View {
             Divider()
             content
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(SophiieTheme.Palette.surfaceWarm)
+        .foregroundStyle(SophiieTheme.Palette.ink)
+        .tint(SophiieTheme.Palette.accent)
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Whispur")
-                    .font(.title3.weight(.semibold))
+                    .font(SophiieTheme.Typography.title)
+                    .tracking(SophiieTheme.Typography.titleTracking)
+                    .foregroundStyle(SophiieTheme.Palette.ink)
                 Text(selectedTab.subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
             .padding(.horizontal, 18)
             .padding(.top, 18)
@@ -34,11 +38,14 @@ struct SettingsView: View {
                         HStack(spacing: 10) {
                             Image(systemName: tab.icon)
                                 .frame(width: 16)
+                                .foregroundStyle(selectedTab == tab ? SophiieTheme.Palette.ink : SophiieTheme.Palette.muted)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(tab.rawValue)
+                                    .fontWeight(selectedTab == tab ? .semibold : .regular)
+                                    .foregroundStyle(SophiieTheme.Palette.ink)
                                 Text(tab.subtitle)
                                     .font(.caption2)
-                                    .foregroundStyle(selectedTab == tab ? Color.primary.opacity(0.72) : Color.secondary)
+                                    .foregroundStyle(selectedTab == tab ? SophiieTheme.Palette.inkSecondary : SophiieTheme.Palette.muted)
                             }
                             Spacer()
                         }
@@ -46,10 +53,11 @@ struct SettingsView: View {
                         .padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(selectedTab == tab ? Color.orange.opacity(0.15) : Color.clear)
+                            RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
+                                .fill(selectedTab == tab ? SophiieTheme.Palette.surfaceSelected : Color.clear)
                         )
-                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
+                        .sophiieAnimation(value: selectedTab)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(tab.rawValue)
@@ -69,12 +77,12 @@ struct SettingsView: View {
 
                 Text(appState.shortcutSummary)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
             .padding(18)
         }
         .frame(width: 240)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
+        .background(SophiieTheme.Palette.surfaceStage)
     }
 
     @ViewBuilder

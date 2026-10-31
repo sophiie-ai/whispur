@@ -18,10 +18,14 @@ enum OverlayStyle: String, CaseIterable, Identifiable {
 }
 
 struct RecordingOverlay: View {
+    private typealias OnDark = SophiieTheme.Palette.OnDark
+
     @ObservedObject var pipeline: DictationPipeline
     var style: OverlayStyle = .standard
     let onStop: () -> Void
     let onCancel: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch style {
@@ -43,7 +47,7 @@ struct RecordingOverlay: View {
                     statusRow(
                         title: "Microphone Access",
                         detail: pipeline.statusDetail,
-                        leading: AnyView(ActivityDotsView(color: .orange))
+                        leading: AnyView(ActivityDotsView(color: OnDark.warning))
                     )
                 }
             case .starting:
@@ -51,7 +55,7 @@ struct RecordingOverlay: View {
                     statusRow(
                         title: "Preparing",
                         detail: pipeline.statusDetail,
-                        leading: AnyView(ActivityDotsView(color: .white))
+                        leading: AnyView(ActivityDotsView(color: OnDark.ink))
                     )
                 }
             case .recording:
@@ -64,18 +68,10 @@ struct RecordingOverlay: View {
                         statusRow(
                             title: pipeline.statusTitle,
                             detail: pipeline.statusDetail,
-                            leading: AnyView(ActivityDotsView(color: .blue))
+                            leading: AnyView(ActivityDotsView(color: OnDark.accent))
                         )
 
-                        Button(action: onCancel) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 22, height: 22)
-                                .background(Circle().fill(Color.white.opacity(0.18)))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Cancel (esc)")
+                        cancelButton
                     }
                 }
             case .done(let text):
@@ -85,7 +81,7 @@ struct RecordingOverlay: View {
                         detail: text,
                         leading: AnyView(
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(OnDark.success)
                                 .font(.title3)
                         )
                     )
@@ -97,7 +93,7 @@ struct RecordingOverlay: View {
                         detail: message,
                         leading: AnyView(
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(OnDark.warning)
                                 .font(.title3)
                         )
                     )
@@ -110,16 +106,18 @@ struct RecordingOverlay: View {
     private var recordingRow: some View {
         let silence = pipeline.isHearingSilence
         let isHold = pipeline.activeTriggerMode == .hold
+        let indicator = silence ? OnDark.warning : OnDark.accent
+        let isSpeaking = pipeline.audioLevel > 0.04
         return HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill((silence ? Color.orange : Color.red).opacity(0.22))
+                    .fill(indicator.opacity(0.22))
                     .frame(width: 24, height: 24)
-                    .scaleEffect(pipeline.audioLevel > 0.04 ? 1.16 : 0.94)
-                    .animation(.easeInOut(duration: 0.14), value: pipeline.audioLevel)
+                    .scaleEffect(reduceMotion ? 1 : (isSpeaking ? 1.16 : 0.94))
+                    .sophiieAnimation(0.14, value: isSpeaking)
 
                 Circle()
-                    .fill(silence ? Color.orange : Color.red)
+                    .fill(indicator)
                     .frame(width: 9, height: 9)
             }
 
@@ -127,43 +125,41 @@ struct RecordingOverlay: View {
                 ? "No audio"
                 : (isHold ? "Listening" : "Recording"))
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(OnDark.ink)
                 .fixedSize(horizontal: true, vertical: false)
 
             Spacer(minLength: 6)
 
-            CompactWaveformView(samples: pipeline.audioSamples)
-                .opacity(silence ? 0.35 : 1)
-                .animation(.easeInOut(duration: 0.2), value: silence)
+            CompactWaveformView(samples: pipeline.audioSamples, silence: silence)
+                .opacity(silence ? 0.45 : 1)
+                .sophiieAnimation(value: silence)
 
-            Button(action: onCancel) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(Color.white.opacity(0.18)))
-            }
-            .buttonStyle(.plain)
-            .help("Cancel (esc)")
+            cancelButton
 
             if !isHold {
                 Button(action: onStop) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 9, weight: .bold))
-                        Text("Stop")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.red.opacity(0.92)))
+                    Label("Stop", systemImage: "stop.fill")
+                        .labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(.plain)
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .buttonStyle(.sophiiePrimaryOnDark)
+                .controlSize(.small)
+                .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: pipeline.activeTriggerMode)
+        .sophiieAnimation(value: pipeline.activeTriggerMode)
+    }
+
+    private var cancelButton: some View {
+        Button(action: onCancel) {
+            Image(systemName: "xmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(OnDark.ink)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(OnDark.raised))
+        }
+        .buttonStyle(.plain)
+        .help("Cancel (esc)")
+        .accessibilityLabel("Cancel")
     }
 
     private func statusRow(title: String, detail: String?, leading: AnyView) -> some View {
@@ -174,12 +170,12 @@ struct RecordingOverlay: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnDark.ink)
 
                 if let detail, !detail.isEmpty {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.72))
+                        .foregroundStyle(OnDark.inkSecondary)
                         .lineLimit(2)
                 }
             }
@@ -193,34 +189,39 @@ struct RecordingOverlay: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
-                LinearGradient(
-                    colors: [Color.black.opacity(0.94), Color.black.opacity(0.84)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                OnDark.background.opacity(0.97),
+                in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.overlay, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SophiieTheme.Radius.overlay, style: .continuous)
+                    .strokeBorder(OnDark.hairline, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
-            .transition(.move(edge: .top).combined(with: .opacity))
-            .animation(.spring(response: 0.26, dampingFraction: 0.85), value: pipeline.phase)
+            .shadow(color: SophiieTheme.Shadow.tint.opacity(0.28), radius: 18, y: 10)
+            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            .sophiieAnimation(SophiieTheme.Motion.medium, value: pipeline.phase)
     }
 }
 
 private struct CompactWaveformView: View {
     let samples: [Float]
+    var silence: Bool = false
 
-    // One gradient shading reused across all capsules — the prior ForEach
-    // built a new LinearGradient per bar per frame (~1.3k gradients/sec
-    // during recording). Canvas draws ~30× faster and keeps CPU cool.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // One shading reused across all capsules: the prior ForEach built a new
+    // LinearGradient per bar per frame (~1.3k gradients/sec during
+    // recording). Canvas draws ~30x faster and keeps CPU cool.
+    // Sky at the edges fading to white at the centre line.
     private static let fillShading = GraphicsContext.Shading.linearGradient(
-        Gradient(colors: [.white.opacity(0.92), .orange.opacity(0.85)]),
+        Gradient(colors: [
+            SophiieTheme.Palette.sky,
+            .white.opacity(0.95),
+            SophiieTheme.Palette.sky
+        ]),
         startPoint: CGPoint(x: 0, y: 0),
         endPoint: CGPoint(x: 0, y: 26)
     )
+    private static let silenceShading = GraphicsContext.Shading.color(SophiieTheme.Palette.OnDark.warning)
 
     var body: some View {
         Canvas(rendersAsynchronously: false) { context, size in
@@ -240,39 +241,45 @@ private struct CompactWaveformView: View {
                     height: h
                 )
                 let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: Self.fillShading)
+                context.fill(path, with: silence ? Self.silenceShading : Self.fillShading)
                 x += barWidth + spacing
             }
         }
         .frame(width: CGFloat(samples.count) * 4 - 2, height: 26)
-        .animation(.easeOut(duration: 0.08), value: samples)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: samples)
     }
 }
 
 private struct CompactRecordingOverlay: View {
+    private typealias OnDark = SophiieTheme.Palette.OnDark
+
     @ObservedObject var pipeline: DictationPipeline
     @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         content
             .frame(width: 76, height: 26)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(Color.black.opacity(0.88))
+                    .fill(OnDark.background.opacity(0.95))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(OnDark.hairline, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.32), radius: 10, y: 4)
+            .shadow(color: SophiieTheme.Shadow.tint.opacity(0.32), radius: 10, y: 4)
             .opacity(pulse ? 0.75 : 1.0)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-            .onAppear { pulse = isProcessing }
+            .animation(
+                reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.9).repeatForever(autoreverses: true),
+                value: pulse
+            )
+            .onAppear { pulse = isProcessing && !reduceMotion }
             .onChange(of: isProcessing) { _, newValue in
-                pulse = newValue
+                pulse = newValue && !reduceMotion
             }
             .transition(.opacity)
-            .animation(.easeInOut(duration: 0.18), value: pipeline.phase)
+            .sophiieAnimation(value: pipeline.phase)
     }
 
     @ViewBuilder
@@ -283,12 +290,12 @@ private struct CompactRecordingOverlay: View {
                 .frame(width: 56, height: 16)
         case .requestingMicrophonePermission, .starting,
                 .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
-            CompactDotsView(color: pipeline.phase == .requestingMicrophonePermission ? .orange : .white)
+            CompactDotsView(color: pipeline.phase == .requestingMicrophonePermission ? OnDark.warning : OnDark.accent)
                 .frame(maxWidth: .infinity)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(OnDark.warning)
                 .frame(maxWidth: .infinity)
         case .idle, .done:
             EmptyView()
@@ -310,6 +317,8 @@ private struct MiniWaveformView: View {
     let samples: [Float]
     let silence: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Canvas(rendersAsynchronously: false) { context, size in
             guard !samples.isEmpty else { return }
@@ -323,8 +332,8 @@ private struct MiniWaveformView: View {
             let spacing: CGFloat = 2
             let totalWidth = CGFloat(count) * barWidth + CGFloat(max(count - 1, 0)) * spacing
             var x = max(0, (size.width - totalWidth) / 2)
-            let baseColor: Color = silence ? .orange : .white
-            let shading = GraphicsContext.Shading.color(baseColor.opacity(silence ? 0.55 : 0.92))
+            let baseColor: Color = silence ? SophiieTheme.Palette.OnDark.warning : SophiieTheme.Palette.OnDark.accent
+            let shading = GraphicsContext.Shading.color(baseColor.opacity(silence ? 0.6 : 1))
             for sample in tail {
                 let normalized = max(0.08, CGFloat(sample))
                 let h = 2 + normalized * (size.height - 2)
@@ -339,7 +348,7 @@ private struct MiniWaveformView: View {
                 x += barWidth + spacing
             }
         }
-        .animation(.easeOut(duration: 0.08), value: samples)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: samples)
     }
 }
 
