@@ -18,7 +18,7 @@ struct ProvidersSettingsView: View {
     private var languagesCard: some View {
         PreferenceCard(
             "Preferred Language",
-            detail: "Pick the language you speak. Whispur sends this as a hint to the selected STT provider. Auto-detect asks the provider to identify the language itself — best when you switch between languages.",
+            detail: "Pick the language you speak. Whispur sends this as a hint to the selected STT provider. Auto-detect asks the provider to identify the language itself, which works best when you switch between languages.",
             icon: "character.bubble"
         ) {
             STTLanguagePicker(appState: appState)
@@ -173,7 +173,7 @@ private struct STTLanguagePicker: View {
         case (.deepgram, .auto):
             return "Deepgram will use nova-3's multilingual mode (English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch)."
         case (.apple, .auto):
-            return "Apple has no auto mode — Whispur falls back to your system language."
+            return "Apple has no auto mode, so Whispur falls back to your system language."
         case (.openai, .auto), (.groqWhisper, .auto), (.elevenlabs, .auto):
             return "The provider will detect the language on each recording."
         default:

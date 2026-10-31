@@ -157,7 +157,7 @@ struct GeneralSettingsView: View {
                     }
                 }
 
-                Text("Reduces the Mac's output volume the moment recording starts and restores it when dictation ends. Background audio keeps playing — it just won't bleed into the mic. 100% silences output entirely; lower values just duck it.")
+                Text("Reduces the Mac's output volume the moment recording starts and restores it when dictation ends. Background audio keeps playing, it just won't bleed into the mic. 100% silences output entirely; lower values just duck it.")
                     .font(.caption)
                     .foregroundStyle(SophiieTheme.Palette.muted)
 
@@ -185,7 +185,7 @@ struct GeneralSettingsView: View {
                 .pickerStyle(.segmented)
 
                 Text(appState.overlayStyle == .compact
-                    ? "A small pill at the bottom of the screen shows only a waveform while recording. No stop or cancel buttons — use your shortcut or Esc."
+                    ? "A small pill at the bottom of the screen shows only a waveform while recording. No stop or cancel buttons: use your shortcut or Esc."
                     : "The full overlay at the top of the screen shows status, waveform, and stop/cancel controls.")
                     .font(.caption)
                     .foregroundStyle(SophiieTheme.Palette.muted)
@@ -267,7 +267,7 @@ private struct AudioInputDevicePicker: View {
 
             if !appState.preferredAudioInputUID.isEmpty,
                !devices.contains(where: { $0.uid == appState.preferredAudioInputUID }) {
-                Text("Saved device is not connected — recording will use the system default.")
+                Text("Saved device is not connected, so recording will use the system default.")
                     .font(.caption2)
                     .foregroundStyle(SophiieTheme.Palette.muted)
             }
