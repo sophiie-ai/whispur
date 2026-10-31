@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/sophiie-ai/whispur/compare/v0.20.0...v0.20.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **input:** make Command + Fn the default hands-free shortcut again ([#61](https://github.com/sophiie-ai/whispur/issues/61)) ([fe9fa18](https://github.com/sophiie-ai/whispur/commit/fe9fa1883f0cb3b4bc50eebdd8932607f1f9bd18))
+
 ## [0.20.0](https://github.com/sophiie-ai/whispur/compare/v0.19.0...v0.20.0) (2026-10-31)
 
 
