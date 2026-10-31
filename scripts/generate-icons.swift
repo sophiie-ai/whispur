@@ -1,6 +1,25 @@
 #!/usr/bin/swift
 
+// Generates every raster of the Whispur app icon and menu bar glyph.
+//
+// The source of truth is the "speak to cursor" master SVG embedded below
+// (APP_ICON_MASTER_SVG). The draw functions are a hand port of that SVG to
+// Core Graphics, in the SVG's own 1024 coordinate space, so no SVG renderer
+// or Node tooling is needed. If you change the art, change the SVG and the
+// matching draw code together.
+//
+// Usage (from the repo root):  swift scripts/generate-icons.swift
+//
+// Writes:
+//   Resources/Assets.xcassets/AppIcon.appiconset/*.png  (every size in Contents.json)
+//   Resources/Assets.xcassets/AppIcon.appiconset/app-icon-master.svg
+//   Resources/Assets.xcassets/MenuBarGlyph.imageset/menu-bar-glyph{,@2x}.png  (black template)
+//   Resources/VolumeIcon.icns  (DMG volume icon, via iconutil)
+//   public/icon.png, public/icon-512.png, public/apple-touch-icon.png, public/favicon.png
+//   public/favicon.svg  (the master, cropped to the tile)
+
 import AppKit
+import CoreGraphics
 import Foundation
 
 struct IconFile {
@@ -14,6 +33,7 @@ let assetCatalogURL = rootURL.appendingPathComponent("Resources/Assets.xcassets"
 let appIconSetURL = assetCatalogURL.appendingPathComponent("AppIcon.appiconset", isDirectory: true)
 let menuBarSetURL = assetCatalogURL.appendingPathComponent("MenuBarGlyph.imageset", isDirectory: true)
 let volumeIconURL = rootURL.appendingPathComponent("Resources/VolumeIcon.icns")
+let publicURL = rootURL.appendingPathComponent("public", isDirectory: true)
 
 let appIconFiles = [
     IconFile(filename: "icon_16x16.png", pixelSize: 16),
@@ -28,10 +48,172 @@ let appIconFiles = [
     IconFile(filename: "icon_512x512@2x.png", pixelSize: 1024)
 ]
 
+// The SwiftUI menu bar item shows the glyph in a 16pt frame.
 let menuBarFiles = [
     IconFile(filename: "menu-bar-glyph.png", pixelSize: 16),
     IconFile(filename: "menu-bar-glyph@2x.png", pixelSize: 32)
 ]
+
+// Site copies of the app icon: public file name -> app icon set file it mirrors.
+let siteIconCopies = [
+    ("icon.png", "icon_256x256.png"),
+    ("icon-512.png", "icon_512x512.png"),
+    ("apple-touch-icon.png", "icon_128x128@2x.png"),
+    ("favicon.png", "icon_32x32@2x.png")
+]
+
+// MARK: - Tokens (Sophiie palette, see Sources/UI/Theme/SophiieTheme.swift)
+
+let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
+
+func hex(_ value: UInt32, _ alpha: CGFloat = 1) -> CGColor {
+    CGColor(
+        colorSpace: srgb,
+        components: [
+            CGFloat((value >> 16) & 0xff) / 255,
+            CGFloat((value >> 8) & 0xff) / 255,
+            CGFloat(value & 0xff) / 255,
+            alpha
+        ]
+    )!
+}
+
+let midnight: UInt32 = 0x140934 // Palette.midnight, the tile
+let navy: UInt32 = 0x151587     // Palette.navy, the radial glow
+let sky: UInt32 = 0x69C7FB      // Palette.sky, the voice bars
+let white: UInt32 = 0xFFFFFF    // caret, rim and sheen
+
+// MARK: - Master SVG (keep in sync with the draw code below)
+
+let appIconMasterSVG = """
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <linearGradient id="sheen" x1="512" y1="100" x2="512" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="body"><path d="M628.00 100.00 c103.61 0 155.41 0 194.99 20.16 a185 185 0 0 1 80.85 80.85 c20.16 39.57 20.16 91.38 20.16 194.99 L924.00 628.00 c0 103.61 0 155.41 -20.16 194.99 a185 185 0 0 1 -80.85 80.85 c-39.57 20.16 -91.38 20.16 -194.99 20.16 L396.00 924.00 c-103.61 0 -155.41 0 -194.99 -20.16 a185 185 0 0 1 -80.85 -80.85 c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99 L100.00 396.00 c0 -103.61 0 -155.41 20.16 -194.99 a185 185 0 0 1 80.85 -80.85 c39.57 -20.16 91.38 -20.16 194.99 -20.16 Z"/></clipPath>
+    <radialGradient id="glowC" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 900) scale(560 380)">
+      <stop stop-color="#151587" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#151587" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="caretGlowC" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="22" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M628.00 100.00 c103.61 0 155.41 0 194.99 20.16 a185 185 0 0 1 80.85 80.85 c20.16 39.57 20.16 91.38 20.16 194.99 L924.00 628.00 c0 103.61 0 155.41 -20.16 194.99 a185 185 0 0 1 -80.85 80.85 c-39.57 20.16 -91.38 20.16 -194.99 20.16 L396.00 924.00 c-103.61 0 -155.41 0 -194.99 -20.16 a185 185 0 0 1 -80.85 -80.85 c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99 L100.00 396.00 c0 -103.61 0 -155.41 20.16 -194.99 a185 185 0 0 1 80.85 -80.85 c39.57 -20.16 91.38 -20.16 194.99 -20.16 Z" fill="#000" fill-opacity="0.001"/>
+    <g clip-path="url(#body)">
+      <path d="M628.00 100.00 c103.61 0 155.41 0 194.99 20.16 a185 185 0 0 1 80.85 80.85 c20.16 39.57 20.16 91.38 20.16 194.99 L924.00 628.00 c0 103.61 0 155.41 -20.16 194.99 a185 185 0 0 1 -80.85 80.85 c-39.57 20.16 -91.38 20.16 -194.99 20.16 L396.00 924.00 c-103.61 0 -155.41 0 -194.99 -20.16 a185 185 0 0 1 -80.85 -80.85 c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99 L100.00 396.00 c0 -103.61 0 -155.41 20.16 -194.99 a185 185 0 0 1 80.85 -80.85 c39.57 -20.16 91.38 -20.16 194.99 -20.16 Z" fill="#140934"/>
+      <path d="M628.00 100.00 c103.61 0 155.41 0 194.99 20.16 a185 185 0 0 1 80.85 80.85 c20.16 39.57 20.16 91.38 20.16 194.99 L924.00 628.00 c0 103.61 0 155.41 -20.16 194.99 a185 185 0 0 1 -80.85 80.85 c-39.57 20.16 -91.38 20.16 -194.99 20.16 L396.00 924.00 c-103.61 0 -155.41 0 -194.99 -20.16 a185 185 0 0 1 -80.85 -80.85 c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99 L100.00 396.00 c0 -103.61 0 -155.41 20.16 -194.99 a185 185 0 0 1 80.85 -80.85 c39.57 -20.16 91.38 -20.16 194.99 -20.16 Z" fill="url(#glowC)"/>
+      <path d="M628.00 100.00 c103.61 0 155.41 0 194.99 20.16 a185 185 0 0 1 80.85 80.85 c20.16 39.57 20.16 91.38 20.16 194.99 L924.00 628.00 c0 103.61 0 155.41 -20.16 194.99 a185 185 0 0 1 -80.85 80.85 c-39.57 20.16 -91.38 20.16 -194.99 20.16 L396.00 924.00 c-103.61 0 -155.41 0 -194.99 -20.16 a185 185 0 0 1 -80.85 -80.85 c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99 L100.00 396.00 c0 -103.61 0 -155.41 20.16 -194.99 a185 185 0 0 1 80.85 -80.85 c39.57 -20.16 91.38 -20.16 194.99 -20.16 Z" fill="url(#sheen)"/>
+    </g>
+  </g>
+  <path d="M629.80 103.00 c101.93 0 152.89 0 191.83 19.84 a182 182 0 0 1 79.54 79.54 c19.84 38.93 19.84 89.90 19.84 191.83 L921.00 629.80 c0 101.93 0 152.89 -19.84 191.83 a182 182 0 0 1 -79.54 79.54 c-38.93 19.84 -89.90 19.84 -191.83 19.84 L394.20 921.00 c-101.93 0 -152.89 0 -191.83 -19.84 a182 182 0 0 1 -79.54 -79.54 c-19.84 -38.93 -19.84 -89.90 -19.84 -191.83 L103.00 394.20 c0 -101.93 0 -152.89 19.84 -191.83 a182 182 0 0 1 79.54 -79.54 c38.93 -19.84 89.90 -19.84 191.83 -19.84 Z" stroke="#ffffff" stroke-opacity="0.12" stroke-width="6"/>
+  <g>
+    <rect x="226.0" y="424.0" width="76" height="176" rx="38.0" fill="#69c7fb" fill-opacity="1"/>
+    <rect x="354.0" y="332.0" width="76" height="360" rx="38.0" fill="#69c7fb" fill-opacity="1"/>
+    <rect x="482.0" y="388.0" width="76" height="248" rx="38.0" fill="#69c7fb" fill-opacity="1"/>
+  </g>
+  <g filter="url(#caretGlowC)">
+    <rect x="655.0" y="262.0" width="70" height="500" rx="35.0" fill="#ffffff" fill-opacity="1"/><rect x="592.0" y="262.0" width="196" height="64" rx="32.0" fill="#ffffff" fill-opacity="1"/><rect x="592.0" y="698.0" width="196" height="64" rx="32.0" fill="#ffffff" fill-opacity="1"/>
+  </g>
+</svg>
+""" + "\n"
+
+// MARK: - Geometry
+
+/// The rounded-square tile from the master SVG. Each corner is a cubic lead-in,
+/// a circular arc of radius 185 * k and a cubic lead-out, spanning 296 * k
+/// along each edge. The body uses k = 1; the inset rim uses k = 182 / 185.
+func squirclePath(minX: CGFloat, minY: CGFloat, maxX: CGFloat, maxY: CGFloat, k: CGFloat) -> CGPath {
+    let path = CGMutablePath()
+    // Corners in SVG order (y down, clockwise on screen): corner point, incoming edge direction, outgoing edge direction.
+    let corners: [(CGPoint, CGVector, CGVector)] = [
+        (CGPoint(x: maxX, y: minY), CGVector(dx: 1, dy: 0), CGVector(dx: 0, dy: 1)),
+        (CGPoint(x: maxX, y: maxY), CGVector(dx: 0, dy: 1), CGVector(dx: -1, dy: 0)),
+        (CGPoint(x: minX, y: maxY), CGVector(dx: -1, dy: 0), CGVector(dx: 0, dy: -1)),
+        (CGPoint(x: minX, y: minY), CGVector(dx: 0, dy: -1), CGVector(dx: 1, dy: 0))
+    ]
+    func at(_ origin: CGPoint, _ a: CGVector, _ alongA: CGFloat, _ b: CGVector, _ alongB: CGFloat) -> CGPoint {
+        CGPoint(
+            x: origin.x + (a.dx * alongA + b.dx * alongB) * k,
+            y: origin.y + (a.dy * alongA + b.dy * alongB) * k
+        )
+    }
+    for (index, (corner, a, b)) in corners.enumerated() {
+        let start = at(corner, a, -296, b, 0)
+        if index == 0 {
+            path.move(to: start)
+        } else {
+            path.addLine(to: start)
+        }
+        let arcStart = at(corner, a, -296 + 194.99, b, 20.16)
+        path.addCurve(
+            to: arcStart,
+            control1: at(corner, a, -296 + 103.61, b, 0),
+            control2: at(corner, a, -296 + 155.41, b, 0)
+        )
+        let center = at(corner, a, -185, b, 185)
+        let arcEnd = at(corner, a, -20.16, b, 296 - 194.99)
+        path.addArc(
+            center: center,
+            radius: 185 * k,
+            startAngle: atan2(arcStart.y - center.y, arcStart.x - center.x),
+            endAngle: atan2(arcEnd.y - center.y, arcEnd.x - center.x),
+            clockwise: false
+        )
+        path.addCurve(
+            to: at(corner, a, 0, b, 296),
+            control1: at(corner, a, -20.16 + 20.16, b, 296 - 194.99 + 39.57),
+            control2: at(corner, a, -20.16 + 20.16, b, 296 - 194.99 + 91.38)
+        )
+    }
+    path.closeSubpath()
+    return path
+}
+
+func roundedRect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat, _ radius: CGFloat) -> CGPath {
+    CGPath(
+        roundedRect: CGRect(x: x, y: y, width: width, height: height),
+        cornerWidth: radius,
+        cornerHeight: radius,
+        transform: nil
+    )
+}
+
+let tileBody = squirclePath(minX: 100, minY: 100, maxX: 924, maxY: 924, k: 1)
+let tileRim = squirclePath(minX: 103, minY: 103, maxX: 921, maxY: 921, k: 182.0 / 185.0)
+
+/// The voice bars leading into the caret.
+let voiceBars = [
+    roundedRect(226, 424, 76, 176, 38),
+    roundedRect(354, 332, 76, 360, 38),
+    roundedRect(482, 388, 76, 248, 38)
+]
+
+/// The I-beam caret: stem plus top and bottom serifs.
+let caretParts = [
+    roundedRect(655, 262, 70, 500, 35),
+    roundedRect(592, 262, 196, 64, 32),
+    roundedRect(592, 698, 196, 64, 32)
+]
+
+/// The 18 x 18 menu bar glyph: three bars and a caret, same composition.
+let glyphParts = [
+    roundedRect(1.1, 6.5, 2, 5.0, 1.0),
+    roundedRect(4.4, 4.0, 2, 10.0, 1.0),
+    roundedRect(7.7, 5.5, 2, 7.0, 1.0),
+    roundedRect(12.6, 1.5, 2, 15, 1.0),
+    roundedRect(10.6, 1.5, 6, 1.9, 0.95),
+    roundedRect(10.6, 14.6, 6, 1.9, 0.95)
+]
+
+// MARK: - Rendering
 
 func ensureDirectory(_ url: URL) throws {
     try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
@@ -43,242 +225,134 @@ func removeIfExists(_ url: URL) throws {
     }
 }
 
-func point(_ x: CGFloat, _ y: CGFloat, in size: CGFloat) -> CGPoint {
-    CGPoint(x: x * size, y: y * size)
-}
-
-func makeMainWavePath(size: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
-    path.move(to: point(0.225, 0.338, in: size))
-    path.curve(
-        to: point(0.445, 0.708, in: size),
-        controlPoint1: point(0.252, 0.605, in: size),
-        controlPoint2: point(0.335, 0.815, in: size)
-    )
-    path.curve(
-        to: point(0.582, 0.455, in: size),
-        controlPoint1: point(0.496, 0.645, in: size),
-        controlPoint2: point(0.534, 0.446, in: size)
-    )
-    path.curve(
-        to: point(0.788, 0.598, in: size),
-        controlPoint1: point(0.636, 0.486, in: size),
-        controlPoint2: point(0.716, 0.738, in: size)
-    )
-    path.lineCapStyle = .round
-    path.lineJoinStyle = .round
-    return path
-}
-
-func makeWhisperArcPath(size: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
-    path.move(to: point(0.27, 0.593, in: size))
-    path.curve(
-        to: point(0.588, 0.69, in: size),
-        controlPoint1: point(0.33, 0.785, in: size),
-        controlPoint2: point(0.48, 0.826, in: size)
-    )
-    path.lineCapStyle = .round
-    path.lineJoinStyle = .round
-    return path
-}
-
-func drawRoundedRect(in rect: CGRect, radius: CGFloat) -> NSBezierPath {
-    NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-}
-
-func applyShadow(color: NSColor, blur: CGFloat, x: CGFloat = 0, y: CGFloat = 0) {
-    let shadow = NSShadow()
-    shadow.shadowColor = color
-    shadow.shadowBlurRadius = blur
-    shadow.shadowOffset = NSSize(width: x, height: y)
-    shadow.set()
-}
-
-func clearShadow() {
-    NSShadow().set()
-}
-
-func makeBitmap(size: Int, draw: (CGFloat) -> Void) throws -> NSBitmapImageRep {
-    guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: size,
-        pixelsHigh: size,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
+/// Renders into a transparent sRGB bitmap whose user space matches an SVG
+/// viewBox of `viewBox` x `viewBox` (origin top left, y down).
+func render(pixels: Int, viewBox: CGFloat, draw: (CGContext, CGFloat) -> Void) throws -> CGImage {
+    guard let ctx = CGContext(
+        data: nil,
+        width: pixels,
+        height: pixels,
+        bitsPerComponent: 8,
         bytesPerRow: 0,
-        bitsPerPixel: 0
+        space: srgb,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ) else {
-        throw NSError(domain: "ai.sophiie.whispur", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create bitmap for \(size)x\(size) icon"])
+        throw NSError(domain: "ai.sophiie.whispur", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create a \(pixels)x\(pixels) bitmap"])
     }
+    ctx.setAllowsAntialiasing(true)
+    ctx.setShouldAntialias(true)
+    ctx.interpolationQuality = .high
+    ctx.clear(CGRect(x: 0, y: 0, width: pixels, height: pixels))
 
-    rep.size = NSSize(width: size, height: size)
+    let scale = CGFloat(pixels) / viewBox
+    ctx.translateBy(x: 0, y: CGFloat(pixels))
+    ctx.scaleBy(x: scale, y: -scale)
+    draw(ctx, scale)
 
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    draw(CGFloat(size))
-    NSGraphicsContext.restoreGraphicsState()
-
-    return rep
+    guard let image = ctx.makeImage() else {
+        throw NSError(domain: "ai.sophiie.whispur", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to finish a \(pixels)x\(pixels) bitmap"])
+    }
+    return image
 }
 
-func writePNG(rep: NSBitmapImageRep, to url: URL) throws {
+func writePNG(_ image: CGImage, to url: URL) throws {
+    let rep = NSBitmapImageRep(cgImage: image)
     guard let png = rep.representation(using: .png, properties: [:]) else {
         throw NSError(domain: "ai.sophiie.whispur", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode PNG for \(url.lastPathComponent)"])
     }
     try png.write(to: url)
 }
 
-func drawAppIcon(size dimension: CGFloat) {
-    let ctx = NSGraphicsContext.current!.cgContext
-    ctx.setAllowsAntialiasing(true)
-    ctx.interpolationQuality = .high
-    ctx.clear(CGRect(origin: .zero, size: NSSize(width: dimension, height: dimension)))
+/// Core Graphics shadows take a blur in device pixels, unaffected by the CTM;
+/// a blur of 2 * sigma matches an SVG Gaussian of stdDeviation sigma.
+func gaussianBlur(stdDeviation: CGFloat, scale: CGFloat) -> CGFloat {
+    2 * stdDeviation * scale
+}
 
-    let cardRect = CGRect(x: dimension * 0.085, y: dimension * 0.085, width: dimension * 0.83, height: dimension * 0.83)
-    let cardRadius = dimension * 0.215
-    let cardPath = drawRoundedRect(in: cardRect, radius: cardRadius)
-
+/// Ports the master SVG element by element. `scale` is device pixels per SVG unit.
+func drawAppIcon(_ ctx: CGContext, scale: CGFloat) {
+    // Tile group with its drop shadow (feDropShadow dy 12, stdDeviation 14, black 0.28).
     ctx.saveGState()
-    applyShadow(color: NSColor(calibratedWhite: 0.0, alpha: 0.26), blur: dimension * 0.08, y: -dimension * 0.018)
-    NSColor.black.withAlphaComponent(0.12).setFill()
-    cardPath.fill()
-    clearShadow()
+    ctx.setShadow(
+        offset: CGSize(width: 0, height: -12 * scale),
+        blur: gaussianBlur(stdDeviation: 14, scale: scale),
+        color: hex(0x000000, 0.28)
+    )
+    ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+    ctx.addPath(tileBody)
+    ctx.clip()
+
+    ctx.setFillColor(hex(midnight))
+    ctx.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+
+    // Navy radial glow rising from the bottom edge: centre (512, 900), radii 560 x 380.
+    let glow = CGGradient(
+        colorsSpace: srgb,
+        colors: [hex(navy, 0.9), hex(navy, 0)] as CFArray,
+        locations: [0, 1]
+    )!
+    ctx.saveGState()
+    ctx.translateBy(x: 512, y: 900)
+    ctx.scaleBy(x: 560, y: 380)
+    ctx.drawRadialGradient(glow, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [.drawsAfterEndLocation])
     ctx.restoreGState()
 
+    // White top sheen, 0.09 at y 100 fading out by y 560.
+    let sheen = CGGradient(
+        colorsSpace: srgb,
+        colors: [hex(white, 0.09), hex(white, 0)] as CFArray,
+        locations: [0, 1]
+    )!
+    ctx.drawLinearGradient(
+        sheen,
+        start: CGPoint(x: 512, y: 100),
+        end: CGPoint(x: 512, y: 560),
+        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+    )
+    ctx.endTransparencyLayer()
+    ctx.restoreGState()
+
+    // Hairline rim.
+    ctx.addPath(tileRim)
+    ctx.setStrokeColor(hex(white, 0.12))
+    ctx.setLineWidth(6)
+    ctx.strokePath()
+
+    // Sky voice bars.
+    ctx.setFillColor(hex(sky))
+    for bar in voiceBars {
+        ctx.addPath(bar)
+        ctx.fillPath()
+    }
+
+    // White caret with a soft bloom (feGaussianBlur stdDeviation 22 merged under the source).
     ctx.saveGState()
-    cardPath.addClip()
-
-    let backgroundGradient = NSGradient(colorsAndLocations:
-        (NSColor(calibratedRed: 0.06, green: 0.13, blue: 0.36, alpha: 1), 0.0),
-        (NSColor(calibratedRed: 0.10, green: 0.42, blue: 0.67, alpha: 1), 0.52),
-        (NSColor(calibratedRed: 0.26, green: 0.82, blue: 0.74, alpha: 1), 1.0)
-    )!
-    backgroundGradient.draw(in: cardPath, angle: 312)
-
-    let accentOrb = NSBezierPath(ovalIn: CGRect(
-        x: dimension * 0.49,
-        y: dimension * 0.50,
-        width: dimension * 0.36,
-        height: dimension * 0.36
-    ))
-    let accentGradient = NSGradient(colorsAndLocations:
-        (NSColor(calibratedRed: 0.66, green: 0.49, blue: 1.0, alpha: 0.58), 0.0),
-        (NSColor(calibratedRed: 0.66, green: 0.49, blue: 1.0, alpha: 0.0), 1.0)
-    )!
-    accentGradient.draw(in: accentOrb, relativeCenterPosition: NSPoint(x: 0.08, y: 0.1))
-
-    let highlightOrb = NSBezierPath(ovalIn: CGRect(
-        x: dimension * 0.15,
-        y: dimension * 0.60,
-        width: dimension * 0.42,
-        height: dimension * 0.32
-    ))
-    let highlightGradient = NSGradient(colorsAndLocations:
-        (NSColor(calibratedWhite: 1.0, alpha: 0.18), 0.0),
-        (NSColor(calibratedWhite: 1.0, alpha: 0.0), 1.0)
-    )!
-    highlightGradient.draw(in: highlightOrb, relativeCenterPosition: NSPoint(x: -0.35, y: 0.55))
-
-    let rimPath = drawRoundedRect(in: cardRect.insetBy(dx: dimension * 0.004, dy: dimension * 0.004), radius: cardRadius - dimension * 0.004)
-    NSColor(calibratedWhite: 1.0, alpha: 0.16).setStroke()
-    rimPath.lineWidth = dimension * 0.008
-    rimPath.stroke()
-
-    let mainWave = makeMainWavePath(size: dimension)
-    let whisperArc = makeWhisperArcPath(size: dimension)
-
-    applyShadow(color: NSColor(calibratedWhite: 0.0, alpha: 0.14), blur: dimension * 0.022, y: -dimension * 0.012)
-    NSColor(calibratedRed: 0.985, green: 0.99, blue: 1.0, alpha: 0.98).setStroke()
-    mainWave.lineWidth = dimension * 0.118
-    mainWave.stroke()
-    whisperArc.lineWidth = dimension * 0.076
-    whisperArc.stroke()
-    clearShadow()
-
-    NSColor(calibratedRed: 0.72, green: 0.98, blue: 1.0, alpha: 0.3).setStroke()
-    mainWave.lineWidth = dimension * 0.046
-    mainWave.stroke()
-    whisperArc.lineWidth = dimension * 0.03
-    whisperArc.stroke()
-
-    let sparkle = NSBezierPath()
-    let sparkleCenter = point(0.73, 0.73, in: dimension)
-    let sparkleRadius = dimension * 0.03
-    sparkle.move(to: CGPoint(x: sparkleCenter.x, y: sparkleCenter.y + sparkleRadius))
-    sparkle.line(to: CGPoint(x: sparkleCenter.x, y: sparkleCenter.y - sparkleRadius))
-    sparkle.move(to: CGPoint(x: sparkleCenter.x - sparkleRadius, y: sparkleCenter.y))
-    sparkle.line(to: CGPoint(x: sparkleCenter.x + sparkleRadius, y: sparkleCenter.y))
-    sparkle.lineCapStyle = .round
-    NSColor(calibratedWhite: 1.0, alpha: 0.72).setStroke()
-    sparkle.lineWidth = dimension * 0.016
-    sparkle.stroke()
-
+    ctx.setShadow(offset: .zero, blur: gaussianBlur(stdDeviation: 22, scale: scale), color: hex(white))
+    ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+    ctx.setFillColor(hex(white))
+    for part in caretParts {
+        ctx.addPath(part)
+        ctx.fillPath()
+    }
+    ctx.endTransparencyLayer()
     ctx.restoreGState()
 }
 
-func drawMenuBarGlyph(size dimension: CGFloat) {
-    let mainWave = makeMainWavePath(size: dimension)
-    let whisperArc = makeWhisperArcPath(size: dimension)
-    NSColor.white.setStroke()
-
-    mainWave.lineWidth = dimension * 0.18
-    mainWave.stroke()
-
-    whisperArc.lineWidth = dimension * 0.11
-    whisperArc.stroke()
-
-    let sparkle = NSBezierPath()
-    let sparkleCenter = point(0.73, 0.73, in: dimension)
-    let sparkleRadius = dimension * 0.05
-    sparkle.move(to: CGPoint(x: sparkleCenter.x, y: sparkleCenter.y + sparkleRadius))
-    sparkle.line(to: CGPoint(x: sparkleCenter.x, y: sparkleCenter.y - sparkleRadius))
-    sparkle.move(to: CGPoint(x: sparkleCenter.x - sparkleRadius, y: sparkleCenter.y))
-    sparkle.line(to: CGPoint(x: sparkleCenter.x + sparkleRadius, y: sparkleCenter.y))
-    sparkle.lineCapStyle = .round
-    sparkle.lineWidth = dimension * 0.03
-    sparkle.stroke()
+/// Pure black on transparent so AppKit can tint it as a template image.
+func drawMenuBarGlyph(_ ctx: CGContext) {
+    ctx.setFillColor(hex(0x000000))
+    for part in glyphParts {
+        ctx.addPath(part)
+        ctx.fillPath()
+    }
 }
 
-func appIconMasterSVG() -> String {
-    """
-    <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="120" y1="166" x2="892" y2="854" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#0F205E"/>
-          <stop offset="0.52" stop-color="#1B6CA9"/>
-          <stop offset="1" stop-color="#3DD1BD"/>
-        </linearGradient>
-        <radialGradient id="violet" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(704 328) rotate(90) scale(184)">
-          <stop stop-color="#A67CFF" stop-opacity="0.58"/>
-          <stop offset="1" stop-color="#A67CFF" stop-opacity="0"/>
-        </radialGradient>
-        <radialGradient id="shine" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(275 246) rotate(-34) scale(240 170)">
-          <stop stop-color="white" stop-opacity="0.18"/>
-          <stop offset="1" stop-color="white" stop-opacity="0"/>
-        </radialGradient>
-        <filter id="shadow" x="42" y="38" width="940" height="940" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-          <feDropShadow dx="0" dy="18" stdDeviation="34" flood-color="#000000" flood-opacity="0.24"/>
-        </filter>
-      </defs>
-
-      <g filter="url(#shadow)">
-        <rect x="87" y="87" width="850" height="850" rx="220" fill="url(#bg)"/>
-        <rect x="91" y="91" width="842" height="842" rx="216" stroke="white" stroke-opacity="0.16" stroke-width="8"/>
-        <circle cx="704" cy="328" r="184" fill="url(#violet)"/>
-        <ellipse cx="356" cy="246" rx="205" ry="156" fill="url(#shine)"/>
-      </g>
-
-      <path d="M230 678C258 404 343 189 456 299C508 364 547 567 596 558C651 526 733 268 807 412" stroke="#FBFDFF" stroke-width="121" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M276 417C338 220 492 178 602 317" stroke="#FBFDFF" stroke-opacity="0.98" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M230 678C258 404 343 189 456 299C508 364 547 567 596 558C651 526 733 268 807 412" stroke="#B7FEFF" stroke-opacity="0.3" stroke-width="47" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M276 417C338 220 492 178 602 317" stroke="#B7FEFF" stroke-opacity="0.3" stroke-width="31" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M748 245V307M717 276H779" stroke="white" stroke-opacity="0.72" stroke-width="16" stroke-linecap="round"/>
-    </svg>
-    """
+/// The master SVG with its viewBox cropped to the tile, for the site's SVG favicon.
+func faviconSVG() -> String {
+    appIconMasterSVG.replacingOccurrences(
+        of: #"<svg width="1024" height="1024" viewBox="0 0 1024 1024""#,
+        with: #"<svg width="824" height="824" viewBox="100 100 824 824""#
+    )
 }
 
 func generateAssets() throws {
@@ -287,36 +361,47 @@ func generateAssets() throws {
     try ensureDirectory(menuBarSetURL)
 
     for icon in appIconFiles {
-        let rep = try makeBitmap(size: icon.pixelSize) { dimension in
-            drawAppIcon(size: dimension)
+        let image = try render(pixels: icon.pixelSize, viewBox: 1024) { ctx, scale in
+            drawAppIcon(ctx, scale: scale)
         }
-        try writePNG(rep: rep, to: appIconSetURL.appendingPathComponent(icon.filename))
+        try writePNG(image, to: appIconSetURL.appendingPathComponent(icon.filename))
     }
 
     for icon in menuBarFiles {
-        let rep = try makeBitmap(size: icon.pixelSize) { dimension in
-            drawMenuBarGlyph(size: dimension)
+        let image = try render(pixels: icon.pixelSize, viewBox: 18) { ctx, _ in
+            drawMenuBarGlyph(ctx)
         }
-        try writePNG(rep: rep, to: menuBarSetURL.appendingPathComponent(icon.filename))
+        try writePNG(image, to: menuBarSetURL.appendingPathComponent(icon.filename))
     }
 
-    try appIconMasterSVG().write(
+    try appIconMasterSVG.write(
         to: appIconSetURL.appendingPathComponent("app-icon-master.svg"),
         atomically: true,
         encoding: .utf8
     )
+
+    if fileManager.fileExists(atPath: publicURL.path) {
+        for (siteName, sourceName) in siteIconCopies {
+            let destination = publicURL.appendingPathComponent(siteName)
+            try removeIfExists(destination)
+            try fileManager.copyItem(at: appIconSetURL.appendingPathComponent(sourceName), to: destination)
+        }
+        try faviconSVG().write(
+            to: publicURL.appendingPathComponent("favicon.svg"),
+            atomically: true,
+            encoding: .utf8
+        )
+    }
 
     let tempIconsetURL = rootURL.appendingPathComponent(".build/whispur-volume.iconset", isDirectory: true)
     try removeIfExists(tempIconsetURL)
     try ensureDirectory(tempIconsetURL)
 
     for icon in appIconFiles {
-        let source = appIconSetURL.appendingPathComponent(icon.filename)
-        let destination = tempIconsetURL.appendingPathComponent(icon.filename)
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-        try fileManager.copyItem(at: source, to: destination)
+        try fileManager.copyItem(
+            at: appIconSetURL.appendingPathComponent(icon.filename),
+            to: tempIconsetURL.appendingPathComponent(icon.filename)
+        )
     }
 
     try removeIfExists(volumeIconURL)
@@ -337,7 +422,7 @@ func generateAssets() throws {
 
 do {
     try generateAssets()
-    print("Generated app icons, menu bar glyphs, and \(volumeIconURL.path)")
+    print("Generated app icons, menu bar glyphs, site icons, and \(volumeIconURL.path)")
 } catch {
     fputs("error: \(error.localizedDescription)\n", stderr)
     exit(1)
