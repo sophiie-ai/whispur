@@ -124,7 +124,9 @@ struct OnboardingWindow: View {
             footer
         }
         .frame(minWidth: 760, minHeight: 560)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(SophiieTheme.Palette.surfaceWarm)
+        .foregroundStyle(SophiieTheme.Palette.ink)
+        .tint(SophiieTheme.Palette.accent)
     }
 
     private var header: some View {
@@ -132,9 +134,11 @@ struct OnboardingWindow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Welcome to Whispur")
                     .font(.title2.weight(.semibold))
+                    .tracking(SophiieTheme.Typography.titleTracking)
+                    .foregroundStyle(SophiieTheme.Palette.ink)
                 Text(step.subtitle)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
 
             Spacer()
@@ -155,16 +159,29 @@ struct OnboardingWindow: View {
                     Image(systemName: currentStep.icon)
                         .font(.headline)
                         .frame(width: 34, height: 34)
-                        .background(step == currentStep ? Color.orange.opacity(0.16) : Color.primary.opacity(0.05), in: Circle())
-                        .foregroundStyle(step.rawValue >= currentStep.rawValue ? Color.orange : Color.secondary)
+                        .background(stepFill(for: currentStep), in: Circle())
+                        .foregroundStyle(stepForeground(for: currentStep))
 
                     Text(currentStep.title)
                         .font(.caption.weight(step == currentStep ? .semibold : .regular))
-                        .foregroundStyle(step == currentStep ? .primary : .secondary)
+                        .foregroundStyle(step == currentStep ? SophiieTheme.Palette.ink : SophiieTheme.Palette.muted)
                 }
                 .frame(maxWidth: .infinity)
+                .sophiieAnimation(value: step)
             }
         }
+    }
+
+    private func stepFill(for candidate: OnboardingStep) -> Color {
+        if candidate == step { return SophiieTheme.Palette.brand }
+        if candidate.rawValue < step.rawValue { return SophiieTheme.Palette.surfaceSelected }
+        return SophiieTheme.Palette.surfaceSubtle
+    }
+
+    private func stepForeground(for candidate: OnboardingStep) -> Color {
+        if candidate == step { return SophiieTheme.Palette.onBrand }
+        if candidate.rawValue < step.rawValue { return SophiieTheme.Palette.ink }
+        return SophiieTheme.Palette.muted
     }
 
     private var contentCard: some View {
@@ -190,7 +207,7 @@ struct OnboardingWindow: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Whispur keeps capture, cleanup, and paste in one pass. This short setup makes sure the menu bar app is ready before your first dictation.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             HStack(spacing: 10) {
                 PreferenceBadge(
@@ -219,7 +236,7 @@ struct OnboardingWindow: View {
 
             Text("If the system prompt was dismissed earlier, use Open Settings and enable Whispur manually in Privacy & Security > Microphone.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 
@@ -237,7 +254,7 @@ struct OnboardingWindow: View {
 
             Text("macOS may keep System Settings in front while you approve access. Return here after the toggle is enabled.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 
@@ -292,7 +309,7 @@ struct OnboardingWindow: View {
 
             Text("Finish here and start dictating from the menu bar. Setup, providers, and prompt tuning all stay available in Settings.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 
@@ -304,7 +321,6 @@ struct OnboardingWindow: View {
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 ProgressView(value: appState.setupProgress)
-                    .tint(.orange)
 
                 HStack(spacing: 10) {
                     PreferenceBadge(
@@ -326,6 +342,7 @@ struct OnboardingWindow: View {
                 guard let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
                 step = previous
             }
+            .buttonStyle(.sophiieSecondary)
             .disabled(step == .welcome)
 
             Spacer()
@@ -335,18 +352,18 @@ struct OnboardingWindow: View {
                     guard let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
                     step = next
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
             } else {
                 Button("Open Settings") {
                     openSettings(tab: .setup)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
 
                 Button("Start Using Whispur") {
                     appState.markOnboardingCompleted()
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.sophiiePrimary)
             }
         }
         .padding(.horizontal, 24)

@@ -26,9 +26,10 @@ struct SetupSettingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(appState.setupCompletedCount) of \(appState.setupItemCount) complete")
                             .font(.title2.weight(.semibold))
+                            .tracking(SophiieTheme.Typography.titleTracking)
                         Text(appState.isReadyForDailyUse ? "Whispur is ready to dictate across your Mac." : "A few items still need attention before daily use feels seamless.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                     }
 
                     Spacer()
@@ -40,7 +41,6 @@ struct SetupSettingsView: View {
                 }
 
                 ProgressView(value: appState.setupProgress)
-                    .tint(.orange)
 
                 HStack(spacing: 10) {
                     ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
@@ -113,17 +113,18 @@ struct SetupSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Hold your shortcut to speak, or use the toggle shortcut when you want to stay in dictation mode. After you stop, Whispur transcribes, cleans up the wording, and pastes the final text back into the frontmost app.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
 
                 HStack(spacing: 10) {
                     Button("Review Prompts") {
                         openTab(.prompts)
                     }
+                    .buttonStyle(.sophiiePrimary)
 
                     Button("Hide Setup Guide") {
                         appState.hideSetupGuide()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.sophiieSecondary)
                 }
             }
         }

@@ -23,33 +23,26 @@ struct PreferenceCard<Content: View>: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: icon)
                     .font(.title3)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SophiieTheme.Palette.ink)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.headline)
+                        .font(SophiieTheme.Typography.heading)
+                        .foregroundStyle(SophiieTheme.Palette.ink)
 
                     if let detail {
                         Text(detail)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                     }
                 }
             }
 
             content
         }
-        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        )
+        .sophiieCard(padding: 18, radius: SophiieTheme.Radius.panel)
     }
 }
 
@@ -66,13 +59,13 @@ struct PreferenceBadge: View {
         var color: Color {
             switch self {
             case .neutral:
-                return .secondary
+                return SophiieTheme.Palette.muted
             case .good:
-                return .green
+                return SophiieTheme.Palette.success
             case .warning:
-                return .orange
+                return SophiieTheme.Palette.warning
             case .critical:
-                return .red
+                return SophiieTheme.Palette.danger
             }
         }
     }
@@ -84,7 +77,7 @@ struct PreferenceBadge: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(tone.color.opacity(0.12), in: Capsule())
+            .background(tone.color.opacity(0.14), in: Capsule())
             .foregroundStyle(tone.color)
     }
 }
@@ -94,10 +87,11 @@ struct ShortcutSummaryBadge: View {
 
     var body: some View {
         Text(title)
-            .font(.system(.caption, design: .rounded).weight(.semibold))
+            .font(SophiieTheme.Typography.captionStrong)
+            .foregroundStyle(SophiieTheme.Palette.ink)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.06), in: Capsule())
+            .background(SophiieTheme.Palette.surfaceSubtle, in: Capsule())
     }
 }
 
@@ -111,29 +105,29 @@ struct SetupChecklistRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: isComplete ? "checkmark.circle.fill" : "circle.dashed")
-                .foregroundStyle(isComplete ? .green : .orange)
+                .foregroundStyle(isComplete ? SophiieTheme.Palette.success : SophiieTheme.Palette.warning)
                 .font(.title3)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SophiieTheme.Palette.ink)
 
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
 
             Spacer(minLength: 8)
 
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.sophiieSecondary)
                     .controlSize(.small)
             }
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .sophiieWell(padding: 14, radius: SophiieTheme.Radius.card)
     }
 }
 
@@ -156,12 +150,13 @@ struct DetailRow<Accessory: View>: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline.weight(.medium))
+                    .font(SophiieTheme.Typography.label)
+                    .foregroundStyle(SophiieTheme.Palette.ink)
 
                 if let detail {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
             }
 

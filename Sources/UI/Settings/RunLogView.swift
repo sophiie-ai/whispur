@@ -17,7 +17,7 @@ struct RunLogView: View {
                     ) {
                         Text("Your first successful dictation will appear in this timeline.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                     }
                 } else {
                     LazyVStack(spacing: 12) {
@@ -49,7 +49,7 @@ struct RunLogView: View {
                     Button("Clear History") {
                         appState.historyStore.clear()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.sophiieSecondary)
                 }
             }
         }
@@ -64,26 +64,27 @@ private struct RunLogEntry: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                withSophiieAnimation {
                     isExpanded.toggle()
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.cleanedText)
-                            .font(.subheadline.weight(.medium))
+                            .font(SophiieTheme.Typography.label)
+                            .foregroundStyle(SophiieTheme.Palette.ink)
                             .lineLimit(isExpanded ? nil : 2)
                             .multilineTextAlignment(.leading)
 
                         Text(item.timestamp.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                     }
 
                     Spacer()
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
             }
             .buttonStyle(.plain)
@@ -106,21 +107,21 @@ private struct RunLogEntry: View {
             }
         }
         .padding(16)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
     }
 
     private func transcriptBlock(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             Text(text)
-                .font(.system(.caption, design: .monospaced))
+                .font(SophiieTheme.Typography.mono)
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.small, style: .continuous))
         }
     }
 }

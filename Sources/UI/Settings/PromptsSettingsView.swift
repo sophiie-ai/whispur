@@ -27,7 +27,7 @@ struct PromptsSettingsView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 180)
                     .padding(10)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
 
                 HStack {
                     PreferenceBadge(
@@ -41,7 +41,7 @@ struct PromptsSettingsView: View {
                         Button("Reset to default") {
                             appState.customSystemPrompt = ""
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.sophiieSecondary)
                     }
                 }
             }
@@ -59,7 +59,7 @@ struct PromptsSettingsView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 120)
                     .padding(10)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
 
                 Toggle(isOn: $appState.learnFromEdits) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -67,7 +67,7 @@ struct PromptsSettingsView: View {
                             .font(.callout.weight(.medium))
                         Text("After a paste, Whispur re-reads the focused text field on your next dictation. If you changed a word, it asks before adding that word to this vocabulary.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SophiieTheme.Palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -84,13 +84,13 @@ struct PromptsSettingsView: View {
         ) {
             DisclosureGroup(isExpanded: $showsDefaultPrompt) {
                 Text(Prompts.defaultCleanup)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(SophiieTheme.Typography.mono)
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
             } label: {
-                Button(action: { withAnimation { showsDefaultPrompt.toggle() } }) {
+                Button(action: { withSophiieAnimation { showsDefaultPrompt.toggle() } }) {
                     Text("Show default cleanup prompt")
                         .contentShape(Rectangle())
                         .frame(maxWidth: .infinity, alignment: .leading)

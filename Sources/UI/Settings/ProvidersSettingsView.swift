@@ -164,7 +164,7 @@ private struct STTLanguagePicker: View {
 
             Text(footnote(for: appState.selectedSTT, selection: appState.sttLanguageSelection))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 
@@ -223,11 +223,11 @@ private struct ProviderConfigurationCard<Content: View>: View {
 
             Text(note)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             content
         }
         .padding(16)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
     }
 }
