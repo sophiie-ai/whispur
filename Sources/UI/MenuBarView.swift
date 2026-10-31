@@ -22,7 +22,7 @@ struct MenuBarView: View {
                 warningCard(
                     title: "Accessibility Needed",
                     detail: "Global shortcuts and paste-back won’t work until accessibility access is enabled.",
-                    tint: .orange,
+                    tint: SophiieTheme.Palette.warning,
                     buttonTitle: "Grant Access",
                     action: appState.requestAccessibilityAccess
                 )
@@ -32,7 +32,7 @@ struct MenuBarView: View {
                 warningCard(
                     title: "Microphone Needed",
                     detail: "Whispur can’t record until macOS microphone permission is granted.",
-                    tint: .yellow,
+                    tint: SophiieTheme.Palette.warning,
                     buttonTitle: "Allow Microphone",
                     action: appState.requestMicrophoneAccess
                 )
@@ -49,6 +49,8 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 370)
+        .foregroundStyle(SophiieTheme.Palette.ink)
+        .tint(SophiieTheme.Palette.accent)
         .sheet(isPresented: $isPresentingRecap) {
             ShareRecapView(stats: appState.stats)
         }
@@ -58,11 +60,12 @@ struct MenuBarView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Whispur")
-                    .font(.title3.weight(.semibold))
+                    .font(SophiieTheme.Typography.title)
+                    .tracking(SophiieTheme.Typography.titleTracking)
 
                 Text(appState.pipeline.statusTitle)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
 
             Spacer()
@@ -77,11 +80,11 @@ struct MenuBarView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(appState.stats.totalWords.formatted(.number))
-                        .font(.system(.title2, design: .rounded).weight(.semibold))
-                        .monospacedDigit()
+                        .font(SophiieTheme.Typography.display)
+                        .tracking(SophiieTheme.Typography.displayTracking)
                     Text("words")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
 
                     Spacer()
 
@@ -93,8 +96,8 @@ struct MenuBarView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.15), in: Capsule())
-                        .foregroundStyle(.orange)
+                        .background(SophiieTheme.Palette.surfaceSelected, in: Capsule())
+                        .foregroundStyle(SophiieTheme.Palette.ink)
                     }
                 }
 
@@ -103,10 +106,10 @@ struct MenuBarView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                     Text(savedSummary)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
 
                     Spacer()
 
@@ -117,11 +120,10 @@ struct MenuBarView: View {
                             .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.borderless)
-                    .tint(.purple)
+                    .foregroundStyle(SophiieTheme.Palette.interactive)
                 }
             }
-            .padding(14)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .sophiieCard(padding: 14, radius: SophiieTheme.Radius.panel)
         }
     }
 
@@ -133,7 +135,7 @@ struct MenuBarView: View {
             ForEach(days) { day in
                 let height = max(4, CGFloat(day.words) / CGFloat(maxValue) * 22)
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(day.words > 0 ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.08))
+                    .fill(day.words > 0 ? SophiieTheme.Palette.highlight : SophiieTheme.Palette.surfaceSubtle)
                     .frame(height: height)
                     .frame(maxWidth: .infinity)
             }
@@ -157,7 +159,7 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(appState.recordingSummary)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             Button {
                 appState.toggleManualDictation()
@@ -165,7 +167,8 @@ struct MenuBarView: View {
                 Label(primaryActionTitle, systemImage: primaryActionIcon)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.sophiiePrimary)
+            .controlSize(.large)
             .disabled(!appState.pipeline.canStopRecording && !appState.canStartDictation)
 
             if appState.pipeline.canStopRecording {
@@ -173,11 +176,11 @@ struct MenuBarView: View {
                     ? "Toggle mode is active. Use the shortcut again or press Stop."
                     : "Push-to-talk is active. Releasing the shortcut also stops recording.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
             }
         }
-        .padding(14)
-        .background(backgroundTone.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .sophiieCard(padding: 14, radius: SophiieTheme.Radius.panel, fill: actionCardFill)
+        .sophiieAnimation(value: appState.pipeline.phase)
     }
 
     private var setupCard: some View {
@@ -188,7 +191,7 @@ struct MenuBarView: View {
                         .font(.subheadline.weight(.semibold))
                     Text("\(appState.setupCompletedCount) of \(appState.setupItemCount) complete")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SophiieTheme.Palette.muted)
                 }
 
                 Spacer()
@@ -196,15 +199,13 @@ struct MenuBarView: View {
                 Button("Open") {
                     openSettings(tab: .setup)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
                 .controlSize(.small)
             }
 
             ProgressView(value: appState.setupProgress)
-                .tint(.orange)
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .sophiieWell(padding: 14, radius: SophiieTheme.Radius.panel)
     }
 
     private var settingsStrip: some View {
@@ -232,10 +233,10 @@ struct MenuBarView: View {
                     Image(systemName: "command")
                     Text(appState.holdShortcut.menuTitle)
                 }
-                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .font(SophiieTheme.Typography.captionStrong)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.primary.opacity(0.06), in: Capsule())
+                .background(SophiieTheme.Palette.surfaceSubtle, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -256,12 +257,12 @@ struct MenuBarView: View {
                 Text(value)
                     .lineLimit(1)
                 Image(systemName: configured ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(configured ? .green : .orange)
+                    .foregroundStyle(configured ? SophiieTheme.Palette.success : SophiieTheme.Palette.warning)
             }
             .font(.caption.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(0.06), in: Capsule())
+            .background(SophiieTheme.Palette.surfaceSubtle, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -280,14 +281,19 @@ struct MenuBarView: View {
 
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SophiieTheme.Palette.muted)
 
             Button(buttonTitle, action: action)
-                .buttonStyle(.bordered)
+                .buttonStyle(.sophiieSecondary)
                 .controlSize(.small)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous)
+                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+        )
     }
 
     private func lastTranscriptCard(_ preview: String) -> some View {
@@ -295,13 +301,14 @@ struct MenuBarView: View {
             HStack {
                 Text("Last Transcript")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
                 Spacer()
                 Button("History") {
                     openSettings(tab: .activity)
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
+                .foregroundStyle(SophiieTheme.Palette.interactive)
             }
 
             Text(preview)
@@ -314,11 +321,10 @@ struct MenuBarView: View {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.sophiiePrimary)
             .controlSize(.small)
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .sophiieWell(padding: 14, radius: SophiieTheme.Radius.panel)
     }
 
     private var footerButtons: some View {
@@ -344,7 +350,8 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("q", modifiers: .command)
         }
-        .font(.caption)
+        .buttonStyle(.sophiieSecondary)
+        .controlSize(.small)
     }
 
     private func openSettings(tab: SettingsTab) {
@@ -366,18 +373,18 @@ struct MenuBarView: View {
         appState.pipeline.canStopRecording ? "stop.circle.fill" : "mic.circle.fill"
     }
 
-    private var backgroundTone: Color {
+    private var actionCardFill: Color {
         switch appState.pipeline.phase {
         case .recording:
-            return .red
+            return SophiieTheme.Palette.sky.opacity(0.16)
         case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
-            return .blue
+            return SophiieTheme.Palette.surfaceSelected
         case .done:
-            return .green
+            return SophiieTheme.Palette.success.opacity(0.10)
         case .error:
-            return .orange
+            return SophiieTheme.Palette.warning.opacity(0.10)
         default:
-            return .secondary
+            return SophiieTheme.Palette.surface
         }
     }
 
