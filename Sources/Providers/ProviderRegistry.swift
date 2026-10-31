@@ -87,8 +87,14 @@ final class ProviderRegistry {
 
     /// Reads an OpenAI-compatible base URL override from UserDefaults.
     /// Trims whitespace and a trailing slash so callers can append `/chat/completions` etc.
-    private static func baseURLOverride(forKey key: String) -> String? {
+    static func baseURLOverride(forKey key: String) -> String? {
         guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        return normalizedBaseURL(raw)
+    }
+
+    /// An http(s) base URL without whitespace or a trailing slash, or `nil`
+    /// when the value can't be used.
+    static func normalizedBaseURL(_ raw: String) -> String? {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let url = URL(string: trimmed),

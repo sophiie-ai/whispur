@@ -43,4 +43,22 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "Provider API calls, errors, and timings"
         }
     }
+
+    /// One line under the tab title in the detail pane.
+    var summary: String {
+        switch self {
+        case .setup:
+            return "The few steps that get Whispur ready to dictate anywhere on your Mac."
+        case .general:
+            return "Recording shortcuts, permissions, and how Whispur behaves while you dictate."
+        case .providers:
+            return "Choose who transcribes and who cleans up, and keep their keys in your Keychain."
+        case .prompts:
+            return "Tune the cleanup instructions and teach Whispur the words you use."
+        case .activity:
+            return "Recent dictations with the raw and cleaned transcript side by side."
+        case .requests:
+            return "Every provider request with its status, timing, and error message."
+        }
+    }
 }
