@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("settings.selectedTab") private var selectedTabRaw = SettingsTab.setup.rawValue
 
     @State private var isPresentingRecap = false
@@ -305,7 +306,8 @@ struct MenuBarView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous))
+        // Lighter tint in light mode keeps the warning title at 4.5:1.
+        .background(tint.opacity(colorScheme == .dark ? 0.10 : 0.08), in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous)
                 .strokeBorder(tint.opacity(0.18), lineWidth: 1)
