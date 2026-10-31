@@ -49,6 +49,10 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 370)
+        // Opaque brand canvas instead of the system window material, so the
+        // cards sit on the same stage as Settings and onboarding. The
+        // MenuBarExtra window still clips this to its native rounded shape.
+        .background { SophiieTheme.Palette.surfaceWarm.ignoresSafeArea() }
         .foregroundStyle(SophiieTheme.Palette.ink)
         .tint(SophiieTheme.Palette.accent)
         .sheet(isPresented: $isPresentingRecap) {
@@ -131,16 +135,28 @@ struct MenuBarView: View {
         let days = appState.stats.lastSevenDays
         let maxValue = max(1, days.map(\.words).max() ?? 1)
 
+        let trackHeight: CGFloat = 24
+        let barWidth: CGFloat = 10
+        let barShape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+
+        // Every day gets a quiet full-height track; days with words fill it
+        // from the bottom in proportion to the busiest day.
         return HStack(alignment: .bottom, spacing: 4) {
             ForEach(days) { day in
-                let height = max(4, CGFloat(day.words) / CGFloat(maxValue) * 22)
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(day.words > 0 ? SophiieTheme.Palette.highlight : SophiieTheme.Palette.surfaceSubtle)
-                    .frame(height: height)
-                    .frame(maxWidth: .infinity)
+                ZStack(alignment: .bottom) {
+                    barShape
+                        .fill(SophiieTheme.Palette.track)
+                        .frame(width: barWidth, height: trackHeight)
+                    if day.words > 0 {
+                        barShape
+                            .fill(SophiieTheme.Palette.highlight)
+                            .frame(width: barWidth, height: max(6, CGFloat(day.words) / CGFloat(maxValue) * trackHeight))
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: 24)
+        .frame(height: trackHeight)
     }
 
     private var savedSummary: String {
@@ -205,7 +221,7 @@ struct MenuBarView: View {
 
             ProgressView(value: appState.setupProgress)
         }
-        .sophiieWell(padding: 14, radius: SophiieTheme.Radius.panel)
+        .sophiieCard(padding: 14, radius: SophiieTheme.Radius.panel)
     }
 
     private var settingsStrip: some View {
@@ -321,10 +337,11 @@ struct MenuBarView: View {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
-            .buttonStyle(.sophiiePrimary)
+            .buttonStyle(.sophiieSecondary)
             .controlSize(.small)
         }
-        .sophiieWell(padding: 14, radius: SophiieTheme.Radius.panel)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sophiieCard(padding: 14, radius: SophiieTheme.Radius.panel)
     }
 
     private var footerButtons: some View {
