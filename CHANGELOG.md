@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/sophiie-ai/whispur/compare/v0.19.0...v0.20.0) (2026-10-31)
+
+
+### Features
+
+* **input:** add double-press Fn as the default hands-free shortcut ([#59](https://github.com/sophiie-ai/whispur/issues/59)) ([66473cd](https://github.com/sophiie-ai/whispur/commit/66473cd717d9a0c08c45f062d7b3f6b846880f19))
+
 ## [0.19.0](https://github.com/sophiie-ai/whispur/compare/v0.18.0...v0.19.0) (2026-10-31)
 
 
