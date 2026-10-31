@@ -49,7 +49,7 @@ struct GeneralSettingsView: View {
 
                 if appState.toggleShortcut?.isDoublePress == true {
                     Label(
-                        "If macOS Dictation also uses Fn twice, change its shortcut in System Settings > Keyboard.",
+                        "Quick Fn taps also trigger macOS. Set \"Press 🌐 key to\" to Do Nothing in System Settings > Keyboard, and make sure Dictation doesn't use Fn twice.",
                         systemImage: "info.circle"
                     )
                     .font(.caption)

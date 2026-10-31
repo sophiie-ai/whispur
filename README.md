@@ -63,7 +63,7 @@ make run
 ## Usage
 
 - Hold shortcut: Press and hold your configured shortcut to record, then release to transcribe and paste.
-- Toggle shortcut: By default, press Fn twice to start hands-free recording and Fn once to stop and process. Other toggle presets start with one press and stop with a second press.
+- Toggle shortcut: By default, press Command + Fn to start hands-free recording and press it again to stop and process. You can also pick Fn twice (press Fn twice to start, once to stop); set "Press 🌐 key to" to Do Nothing in System Settings > Keyboard so macOS doesn't open the Emoji & Symbols panel.
 - Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts.
 - Prompt tuning: Open `Settings` → `Prompts` to override the cleanup prompt or add domain vocabulary.
 - Cleanup model: Open `Settings` → `Providers` and set `Custom Model` on any cleanup provider to use a model other than the default.

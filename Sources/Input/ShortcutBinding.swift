@@ -59,10 +59,12 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
     /// Function key only (hold to talk default).
     static let fnKey = ShortcutBinding(keyCode: nil, modifiers: .function)
 
-    /// Function key pressed twice quickly (default toggle / hands-free shortcut).
+    /// Function key pressed twice quickly (optional toggle / hands-free shortcut).
+    /// Quick Fn taps also trigger macOS (Emoji & Symbols, Dictation), so this
+    /// is not the default.
     static let fnDoublePress = ShortcutBinding(keyCode: nil, modifiers: .function, isDoublePress: true)
 
-    /// Command + Function key.
+    /// Command + Function key (default toggle / hands-free shortcut).
     static let commandFn = ShortcutBinding(keyCode: nil, modifiers: [.command, .function])
 
     /// Right Option key.
@@ -85,7 +87,10 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
 
     /// Built-in preset shortcuts for toggle recording.
     /// `fnDoublePress` is toggle-only and is never offered as a hold preset.
-    static let togglePresets: [ShortcutBinding] = [.fnDoublePress, .commandFn, .optionSpace, .commandShiftSpace, .f5]
+    static let togglePresets: [ShortcutBinding] = [.commandFn, .fnDoublePress, .optionSpace, .commandShiftSpace, .f5]
+
+    /// Toggle shortcut used when the user has never picked one.
+    static let defaultToggle: ShortcutBinding = .commandFn
 
     var displayName: String {
         var parts: [String] = []

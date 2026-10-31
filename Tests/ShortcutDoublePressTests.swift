@@ -42,8 +42,40 @@ final class ShortcutDoublePressTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ShortcutBinding.self, from: encoded), .fnDoublePress)
     }
 
+    // MARK: - Toggle default persistence
+
+    @MainActor
+    func testDefaultToggleIsCommandFnWhenNothingStored() throws {
+        let suite = "whispur.tests.toggle-default.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(ShortcutBinding.defaultToggle, .commandFn)
+        XCTAssertEqual(AppState.loadToggleShortcut(holdShortcut: .fnKey, defaults: defaults), .commandFn)
+        // Loading never writes the fallback back.
+        XCTAssertNil(defaults.string(forKey: "toggleShortcut"))
+    }
+
+    @MainActor
+    func testStoredToggleChoicesStillLoad() throws {
+        let suite = "whispur.tests.toggle-stored.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set(ShortcutBinding.fnDoublePress.storageValue, forKey: "toggleShortcut")
+        XCTAssertEqual(AppState.loadToggleShortcut(holdShortcut: .fnKey, defaults: defaults), .fnDoublePress)
+
+        defaults.set("off", forKey: "toggleShortcut")
+        XCTAssertNil(AppState.loadToggleShortcut(holdShortcut: .fnKey, defaults: defaults))
+
+        // A stored toggle that collides with the hold shortcut falls back to the default.
+        defaults.set(ShortcutBinding.rightOption.storageValue, forKey: "toggleShortcut")
+        XCTAssertEqual(AppState.loadToggleShortcut(holdShortcut: .rightOption, defaults: defaults), .commandFn)
+    }
+
     func testDoublePressPresets() {
-        XCTAssertEqual(ShortcutBinding.togglePresets.first, .fnDoublePress)
+        XCTAssertEqual(ShortcutBinding.togglePresets.first, .commandFn)
+        XCTAssertEqual(ShortcutBinding.togglePresets.dropFirst().first, .fnDoublePress)
         XCTAssertFalse(ShortcutBinding.holdPresets.contains(.fnDoublePress))
         XCTAssertFalse(ShortcutBinding.holdPresets.contains { $0.isDoublePress })
     }

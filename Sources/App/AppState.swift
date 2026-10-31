@@ -59,12 +59,7 @@ final class AppState: ObservableObject {
 
     init() {
         let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
-        // Users who never picked a toggle shortcut get Fn twice; an explicit
-        // stored choice (including "off") is kept.
-        let loadedToggleShortcut = Self.loadOptionalShortcut(forKey: "toggleShortcut", fallback: .fnDoublePress)
-        let sanitizedToggleShortcut = loadedToggleShortcut == loadedHoldShortcut
-            ? ShortcutBinding.fnDoublePress
-            : loadedToggleShortcut
+        let sanitizedToggleShortcut = Self.loadToggleShortcut(holdShortcut: loadedHoldShortcut)
 
         _holdShortcut = Published(initialValue: loadedHoldShortcut)
         _toggleShortcut = Published(initialValue: sanitizedToggleShortcut)
@@ -261,8 +256,8 @@ final class AppState: ObservableObject {
         return "\(holdShortcut.menuTitle) to talk"
     }
 
-    /// "Press Fn twice to start, press Fn once to stop." for the default
-    /// double-press binding; "Press X to start, press X again to stop." otherwise.
+    /// "Press Fn twice to start, press Fn once to stop." for the double-press
+    /// binding; "Press X to start, press X again to stop." otherwise.
     var toggleShortcutInstruction: String {
         guard let toggleShortcut else {
             return "Toggle mode is currently off. You can add one later in Settings."
@@ -558,8 +553,23 @@ final class AppState: ObservableObject {
         return binding
     }
 
-    private static func loadOptionalShortcut(forKey key: String, fallback: ShortcutBinding?) -> ShortcutBinding? {
-        guard let storedValue = UserDefaults.standard.string(forKey: key) else {
+    /// Users who never picked a toggle shortcut get `ShortcutBinding.defaultToggle`
+    /// (the fallback is never written back); an explicit stored choice, including
+    /// "off" and Fn twice, is kept unless it collides with the hold shortcut.
+    static func loadToggleShortcut(
+        holdShortcut: ShortcutBinding,
+        defaults: UserDefaults = .standard
+    ) -> ShortcutBinding? {
+        let loaded = loadOptionalShortcut(forKey: "toggleShortcut", fallback: .defaultToggle, defaults: defaults)
+        return loaded == holdShortcut ? .defaultToggle : loaded
+    }
+
+    private static func loadOptionalShortcut(
+        forKey key: String,
+        fallback: ShortcutBinding?,
+        defaults: UserDefaults = .standard
+    ) -> ShortcutBinding? {
+        guard let storedValue = defaults.string(forKey: key) else {
             return fallback
         }
 
