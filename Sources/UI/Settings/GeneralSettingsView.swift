@@ -35,7 +35,7 @@ struct GeneralSettingsView: View {
                     .frame(width: 180)
                 }
 
-                DetailRow("Toggle recording", detail: "Start once, then stop with the same shortcut or the overlay button.") {
+                DetailRow("Toggle recording", detail: toggleRowDetail) {
                     Picker("Toggle recording", selection: toggleShortcutBinding) {
                         Text("Off").tag(Optional<ShortcutBinding>.none)
                         ForEach(ShortcutBinding.togglePresets, id: \.self) { binding in
@@ -45,6 +45,15 @@ struct GeneralSettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .frame(width: 220)
+                }
+
+                if appState.toggleShortcut?.isDoublePress == true {
+                    Label(
+                        "If macOS Dictation also uses Fn twice, change its shortcut in System Settings > Keyboard.",
+                        systemImage: "info.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
                 }
 
                 Divider()
@@ -220,6 +229,13 @@ struct GeneralSettingsView: View {
             get: { appState.holdShortcut },
             set: { appState.setHoldShortcut($0) }
         )
+    }
+
+    private var toggleRowDetail: String {
+        if appState.toggleShortcut?.isDoublePress == true {
+            return "Hands-free recording. \(appState.toggleShortcutInstruction)"
+        }
+        return "Start once, then stop with the same shortcut or the overlay button."
     }
 
     private var toggleShortcutBinding: Binding<ShortcutBinding?> {

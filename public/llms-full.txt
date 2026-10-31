@@ -13,7 +13,7 @@
 ## Features
 
 ### Hold to talk, or toggle
-Hold Fn to dictate and release to paste. Press Command + Fn for hands-free recording. Esc cancels.
+Hold Fn to dictate and release to paste. Press Fn twice for hands-free recording, and Fn once to stop. Esc cancels.
 
 ### Pastes where your cursor is
 Text lands in the app you are already using: email, Slack, your editor, a prompt box. Your clipboard is restored afterwards.
@@ -93,7 +93,7 @@ Apple speech recognition built into macOS, OpenAI Whisper, Groq Whisper Large v3
 Macs running macOS 14 Sonoma or later. The current release build runs on Apple silicon.
 
 ### What is the default shortcut, and can I change it?
-Hold Fn to talk and release to paste. Press Command + Fn to start hands-free recording and press it again to stop. You can pick other shortcuts in Settings, and Esc cancels a recording.
+Hold Fn to talk and release to paste. Press Fn twice to start hands-free recording and press Fn once to stop. You can pick other shortcuts in Settings, and Esc cancels a recording.
 
 ### How does AI cleanup work?
 Add an API key for Anthropic, OpenAI, Groq or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead.

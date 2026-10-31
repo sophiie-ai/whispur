@@ -8,7 +8,7 @@ Key facts:
 - Install: download the signed, Apple-notarized DMG. Homebrew is not available yet.
 - Speech to text: Apple speech recognition (built into macOS, no key, the default), OpenAI Whisper (whisper-1, custom OpenAI-compatible base URL supported), Groq (Whisper Large v3), Deepgram (Nova-3), ElevenLabs (Scribe v2).
 - Optional cleanup LLMs: Anthropic Claude (default Claude Sonnet 4), OpenAI (default GPT-4o mini, custom base URL supported), Groq (default Llama 3.3 70B), AWS Bedrock (Claude via a Bedrock API key). Every cleanup provider accepts a custom model name.
-- Shortcuts: hold Fn to talk; Command + Fn toggles hands-free recording; Esc cancels. Other presets can be chosen in Settings.
+- Shortcuts: hold Fn to talk; press Fn twice for hands-free recording and Fn once to stop; Esc cancels. Other presets can be chosen in Settings.
 - Privacy: API keys are stored in the macOS Keychain; audio and text go only to the providers you configure; the app has no telemetry. Updates come through Sparkle with EdDSA-signed releases.
 
 ## Download and install

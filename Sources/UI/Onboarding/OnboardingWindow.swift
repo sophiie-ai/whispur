@@ -277,7 +277,7 @@ struct OnboardingWindow: View {
                 title: "Latched recording",
                 detail: appState.toggleShortcut == nil
                     ? "Toggle mode is currently off. You can add one later in Settings."
-                    : "Press \(appState.toggleShortcut?.menuTitle ?? "") once to start and again to stop.",
+                    : appState.toggleShortcutInstruction,
                 isComplete: true,
                 actionTitle: "Open Settings",
                 action: { openSettings(tab: .general) }

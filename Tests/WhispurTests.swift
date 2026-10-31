@@ -48,7 +48,7 @@ final class WhispurTests: XCTestCase {
 
     func testShortcutBindingStorageRoundTrip() {
         let cases: [ShortcutBinding] = [
-            .fnKey, .commandFn, .rightOption, .controlSpace, .optionSpace, .commandShiftSpace, .f5,
+            .fnKey, .fnDoublePress, .commandFn, .rightOption, .controlSpace, .optionSpace, .commandShiftSpace, .f5,
         ]
         for binding in cases {
             let storage = binding.storageValue
