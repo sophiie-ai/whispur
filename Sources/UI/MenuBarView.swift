@@ -190,7 +190,7 @@ struct MenuBarView: View {
 
             if appState.pipeline.canStopRecording {
                 Text(appState.pipeline.activeTriggerMode == .toggle
-                    ? "Toggle mode is active. Use the shortcut again or press Stop."
+                    ? appState.toggleActiveHint
                     : "Push-to-talk is active. Releasing the shortcut also stops recording.")
                     .font(.caption)
                     .foregroundStyle(SophiieTheme.Palette.muted)

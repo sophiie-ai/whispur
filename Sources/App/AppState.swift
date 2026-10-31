@@ -59,9 +59,11 @@ final class AppState: ObservableObject {
 
     init() {
         let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
-        let loadedToggleShortcut = Self.loadOptionalShortcut(forKey: "toggleShortcut", fallback: .commandFn)
+        // Users who never picked a toggle shortcut get Fn twice; an explicit
+        // stored choice (including "off") is kept.
+        let loadedToggleShortcut = Self.loadOptionalShortcut(forKey: "toggleShortcut", fallback: .fnDoublePress)
         let sanitizedToggleShortcut = loadedToggleShortcut == loadedHoldShortcut
-            ? ShortcutBinding.commandFn
+            ? ShortcutBinding.fnDoublePress
             : loadedToggleShortcut
 
         _holdShortcut = Published(initialValue: loadedHoldShortcut)
@@ -259,6 +261,23 @@ final class AppState: ObservableObject {
         return "\(holdShortcut.menuTitle) to talk"
     }
 
+    /// "Press Fn twice to start, press Fn once to stop." for the default
+    /// double-press binding; "Press X to start, press X again to stop." otherwise.
+    var toggleShortcutInstruction: String {
+        guard let toggleShortcut else {
+            return "Toggle mode is currently off. You can add one later in Settings."
+        }
+        return "\(toggleShortcut.toggleStartPhrase) to start, \(toggleShortcut.toggleStopPhrase) to stop."
+    }
+
+    /// Menu bar hint while a toggle recording is running.
+    var toggleActiveHint: String {
+        guard let toggleShortcut else {
+            return "Toggle mode is active. Press Stop when you're done."
+        }
+        return "Toggle mode is active. \(toggleShortcut.toggleStopPhrase.capitalizedFirst) or press Stop."
+    }
+
     var recordingSummary: String {
         switch pipeline.phase {
         case .idle:
@@ -275,7 +294,7 @@ final class AppState: ObservableObject {
                 return "Release \(holdShortcut.menuTitle) to transcribe."
             }
             if let toggleShortcut {
-                return "Press \(toggleShortcut.menuTitle) again or use Stop."
+                return "\(toggleShortcut.toggleStopPhrase.capitalizedFirst) or use Stop."
             }
             return "Use Stop when you're done."
         case .normalizingAudio:
@@ -319,6 +338,7 @@ final class AppState: ObservableObject {
 
     func stopDictation() {
         shortcutSessionController.reset()
+        syncHotkeySessionState()
         pipeline.stopAndProcess()
     }
 
@@ -327,6 +347,7 @@ final class AppState: ObservableObject {
             stopDictation()
         } else if canStartDictation {
             shortcutSessionController.beginManual(mode: .toggle)
+            syncHotkeySessionState()
             startDictation(triggerMode: .toggle)
         }
     }
@@ -414,13 +435,22 @@ final class AppState: ObservableObject {
                 case .none:
                     break
                 }
+                self.syncHotkeySessionState()
             }
         }
+    }
+
+    /// Mirror the controller's toggle state into the hotkey manager so a
+    /// single press of a double-press binding (Fn twice) stops the session
+    /// however it was started, and never starts one after it ended.
+    private func syncHotkeySessionState() {
+        hotkeyManager.setToggleSessionActive(shortcutSessionController.activeMode == .toggle)
     }
 
     func cancelDictation() {
         guard !pipeline.canStartRecording else { return }
         shortcutSessionController.reset()
+        syncHotkeySessionState()
         pipeline.cancel()
     }
 
@@ -436,6 +466,7 @@ final class AppState: ObservableObject {
                 switch phase {
                 case .idle, .done, .error:
                     self.shortcutSessionController.reset()
+                    self.syncHotkeySessionState()
                     self.hotkeyManager.cancelWatchEnabled = false
                 default:
                     self.hotkeyManager.cancelWatchEnabled = true

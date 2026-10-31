@@ -25,7 +25,14 @@ final class HotkeyManager {
 
     nonisolated(unsafe) var onEvent: ((Event) -> Void)?
     nonisolated(unsafe) var holdBinding: ShortcutBinding = .fnKey
-    nonisolated(unsafe) var toggleBinding: ShortcutBinding? = nil
+    nonisolated(unsafe) var toggleBinding: ShortcutBinding? = nil {
+        didSet {
+            stateLock.withLock { state in
+                state.doublePress.reset()
+                state.doublePressDown = false
+            }
+        }
+    }
     nonisolated(unsafe) var cancelWatchEnabled = false
 
     /// Delay before a bare-modifier hold binding (e.g. Fn alone) activates.
@@ -33,6 +40,10 @@ final class HotkeyManager {
     /// Fn behaviors (emoji picker, dictation) without racing our overlay.
     /// Chorded bindings with an explicit keyCode activate immediately.
     nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.33
+
+    /// Maximum gap between the release of the first clean tap and the second
+    /// press for a double-press toggle binding (e.g. "Fn twice") to fire.
+    nonisolated(unsafe) var doublePressWindow: TimeInterval = 0.4
 
     @Published private(set) var isAccessibilityGranted = false
     @Published private(set) var isMonitoring = false
@@ -51,6 +62,15 @@ final class HotkeyManager {
         // Blocks re-arming until the modifier is fully released.
         var holdSuppressed = false
         var toggleActive = false
+        // Double-press toggle bindings (e.g. Fn twice). `doublePressDown`
+        // tracks the binding's modifier edge; `toggleSessionActive` says
+        // whether a single press should stop a running toggle session. The
+        // manager sets it when it emits start/stop, and AppState re-syncs it
+        // from ShortcutSessionController after every event so Stop button,
+        // Esc and manual starts are reflected too.
+        var doublePress = DoublePressDetector(window: 0.4, maxTapDuration: 0.33)
+        var doublePressDown = false
+        var toggleSessionActive = false
     }
     private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
 
@@ -110,8 +130,19 @@ final class HotkeyManager {
             state.holdArming = false
             state.holdSuppressed = false
             state.toggleActive = false
+            state.doublePress.reset()
+            state.doublePressDown = false
+            state.toggleSessionActive = false
         }
         isMonitoring = false
+    }
+
+    /// Tell the manager whether a toggle session is running, so a single
+    /// press of a double-press binding stops it instead of starting a tap.
+    nonisolated func setToggleSessionActive(_ active: Bool) {
+        stateLock.withLock { state in
+            state.toggleSessionActive = active
+        }
     }
 
     func requestAccessibility() {
@@ -293,7 +324,12 @@ final class HotkeyManager {
         }
         logger.info("Modifier \(wasReleased ? "released" : "pressed"): keyCode=\(keyCode)")
 
-        evaluateBindings()
+        // Any modifier other than the double-press binding's own resets
+        // double-press tracking (Fn+Cmd is a chord, not a tap).
+        let otherModifier = toggleBinding.map { binding in
+            binding.isDoublePress && !Self.keyCodes(for: binding.modifiers).contains(keyCode)
+        } ?? false
+        evaluateBindings(interruptDoublePress: otherModifier)
         return false
     }
 
@@ -327,7 +363,8 @@ final class HotkeyManager {
                 logger.info("Hold arm cancelled — chord key pressed (keyCode=\(keyCode))")
             }
         }
-        evaluateBindings()
+        // Any regular key (Fn+Delete, typing between taps) resets double-press tracking.
+        evaluateBindings(interruptDoublePress: true)
         return false
     }
 
@@ -342,17 +379,75 @@ final class HotkeyManager {
     // MARK: - Binding Evaluation
 
     /// Check all bindings against current key state and fire events.
-    private nonisolated func evaluateBindings() {
+    private nonisolated func evaluateBindings(interruptDoublePress: Bool = false) {
         let useThreshold = holdBinding.keyCode == nil && holdArmThreshold > 0
+        let toggleBinding = self.toggleBinding
+        let now = ProcessInfo.processInfo.systemUptime
 
         enum HoldAction { case none, arm, cancelArm }
 
         let (transitions, holdAction) = stateLock.withLock { state -> ([Event], HoldAction) in
-            let holdNowMatches = Self.bindingIsActive(holdBinding, state: state)
-            let toggleNowActive = toggleBinding.map { Self.bindingIsActive($0, state: state) } ?? false
-
             var events: [Event] = []
             var action: HoldAction = .none
+
+            // Double-press toggle binding: edge-driven, evaluated before hold
+            // so a press it acts on can veto the hold arm in the same pass.
+            if let toggleBinding, toggleBinding.isDoublePress {
+                state.doublePress.window = doublePressWindow
+                state.doublePress.maxTapDuration = holdArmThreshold
+                if interruptDoublePress {
+                    state.doublePress.interrupt()
+                }
+
+                let modifiers = Self.currentModifiers(state: state)
+                let isDown = modifiers.isSuperset(of: toggleBinding.modifiers)
+                if isDown && !state.doublePressDown {
+                    state.doublePressDown = true
+                    if modifiers != toggleBinding.modifiers {
+                        // Pressed while another modifier is held: a chord, never a tap.
+                        state.doublePress.interrupt()
+                    } else {
+                        let pressAction = state.doublePress.press(at: now, sessionActive: state.toggleSessionActive)
+                        switch pressAction {
+                        case .none:
+                            break
+                        case .start:
+                            // Start on the second press itself (snappy) and
+                            // emit the release edge right away so the
+                            // controller arms its stop. The physical release
+                            // is ignored, and hold is suppressed for this
+                            // press so keeping it down never also starts a
+                            // push-to-talk recording.
+                            state.toggleSessionActive = true
+                            events.append(.toggleActivated)
+                            events.append(.toggleDeactivated)
+                        case .stop:
+                            // One press stops, on press (not after the hold
+                            // threshold). Hold is suppressed for this press so
+                            // it cannot start a new recording after the stop.
+                            state.toggleSessionActive = false
+                            events.append(.toggleActivated)
+                        case .swallow:
+                            break
+                        }
+                        if pressAction != .none {
+                            state.holdSuppressed = true
+                            if state.holdArming {
+                                state.holdArming = false
+                                action = .cancelArm
+                            }
+                        }
+                    }
+                } else if !isDown && state.doublePressDown {
+                    state.doublePressDown = false
+                    state.doublePress.release(at: now)
+                }
+            }
+
+            let holdNowMatches = Self.bindingIsActive(holdBinding, state: state)
+            let toggleNowActive = toggleBinding.map { binding in
+                !binding.isDoublePress && Self.bindingIsActive(binding, state: state)
+            } ?? false
 
             if useThreshold {
                 if holdNowMatches {
@@ -409,6 +504,7 @@ final class HotkeyManager {
             switch event {
             case .holdActivated: logger.info("Hold activated")
             case .holdDeactivated: logger.info("Hold deactivated")
+            case .toggleActivated: logger.info("Toggle activated")
             default: break
             }
             onEvent?(event)
@@ -432,6 +528,8 @@ final class HotkeyManager {
                     return false
                 }
                 state.holdActive = true
+                // A tap that became a hold can never be part of a double press.
+                state.doublePress.interrupt()
                 return true
             }
 
@@ -462,6 +560,17 @@ final class HotkeyManager {
         }
 
         return false
+    }
+
+    /// Physical key codes that produce the given modifiers.
+    private nonisolated static func keyCodes(for modifiers: ShortcutModifiers) -> Set<UInt16> {
+        var codes: Set<UInt16> = []
+        if modifiers.contains(.function) { codes.insert(63) }
+        if modifiers.contains(.command) { codes.formUnion([54, 55]) }
+        if modifiers.contains(.shift) { codes.formUnion([56, 60]) }
+        if modifiers.contains(.option) { codes.formUnion([58, 61]) }
+        if modifiers.contains(.control) { codes.formUnion([59, 62]) }
+        return codes
     }
 
     private nonisolated static func currentModifiers(state: SharedState) -> ShortcutModifiers {

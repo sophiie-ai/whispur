@@ -142,7 +142,7 @@ final class DictationPipeline: ObservableObject {
         case .recording:
             return activeTriggerMode == .hold
                 ? "Speak now, then release your shortcut to stop."
-                : "Speak now, then use your shortcut again or press Stop."
+                : "Speak now, then use your toggle shortcut or press Stop."
         case .normalizingAudio:
             return "Converting the captured audio to 16 kHz mono WAV."
         case .transcribing:
