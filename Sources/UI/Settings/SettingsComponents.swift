@@ -50,6 +50,8 @@ struct PreferenceBadge: View {
     let title: String
     let tone: Tone
 
+    @Environment(\.colorScheme) private var colorScheme
+
     enum Tone: Equatable {
         case neutral
         case good
@@ -77,8 +79,14 @@ struct PreferenceBadge: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(tone.color.opacity(0.14), in: Capsule())
+            .background(tone.color.opacity(fillOpacity), in: Capsule())
             .foregroundStyle(tone.color)
+    }
+
+    /// A lighter tint in light mode keeps the status text at 4.5:1 or
+    /// better against the pill on the window canvas.
+    private var fillOpacity: Double {
+        colorScheme == .dark ? 0.14 : 0.08
     }
 }
 

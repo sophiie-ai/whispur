@@ -33,6 +33,9 @@ enum SophiieTheme {
         /// Cards and raised content. Light: white. Dark: #1B1433.
         static let surface = Color(light: 0xFFFFFF, dark: 0x1B1433)
         /// Window canvas. Light: warm #F8F8F6. Dark: deep midnight #120C24.
+        /// Every window (menu bar, settings, onboarding) paints this opaque
+        /// stage so cards sit on one surface family instead of the system
+        /// material.
         static let surfaceWarm = Color(light: 0xF8F8F6, dark: 0x120C24)
         /// Sidebars and recessed areas. Light: #F2F1EE. Dark: #0D0819.
         static let surfaceStage = Color(light: 0xF2F1EE, dark: 0x0D0819)
@@ -48,6 +51,15 @@ enum SophiieTheme {
         static let hairline = Color(light: 0x140934, lightAlpha: 0.12, dark: 0xFFFFFF, darkAlpha: 0.14)
         /// Hairline outline (hover).
         static let hairlineStrong = Color(light: 0x140934, lightAlpha: 0.20, dark: 0xFFFFFF, darkAlpha: 0.24)
+        /// Secondary button outline. At least 3:1 against both the canvas
+        /// and card surfaces so the button boundary stays perceivable.
+        /// Light: #85829B. Dark: #6E688C.
+        static let controlBorder = Color(light: 0x85829B, dark: 0x6E688C)
+        /// Secondary button outline (hover).
+        static let controlBorderStrong = Color(light: 0x65627D, dark: 0x8C86AA)
+        /// Empty slots in charts and meters: quiet but clearly visible on a
+        /// card. Light: #E3E1EA. Dark: #40395E.
+        static let track = Color(light: 0xE3E1EA, dark: 0x40395E)
 
         // Brand roles.
         /// Solid primary fill: midnight in light, sky in dark (midnight on
@@ -58,9 +70,9 @@ enum SophiieTheme {
         static let onBrand = Color(light: 0xFFFFFF, dark: 0x140934)
         /// App-wide control tint (toggles, progress, prominent controls).
         static let accent = brand
-        /// Decorative highlight (sparklines, meters). Sky in both modes; a
-        /// deeper sky in light mode so it reads on white.
-        static let highlight = Color(light: 0x3FA9E6, dark: 0x69C7FB)
+        /// Data highlight (sparklines, meters). Sky in dark mode; a deeper
+        /// sky in light mode so it holds 3:1 against white and `track`.
+        static let highlight = Color(light: 0x1C80BF, dark: 0x69C7FB)
 
         // Status. Text-safe (at least 5:1) on surface in each mode.
         static let success = Color(light: 0x1B7A4A, dark: 0x5FD39A)
@@ -247,7 +259,7 @@ private struct SophiieAnimationModifier<V: Equatable>: ViewModifier {
 
 /// Site-style buttons: radius 8, medium label, emphasized easing on hover.
 /// `primary` is solid brand (midnight in light, sky in dark); `secondary`
-/// is a surface fill with a hairline outline.
+/// is a surface fill with a 3:1 control outline.
 struct SophiieButtonStyle: ButtonStyle {
     enum Kind {
         case primary
@@ -327,7 +339,7 @@ private struct SophiieButtonBody: View {
     private var stroke: some View {
         switch kind {
         case .secondary:
-            shape.strokeBorder(isHovering ? Palette.hairlineStrong : Palette.hairline, lineWidth: 1)
+            shape.strokeBorder(isHovering ? Palette.controlBorderStrong : Palette.controlBorder, lineWidth: 1)
         default:
             EmptyView()
         }
