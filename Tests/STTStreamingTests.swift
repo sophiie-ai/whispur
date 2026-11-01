@@ -238,6 +238,7 @@ final class STTStreamingTests: XCTestCase {
 
     func testOnlyStreamingCapableProvidersOfferTheToggle() {
         XCTAssertTrue(STTProviderID.elevenlabs.supportsStreaming)
+        XCTAssertTrue(STTProviderID.metaMuse.supportsStreaming)
         XCTAssertFalse(STTProviderID.apple.supportsStreaming)
         XCTAssertFalse(STTProviderID.openai.supportsStreaming)
     }
@@ -380,5 +381,94 @@ final class StreamingCancellationTests: XCTestCase {
         XCTAssertThrowsError(try result.get()) { XCTAssertTrue($0 is CancellationError) }
         XCTAssertEqual(batchCalls, 0)
         XCTAssertTrue(socket.closed)
+    }
+}
+
+final class MetaMuseTests: XCTestCase {
+    private func object(_ message: STTSocketMessage?) -> [String: Any] {
+        guard case let .text(text)? = message else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]) ?? [:]
+    }
+
+    func testHandshakeCarriesCredentialModeAndBiasing() {
+        let format = MetaMuseRealtimeFormat(apiKey: "k", language: .single(code: "fr-FR"), vocabulary: ["Whispur", " "])
+        let handshake = object(format.openingMessages().first)
+        XCTAssertEqual(handshake["mode"] as? String, "PUSH_TO_TALK")
+        XCTAssertEqual((handshake["authorization"] as? [String: String])?["accessToken"], "Bearer k")
+        XCTAssertEqual(handshake["audioEncoding"] as? String, "PCM_16KHZ")
+        XCTAssertEqual(handshake["model"] as? String, "muse-voice-transcribe-1.0")
+        XCTAssertEqual(handshake["partialMode"] as? String, "CUMULATIVE")
+        XCTAssertEqual(handshake["keywords"] as? [String], ["Whispur"])
+        XCTAssertEqual(handshake["languageBias"] as? [String], ["French"])
+        XCTAssertTrue(format.waitsForReadyBeforeAudio)
+        XCTAssertEqual(format.closingMessages(), [.text(#"{"type":"endStream"}"#)])
+    }
+
+    func testAutoLanguageAndEmptyVocabularySendNoBiasing() {
+        let handshake = object(MetaMuseRealtimeFormat(apiKey: "k", language: .auto, vocabulary: []).openingMessages().first)
+        XCTAssertNil(handshake["keywords"])
+        XCTAssertNil(handshake["languageBias"])
+    }
+
+    func testAudioIsSentAsBinaryFrames() {
+        let format = MetaMuseRealtimeFormat(apiKey: "k", language: .auto, vocabulary: [])
+        XCTAssertEqual(format.audioMessages(pcm: Data([1, 2]), isLast: false), [.data(Data([1, 2]))])
+        XCTAssertEqual(format.audioMessages(pcm: Data(), isLast: true), [])
+    }
+
+    func testParse() {
+        let format = MetaMuseRealtimeFormat(apiKey: "k", language: .auto, vocabulary: [])
+        XCTAssertEqual(format.parse(.text(#"{"sessionId":"abc"}"#)), .ready)
+        XCTAssertEqual(format.parse(.text(#"{"type":"transcript","transcript":"hel","final":false}"#)), .partial("hel"))
+        XCTAssertEqual(format.parse(.text(#"{"type":"transcript","transcript":"hello.","final":true}"#)), .completed("hello."))
+        XCTAssertEqual(format.parse(.text(#"{"type":"error","message":"bad token","sessionId":""}"#)), .failed("bad token"))
+        XCTAssertEqual(format.parse(.text(#"{"type":"speechStart","turnId":1}"#)), .ignored)
+        XCTAssertEqual(format.parse(.data(Data([0]))), .ignored)
+    }
+
+    func testPushToTalkSessionEndsOnTheFinalTranscript() async throws {
+        let socket = FakeStreamSocket()
+        socket.respond = { message, socket in
+            if case let .text(body) = message, body.contains("authorization") {
+                socket.push(.text(#"{"sessionId":"s1"}"#))
+            }
+            if message == .text(#"{"type":"endStream"}"#) {
+                socket.push(.text(#"{"type":"transcript","transcript":"Ship it.","final":false}"#))
+                socket.push(.text(#"{"type":"transcript","transcript":"Ship it Friday.","final":true}"#))
+            }
+        }
+        let session = STTStreamingSession(
+            providerID: .metaMuse,
+            endpointDescription: "t",
+            format: MetaMuseRealtimeFormat(apiKey: "k", language: .auto, vocabulary: []),
+            socket: socket,
+            chunkBytes: 4
+        )
+        var partials: [String] = []
+        session.onPartial = { partials.append($0) }
+        session.start()
+        session.append(Data(repeating: 7, count: 10))
+
+        let text = try await session.finish(timeout: .seconds(2))
+        XCTAssertEqual(text, "Ship it Friday.")
+        XCTAssertEqual(partials, ["Ship it."])
+        let audio = socket.sent.compactMap { if case let .data(data) = $0 { data } else { nil } }
+        XCTAssertEqual(audio.reduce(0) { $0 + $1.count }, 10)
+    }
+
+    func testBatchRequestPartAndResponse() throws {
+        let request = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: MetaMuseSTT.requestJSON(language: .single(code: "en-GB"), vocabulary: ["Whispur"])
+        ) as? [String: Any])
+        XCTAssertEqual(request["mode"] as? String, "PUSH_TO_TALK")
+        XCTAssertEqual(request["audioEncoding"] as? String, "WAV")
+        XCTAssertEqual(request["model"] as? String, MetaMuseSTT.model)
+        XCTAssertEqual(request["languageBias"] as? [String], ["English"])
+        XCTAssertEqual(request["keywords"] as? [String], ["Whispur"])
+
+        let body = #"{"sessionId":"x","transcript":" Hello there. ","audioDurationMs":6800,"turns":[]}"#
+        XCTAssertEqual(MetaMuseSTT.parseTranscript(Data(body.utf8)), "Hello there.")
+        XCTAssertEqual(STTProviderID.metaMuse.keychainKeys, [.metaAPIKey])
+        XCTAssertEqual(KeychainKey.metaAPIKey.rawValue, "meta-api-key")
     }
 }

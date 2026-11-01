@@ -80,6 +80,7 @@ make run
 | Deepgram | Available | Cloud STT via API key |
 | ElevenLabs Scribe | Available | Cloud STT via API key. Optional live streaming while you talk |
 | Mistral Voxtral | Available | Voxtral Mini or Small Transcribe 3, via API key |
+| Meta Muse | Available | Muse Voice Transcribe via a Meta Model API key. Optional live streaming while you talk |
 
 ### Transcript cleanup
 

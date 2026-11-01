@@ -34,6 +34,7 @@ extension KeychainKey {
         case .deepgramAPIKey: "Paste your Deepgram key"
         case .elevenlabsAPIKey: "Paste your ElevenLabs key"
         case .mistralAPIKey: "Paste your Mistral key"
+        case .metaAPIKey: "Paste your Meta Model API key"
         case .awsBedrockAPIKey: "Paste your Bedrock API key"
         case .awsRegion: "us-east-1"
         }
@@ -315,6 +316,7 @@ extension STTProviderID {
         case .deepgram: "Nova-3 transcription with multilingual auto-detect."
         case .elevenlabs: "Scribe transcription with keyword biasing."
         case .mistral: "Voxtral transcription with custom vocabulary."
+        case .metaMuse: "Muse Voice Transcribe with keyword biasing. Can stream while you talk."
         }
     }
 }

@@ -7,6 +7,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     case deepgram
     case elevenlabs
     case mistral
+    case metaMuse
     case apple
 
     var id: String { rawValue }
@@ -18,6 +19,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .deepgram: "Deepgram"
         case .elevenlabs: "ElevenLabs"
         case .mistral: "Mistral Voxtral"
+        case .metaMuse: "Meta Muse"
         case .apple: "Apple (on-device)"
         }
     }
@@ -33,6 +35,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .deepgram: [.deepgramAPIKey]
         case .elevenlabs: [.elevenlabsAPIKey]
         case .mistral: [.mistralAPIKey]
+        case .metaMuse: [.metaAPIKey]
         case .apple: []
         }
     }
@@ -56,7 +59,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
                 STTModelOption(id: "voxtral-mini-transcribe-3", label: "Voxtral Mini Transcribe 3"),
                 STTModelOption(id: "voxtral-small-transcribe-3", label: "Voxtral Small Transcribe 3"),
             ]
-        case .deepgram, .elevenlabs, .apple:
+        case .deepgram, .elevenlabs, .metaMuse, .apple:
             []
         }
     }
@@ -77,7 +80,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "openaiSTTModel"
         case .groqWhisper: "groqWhisperSTTModel"
         case .mistral: "mistralSTTModel"
-        case .deepgram, .elevenlabs, .apple: nil
+        case .deepgram, .elevenlabs, .metaMuse, .apple: nil
         }
     }
 }
@@ -106,7 +109,8 @@ protocol STTProvider {
     ///     acronyms, product words). Providers wire this into their own
     ///     biasing feature — prompt text for Whisper, `keyterm` for
     ///     Deepgram nova-3, `biased_keywords` for ElevenLabs Scribe,
-    ///     `context_bias` for Mistral, `contextualStrings` for Apple. Empty means no biasing.
+    ///     `context_bias` for Mistral, `keywords` for Meta Muse,
+    ///     `contextualStrings` for Apple. Empty means no biasing.
     /// - Returns: The raw transcription text.
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String
 }

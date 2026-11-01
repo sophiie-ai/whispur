@@ -32,3 +32,15 @@ extension Data {
         }
     }
 }
+
+extension Data {
+    /// Append a multipart part with its own content type and no filename,
+    /// such as a JSON parameters part.
+    mutating func appendMultipart(boundary: String, name: String, mimeType: String, data: Data) {
+        append("--\(boundary)\r\n".data(using: .utf8)!)
+        append("Content-Disposition: form-data; name=\"\(name)\"\r\n".data(using: .utf8)!)
+        append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        append(data)
+        append("\r\n".data(using: .utf8)!)
+    }
+}
