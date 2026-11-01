@@ -148,15 +148,9 @@ enum AppGroup: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// The style a group starts with.
-    var defaultStyle: WritingStyle {
-        switch self {
-        case .chat: return .casual
-        case .email: return .formal
-        case .docs: return .standard
-        case .code: return .codeAware
-        }
-    }
+    /// The style a group starts with. Every group starts on Default so
+    /// nothing changes on upgrade; users opt groups into other styles.
+    var defaultStyle: WritingStyle { .standard }
 
     /// Display names, in the order shown under the group.
     var appNames: [String] {
@@ -204,7 +198,7 @@ struct StyleSettings: Codable, Equatable {
     var groups: [AppGroup: WritingStyle]
     var overrides: [AppStyleOverride]
 
-    /// Group defaults; the default style stays as today.
+    /// Every group and every other app on Default: cleanup reads as today.
     static let initial = StyleSettings(
         fallback: .standard,
         groups: Dictionary(uniqueKeysWithValues: AppGroup.allCases.map { ($0, $0.defaultStyle) }),

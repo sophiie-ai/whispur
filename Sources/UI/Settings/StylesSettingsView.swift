@@ -18,7 +18,7 @@ struct StylesSettingsView: View {
                 Button("Reset") { styles.reset() }
                     .buttonStyle(.sophiieSecondary)
                     .disabled(styles.settings == .initial)
-                    .help("Back to the default style for each group, with no per-app styles")
+                    .help("Back to Default for every group and app, with no per-app styles")
             }
 
             HStack(spacing: 10) {
@@ -38,7 +38,7 @@ struct StylesSettingsView: View {
                 }
             }
 
-            SettingsSection("App groups") {
+            SettingsSection("App groups", footer: "Every group starts on Default. Pick a style to change how cleanup reads in those apps.") {
                 SettingsCard {
                     ForEach(Array(AppGroup.allCases.enumerated()), id: \.element) { index, group in
                         if index > 0 { CardDivider() }

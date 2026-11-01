@@ -74,11 +74,27 @@ final class WritingStylesTests: XCTestCase {
         XCTAssertEqual(settings.resolve(bundleID: nil).style, .formal)
     }
 
-    func testInitialSettingsKeepTheDefaultOutsideGroups() {
+    func testInitialSettingsPutEveryGroupOnDefault() {
         let initial = StyleSettings.initial
         XCTAssertEqual(initial.fallback, .standard, "Apps outside every group behave exactly as today")
         for group in AppGroup.allCases {
-            XCTAssertEqual(initial.style(for: group), group.defaultStyle)
+            XCTAssertEqual(group.defaultStyle, .standard, "\(group) starts on Default")
+            XCTAssertEqual(initial.style(for: group), .standard, "\(group) starts on Default")
+        }
+    }
+
+    @MainActor
+    func testUpgradeWithoutACustomPromptChangesNothing() throws {
+        let suite = "ai.sophiie.whispur.tests.styles.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = StyleStore(defaults: defaults, hasCustomPrompt: false)
+        XCTAssertEqual(store.settings, .initial)
+        for bundleID in ["com.tinyspeck.slackmacgap", "com.apple.mail", "md.obsidian", "com.mitchellh.ghostty", "com.apple.Safari"] {
+            let choice = store.choice(for: bundleID, customPrompt: "")
+            XCTAssertEqual(choice.style, .standard, bundleID)
+            XCTAssertEqual(choice.systemPrompt, Prompts.defaultCleanup, bundleID)
         }
     }
 
@@ -120,8 +136,9 @@ final class WritingStylesTests: XCTestCase {
         XCTAssertEqual(choice.style, .standard)
         XCTAssertEqual(choice.systemPrompt, Prompts.defaultCleanup)
 
+        store.setStyle(.casual, for: .chat)
         let slack = store.choice(for: "com.tinyspeck.slackmacgap", customPrompt: "")
-        XCTAssertEqual(slack.style, .casual)
+        XCTAssertEqual(slack.style, .casual, "A group the user opted into keeps its style")
         XCTAssertEqual(slack.systemPrompt, Prompts.cleanupPrompt(for: .casual, customPrompt: ""))
     }
 
