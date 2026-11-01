@@ -149,7 +149,7 @@ final class ProviderSetupTests: XCTestCase {
     func testKeyChecksAreReadOnlyGets() {
         let checks = STTProviderID.allCases.compactMap(ProviderKeyCheck.forSpeech)
             + LLMProviderID.allCases.compactMap(ProviderKeyCheck.forCleanup)
-        XCTAssertEqual(checks.count, 7, "Apple and Bedrock have no key check")
+        XCTAssertEqual(checks.count, 8, "Apple and Bedrock have no key check")
         for check in checks {
             let request = check.makeRequest(secret: "secret", baseURLOverride: { _ in nil })
             XCTAssertEqual(request?.httpMethod, "GET", check.providerID)
@@ -176,6 +176,10 @@ final class ProviderSetupTests: XCTestCase {
         let groq = try XCTUnwrap(ProviderKeyCheck.forSpeech(.groqWhisper)?.makeRequest(secret: "k", baseURLOverride: { _ in nil }))
         XCTAssertEqual(groq.url?.absoluteString, "https://api.groq.com/openai/v1/models")
         XCTAssertEqual(groq.value(forHTTPHeaderField: "Authorization"), "Bearer k")
+
+        let mistral = try XCTUnwrap(ProviderKeyCheck.forSpeech(.mistral)?.makeRequest(secret: "k", baseURLOverride: { _ in nil }))
+        XCTAssertEqual(mistral.url?.absoluteString, "https://api.mistral.ai/v1/models")
+        XCTAssertEqual(mistral.value(forHTTPHeaderField: "Authorization"), "Bearer k")
     }
 
     func testOpenAIKeyCheckFollowsTheSectionBaseURLOverride() throws {

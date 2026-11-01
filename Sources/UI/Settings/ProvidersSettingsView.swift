@@ -259,7 +259,7 @@ private struct STTLanguagePicker: View {
             return "Deepgram will use nova-3's multilingual mode (English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch)."
         case (.apple, .auto):
             return "Apple has no auto mode, so Whispur falls back to your system language."
-        case (.openai, .auto), (.groqWhisper, .auto), (.elevenlabs, .auto):
+        case (.openai, .auto), (.groqWhisper, .auto), (.elevenlabs, .auto), (.mistral, .auto):
             return "The provider will detect the language on each recording."
         default:
             return "Whispur will tell \(provider.displayName) which language to expect."

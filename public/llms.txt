@@ -6,7 +6,7 @@ Key facts:
 
 - Price: free. License: MIT. Publisher: Sophiie AI Pty Ltd (https://sophiie.ai).
 - Install: download the signed, Apple-notarized DMG. Homebrew is not available yet.
-- Speech to text: Apple speech recognition (built into macOS, no key, the default), OpenAI (gpt-transcribe by default, whisper-1 until it retires in February 2027, custom OpenAI-compatible base URL supported), Groq (Whisper Large v3 or v3 Turbo), Deepgram (Nova-3), ElevenLabs (Scribe v2).
+- Speech to text: Apple speech recognition (built into macOS, no key, the default), OpenAI (gpt-transcribe by default, whisper-1 until it retires in February 2027, custom OpenAI-compatible base URL supported), Groq (Whisper Large v3 or v3 Turbo), Deepgram (Nova-3), ElevenLabs (Scribe v2), Mistral (Voxtral Mini or Small Transcribe 3).
 - Optional cleanup LLMs: Anthropic Claude (default Claude Sonnet 4), OpenAI (default GPT-4o mini, custom base URL supported), Groq (default Llama 3.3 70B), AWS Bedrock (Claude via a Bedrock API key). Every cleanup provider accepts a custom model name.
 - Shortcuts: hold Fn to talk; Command + Fn toggles hands-free recording; Esc cancels. Other presets, including Fn twice, can be chosen in Settings (set "Press 🌐 key to" to Do Nothing in macOS Keyboard settings for Fn twice).
 - Privacy: API keys are stored in the macOS Keychain; audio and text go only to the providers you configure; the app has no telemetry. Updates come through Sparkle with EdDSA-signed releases.

@@ -6,6 +6,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     case groqWhisper
     case deepgram
     case elevenlabs
+    case mistral
     case apple
 
     var id: String { rawValue }
@@ -16,6 +17,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .groqWhisper: "Groq Whisper"
         case .deepgram: "Deepgram"
         case .elevenlabs: "ElevenLabs"
+        case .mistral: "Mistral Voxtral"
         case .apple: "Apple (on-device)"
         }
     }
@@ -30,6 +32,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .groqWhisper: [.groqAPIKey]
         case .deepgram: [.deepgramAPIKey]
         case .elevenlabs: [.elevenlabsAPIKey]
+        case .mistral: [.mistralAPIKey]
         case .apple: []
         }
     }
@@ -47,6 +50,11 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
             [
                 STTModelOption(id: "whisper-large-v3", label: "Whisper Large v3"),
                 STTModelOption(id: "whisper-large-v3-turbo", label: "Whisper Large v3 Turbo"),
+            ]
+        case .mistral:
+            [
+                STTModelOption(id: "voxtral-mini-transcribe-3", label: "Voxtral Mini Transcribe 3"),
+                STTModelOption(id: "voxtral-small-transcribe-3", label: "Voxtral Small Transcribe 3"),
             ]
         case .deepgram, .elevenlabs, .apple:
             []
@@ -68,6 +76,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .openai: "openaiSTTModel"
         case .groqWhisper: "groqWhisperSTTModel"
+        case .mistral: "mistralSTTModel"
         case .deepgram, .elevenlabs, .apple: nil
         }
     }
@@ -97,7 +106,7 @@ protocol STTProvider {
     ///     acronyms, product words). Providers wire this into their own
     ///     biasing feature — prompt text for Whisper, `keyterm` for
     ///     Deepgram nova-3, `biased_keywords` for ElevenLabs Scribe,
-    ///     `contextualStrings` for Apple. Empty means no biasing.
+    ///     `context_bias` for Mistral, `contextualStrings` for Apple. Empty means no biasing.
     /// - Returns: The raw transcription text.
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String
 }
