@@ -134,4 +134,25 @@ final class STTProviderTests: XCTestCase {
         XCTAssertEqual(STTProviderID.mistral.modelOptions.map(\.id), ["voxtral-mini-transcribe-3", "voxtral-small-transcribe-3"])
         XCTAssertTrue(STTProviderID.mistral.requiresAPIKey)
     }
+
+    // MARK: - Apple engine choice
+
+    func testAppleUsesSpeechAnalyzerOnlyWhenTheModelIsReady() {
+        XCTAssertEqual(AppleSpeechEngineChoice.route(localeSupported: true, assets: .installed), .analyzer)
+        XCTAssertEqual(AppleSpeechEngineChoice.route(localeSupported: true, assets: .downloadable), .installThenAnalyzer)
+        XCTAssertEqual(AppleSpeechEngineChoice.route(localeSupported: true, assets: .downloading), .legacy)
+        XCTAssertEqual(AppleSpeechEngineChoice.route(localeSupported: true, assets: .unsupported), .legacy)
+        XCTAssertEqual(AppleSpeechEngineChoice.route(localeSupported: false, assets: .installed), .legacy)
+    }
+
+    func testAppleTranscriptKeepsTheNewestResultPerRangeInOrder() {
+        let joined = AppleSpeechEngineChoice.joinedTranscript([
+            (start: 2.5, text: "second par"),
+            (start: 0.0, text: "First part,"),
+            (start: 2.5, text: " second part. "),
+            (start: 5.0, text: "  "),
+        ])
+        XCTAssertEqual(joined, "First part, second part.")
+        XCTAssertEqual(AppleSpeechEngineChoice.joinedTranscript([]), "")
+    }
 }

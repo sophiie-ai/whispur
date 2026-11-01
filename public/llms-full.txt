@@ -46,7 +46,7 @@ Start with Apple speech recognition and no API key, or add a key for a cloud pro
 ### Speech to text
 | Provider | Notes |
 | --- | --- |
-| Apple speech recognition | Built into macOS, no key, default |
+| Apple speech recognition | Built into macOS, no key, default. Uses the newer SpeechAnalyzer model on macOS 26 and later |
 | OpenAI | gpt-transcribe by default, whisper-1 until February 2027, or any OpenAI-compatible endpoint |
 | Groq | Whisper Large v3 or v3 Turbo |
 | Deepgram | Nova-3 |
