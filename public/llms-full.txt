@@ -28,7 +28,7 @@ Run transcripts through Claude, OpenAI, Groq or AWS Bedrock to fix punctuation a
 No account, no subscription, no middleman. API keys live in the macOS Keychain and requests go straight to the provider you chose.
 
 ### See every request
-The Activity tab shows raw and cleaned transcripts. The Requests tab lists every provider API call with its timing and any error.
+The Activity tab shows raw and cleaned transcripts. When a dictation fails, Whispur keeps that recording (and only that one) for 24 hours; Retry transcribes it again and copies the text to the clipboard. The Requests tab lists every provider API call with its timing and any error.
 
 ### Also included
 - Choose your microphone

@@ -46,6 +46,8 @@ final class AppState: ObservableObject {
     let recorder: AudioRecorder
     let hotkeyManager: HotkeyManager
     let historyStore: PipelineHistoryStore
+    /// Retries failed dictations from Activity and Requests.
+    let retrier: FailedDictationRetrier
     let stats: DictationStats
     let providerRequestLog: ProviderRequestLog
     let keychain: KeychainManager
@@ -65,6 +67,7 @@ final class AppState: ObservableObject {
     private var phaseCancellable: AnyCancellable?
     private var statsCancellable: AnyCancellable?
     private var lastCountedResultID: UUID?
+    private var failedAudioPurgeTask: Task<Void, Never>?
 
     /// - Parameters:
     ///   - historyStore: Saved dictations. Defaults to the on-disk store;
@@ -117,6 +120,10 @@ final class AppState: ObservableObject {
         self.registry = registry
         self.recorder = recorder
         self.historyStore = historyStore
+        self.retrier = FailedDictationRetrier(history: historyStore) { [weak pipeline] audioURL, item in
+            guard let pipeline else { throw CancellationError() }
+            return try await pipeline.retryTranscription(audioURL: audioURL, appBundleID: item.appBundleID, dictationID: item.id)
+        }
         self.stats = stats
         self.lastCountedResultID = historyStore.items.first?.id
         self.pipeline = pipeline
@@ -160,6 +167,7 @@ final class AppState: ObservableObject {
             guard let self else { return }
             Self.clearRetiredModesStorage()
             self.hotkeyManager.start()
+            self.startFailedAudioPurge()
             self.startPermissionMonitoring()
             self.sparkleUpdater.checkForUpdatesInBackground()
         }
@@ -245,7 +253,25 @@ final class AppState: ObservableObject {
     }
 
     var hasCompletedFirstDictation: Bool {
-        !historyStore.items.isEmpty
+        historyStore.items.contains { !$0.isFailed }
+    }
+
+    /// Retries a failed dictation with the current settings and copies the
+    /// text.
+    func retryFailedDictation(_ id: UUID) {
+        syncPipelineConfig()
+        Task { await retrier.retry(id) }
+    }
+
+    /// Failed recordings are kept for 24 hours: purge at launch, then hourly.
+    private func startFailedAudioPurge() {
+        failedAudioPurgeTask?.cancel()
+        failedAudioPurgeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.historyStore.purgeExpiredAudio()
+                try? await Task.sleep(for: .seconds(60 * 60))
+            }
+        }
     }
 
     var setupProgress: Double {

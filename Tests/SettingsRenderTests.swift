@@ -72,6 +72,13 @@ final class SettingsRenderTests: XCTestCase {
                     try render(view, scheme: scheme, size: Self.tallSize, to: dir.appendingPathComponent("\(tab.rawValue)-full-\(suffix).png"))
                 }
             }
+            if let failed = appState.historyStore.items.first(where: { appState.historyStore.canRetry($0) }) {
+                defaults.set(SettingsTab.activity.rawValue, forKey: SettingsView.selectedTabKey)
+                appState.retrier.setStateForRendering(running: [failed.id], toast: "Copied to clipboard")
+                let retrying = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: ready, defaults: defaults)
+                try render(retrying, scheme: scheme, to: dir.appendingPathComponent("activity-retrying-\(suffix).png"))
+                appState.retrier.setStateForRendering(running: [], toast: nil)
+            }
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
             try render(needsSetup, scheme: scheme, to: dir.appendingPathComponent("dictation-needs-setup-\(suffix).png"))
@@ -144,6 +151,30 @@ final class SettingsRenderTests: XCTestCase {
         }
         let historyURL = scratch.appendingPathComponent("history.json")
         try JSONEncoder().encode(items).write(to: historyURL)
+        // One failed dictation with its recording kept, one whose recording
+        // expired, and one that was retried.
+        let renderHistory = PipelineHistoryStore(fileURL: historyURL)
+        let wav = scratch.appendingPathComponent("failed.wav")
+        try Data(repeating: 0, count: 64).write(to: wav)
+        renderHistory.recordFailure(
+            error: "Groq Whisper error (503): Service unavailable.",
+            wavURL: nil,
+            sttProvider: .groqWhisper, llmProvider: .groq, appBundleID: "com.apple.mail", style: .formal,
+            at: now.addingTimeInterval(-2 * 86_400)
+        )
+        let retried = renderHistory.recordFailure(
+            error: "Groq Whisper transcription timed out.",
+            wavURL: nil,
+            sttProvider: .groqWhisper, llmProvider: .groq, appBundleID: nil, style: nil,
+            at: now.addingTimeInterval(-3600)
+        )
+        renderHistory.markRetried(retried.id, rawTranscript: "hola que tal", text: "Hola, ¿qué tal?", llmModel: "openai/gpt-oss-20b", style: .standard)
+        renderHistory.recordFailure(
+            error: "Groq Whisper transcription timed out.",
+            wavURL: wav,
+            sttProvider: .groqWhisper, llmProvider: .groq, appBundleID: "com.tinyspeck.slackmacgap", style: .casual,
+            at: now.addingTimeInterval(-120)
+        )
 
         let statsURL = scratch.appendingPathComponent("stats.json")
         let stats = #"{"totalWords":18240,"dailyWords":{},"totalDictations":1284}"#
@@ -183,7 +214,7 @@ final class SettingsRenderTests: XCTestCase {
         }
 
         return AppState(
-            historyStore: PipelineHistoryStore(fileURL: historyURL),
+            historyStore: renderHistory,
             stats: DictationStats(fileURL: statsURL),
             providerRequestLog: requestLog,
             vocabulary: vocabulary,

@@ -188,3 +188,19 @@ enum TranscriptDecision {
         return ratio >= 1.4
     }
 }
+
+/// Which errors make a dictation FAILED (recording kept, Retry offered).
+///
+/// Only errors that leave no usable text count: transcription errors and
+/// timeouts, a missing key, a recording that couldn't be normalized. A
+/// cleanup error never reaches here (the raw transcript is pasted, see
+/// `TranscriptDecision.finalOutcome`), and neither does silence (dismissed).
+/// Cancelling a dictation is not a failure.
+enum DictationFailureClassifier {
+    static func isFailure(_ error: Error, taskCancelled: Bool) -> Bool {
+        if taskCancelled || error is CancellationError { return false }
+        if (error as? URLError)?.code == .cancelled { return false }
+        if case .cancelled? = error as? STTStreamingError { return false }
+        return true
+    }
+}

@@ -22,6 +22,15 @@ struct ProviderRequestLogEntry: Codable, Identifiable, Hashable {
     let requestSummary: String
     let responseBodyPreview: String
     let errorMessage: String?
+    /// The dictation the request belonged to, when it ran inside one. Nil for
+    /// key checks and for entries saved before this was recorded.
+    var dictationID: UUID? = nil
+}
+
+/// Context a provider request runs in, carried as task-locals so providers
+/// don't have to pass it through.
+enum ProviderRequestContext {
+    @TaskLocal static var dictationID: UUID?
 }
 
 extension ProviderRequestLogEntry {
