@@ -107,7 +107,8 @@ struct SettingsView: View {
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
             speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor.keys).isReady,
-            hasDictated: !historyStore.items.isEmpty
+            hasDictated: !historyStore.items.isEmpty,
+            hasShortcut: appState.hasAnyShortcut
         )
     }
 

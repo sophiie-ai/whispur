@@ -125,15 +125,18 @@ struct SettingsSetupState: Equatable {
     var accessibilityGranted: Bool
     var speechReady: Bool
     var hasDictated: Bool
+    /// At least one of the two dictation shortcuts is set.
+    var hasShortcut: Bool = true
 
-    /// Ready for daily use: both permissions and a working speech provider.
+    /// Ready for daily use: both permissions, a working speech provider, and
+    /// a shortcut to start dictating with.
     var isComplete: Bool {
-        microphoneGranted && accessibilityGranted && speechReady
+        microphoneGranted && accessibilityGranted && speechReady && hasShortcut
     }
 
     /// Get started steps still open (the first dictation counts as a step).
     var pendingSteps: Int {
-        [microphoneGranted, accessibilityGranted, speechReady, hasDictated].filter { !$0 }.count
+        [microphoneGranted, accessibilityGranted, speechReady, hasShortcut, hasDictated].filter { !$0 }.count
     }
 
     var landingTab: SettingsTab {

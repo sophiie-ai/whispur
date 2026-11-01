@@ -248,7 +248,7 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "command")
-                    Text(appState.holdShortcut.menuTitle)
+                    Text(appState.holdShortcut?.menuTitle ?? appState.toggleShortcut?.menuTitle ?? "No shortcut")
                 }
                 .font(SophiieTheme.Typography.captionStrong)
                 .padding(.horizontal, 10)

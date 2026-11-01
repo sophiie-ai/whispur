@@ -37,7 +37,8 @@ final class AppState: ObservableObject {
     /// Settings master switch: while off, the dictation shortcuts do nothing.
     @AppStorage("dictationEnabled") private(set) var dictationEnabled: Bool = true
 
-    @Published var holdShortcut: ShortcutBinding
+    /// nil when the user removed the hold-to-talk shortcut.
+    @Published var holdShortcut: ShortcutBinding?
     @Published var toggleShortcut: ShortcutBinding?
     @Published private(set) var microphoneAccessGranted = AudioRecorder.hasMicrophoneAccess
 
@@ -73,7 +74,7 @@ final class AppState: ObservableObject {
         stats: DictationStats? = nil,
         startsServices: Bool = true
     ) {
-        let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
+        let loadedHoldShortcut = Self.loadHoldShortcut()
         let sanitizedToggleShortcut = Self.loadToggleShortcut(holdShortcut: loadedHoldShortcut)
 
         _holdShortcut = Published(initialValue: loadedHoldShortcut)
@@ -244,7 +245,7 @@ final class AppState: ObservableObject {
             microphoneAccessGranted,
             hotkeyManager.isAccessibilityGranted,
             isSelectedSTTConfigured,
-            true,
+            hasAnyShortcut,
             hasCompletedFirstDictation
         ]
         .filter { $0 }
@@ -267,11 +268,27 @@ final class AppState: ObservableObject {
         toggleShortcut != nil
     }
 
+    /// At least one dictation shortcut is set. With none, dictation still
+    /// starts from the menu bar.
+    var hasAnyShortcut: Bool {
+        holdShortcut != nil || toggleShortcut != nil
+    }
+
     var shortcutSummary: String {
-        if let toggleShortcut {
-            return "\(holdShortcut.menuTitle) to talk, \(toggleShortcut.menuTitle) to latch"
+        Self.shortcutSummary(hold: holdShortcut, toggle: toggleShortcut)
+    }
+
+    static func shortcutSummary(hold: ShortcutBinding?, toggle: ShortcutBinding?) -> String {
+        switch (hold, toggle) {
+        case let (hold?, toggle?):
+            return "\(hold.menuTitle) to talk, \(toggle.menuTitle) to latch"
+        case let (hold?, nil):
+            return "\(hold.menuTitle) to talk"
+        case let (nil, toggle?):
+            return "\(toggle.menuTitle) to latch"
+        case (nil, nil):
+            return "No shortcut set. Use Start in the menu bar or add one in Settings."
         }
-        return "\(holdShortcut.menuTitle) to talk"
     }
 
     /// "Press Fn twice to start, press Fn once to stop." for the double-press
@@ -304,6 +321,7 @@ final class AppState: ObservableObject {
             return "Preparing your microphone."
         case .recording:
             if pipeline.activeTriggerMode == .hold {
+                guard let holdShortcut else { return "Release the shortcut to transcribe." }
                 return "Release \(holdShortcut.menuTitle) to transcribe."
             }
             if let toggleShortcut {
@@ -399,15 +417,16 @@ final class AppState: ObservableObject {
         onboardingCompleted = true
     }
 
-    func setHoldShortcut(_ binding: ShortcutBinding) {
-        guard binding != toggleShortcut else { return }
+    /// Pass nil to remove the hold-to-talk shortcut.
+    func setHoldShortcut(_ binding: ShortcutBinding?) {
+        guard binding == nil || binding != toggleShortcut else { return }
         holdShortcut = binding
         persistShortcut(binding, forKey: "holdShortcut")
         hotkeyManager.holdBinding = binding
     }
 
     func setToggleShortcut(_ binding: ShortcutBinding?) {
-        guard binding != holdShortcut else { return }
+        guard binding == nil || binding != holdShortcut else { return }
         toggleShortcut = binding
         persistShortcut(binding, forKey: "toggleShortcut")
         hotkeyManager.toggleBinding = binding
@@ -574,23 +593,22 @@ final class AppState: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    private static func loadShortcut(forKey key: String, fallback: ShortcutBinding) -> ShortcutBinding {
-        guard let storedValue = UserDefaults.standard.string(forKey: key),
-              let binding = ShortcutBinding(storageValue: storedValue) else {
-            return fallback
-        }
-        return binding
+    /// Users who never picked a hold shortcut (new installs) get Fn; a stored
+    /// "off" means the user removed it and stays removed across launches.
+    static func loadHoldShortcut(defaults: UserDefaults = .standard) -> ShortcutBinding? {
+        loadOptionalShortcut(forKey: "holdShortcut", fallback: .fnKey, defaults: defaults)
     }
 
     /// Users who never picked a toggle shortcut get `ShortcutBinding.defaultToggle`
     /// (the fallback is never written back); an explicit stored choice, including
     /// "off" and Fn twice, is kept unless it collides with the hold shortcut.
     static func loadToggleShortcut(
-        holdShortcut: ShortcutBinding,
+        holdShortcut: ShortcutBinding?,
         defaults: UserDefaults = .standard
     ) -> ShortcutBinding? {
         let loaded = loadOptionalShortcut(forKey: "toggleShortcut", fallback: .defaultToggle, defaults: defaults)
-        return loaded == holdShortcut ? .defaultToggle : loaded
+        guard let loaded, loaded == holdShortcut else { return loaded }
+        return .defaultToggle
     }
 
     private static func loadOptionalShortcut(

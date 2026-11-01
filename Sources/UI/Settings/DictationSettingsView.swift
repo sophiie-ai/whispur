@@ -127,29 +127,76 @@ struct DictationSettingsView: View {
     private var shortcutsSection: some View {
         SettingsSection("Shortcuts") {
             SettingsCard {
-                SettingsRow(icon: "hand.raised", title: "Hold to talk", subtitle: "Hold to dictate. Release to finish.") {
-                    ShortcutMenu(
-                        title: "Hold to talk shortcut",
-                        current: appState.holdShortcut,
+                holdRow
+                if appState.holdShortcut == nil {
+                    addShortcutButton(
+                        title: "Add hold to talk shortcut",
                         presets: ShortcutBinding.holdPresets,
                         unavailable: appState.toggleShortcut,
-                        onSelect: appState.setHoldShortcut
+                        onSelect: { appState.setHoldShortcut($0) }
                     )
                 }
                 CardDivider()
                 handsFreeRow
                 if appState.toggleShortcut == nil {
-                    HStack {
-                        Spacer()
-                        AddShortcutMenu(
-                            presets: ShortcutBinding.togglePresets,
-                            unavailable: appState.holdShortcut,
-                            onSelect: { appState.setToggleShortcut($0) }
-                        )
-                    }
-                    .padding(.bottom, 12)
+                    addShortcutButton(
+                        title: "Add hands-free shortcut",
+                        presets: ShortcutBinding.togglePresets,
+                        unavailable: appState.holdShortcut,
+                        onSelect: { appState.setToggleShortcut($0) }
+                    )
+                }
+                if !appState.hasAnyShortcut {
+                    CardDivider(leadingInset: 0)
+                    Label(Self.noShortcutHint, systemImage: "exclamationmark.triangle")
+                        .font(SophiieTheme.Typography.caption)
+                        .foregroundStyle(SophiieTheme.Palette.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 12)
                 }
             }
+        }
+    }
+
+    /// Shown when both shortcuts are removed.
+    static let noShortcutHint = "No shortcut set. Dictation only starts from Start in the menu bar until you add one."
+
+    private func addShortcutButton(
+        title: String,
+        presets: [ShortcutBinding],
+        unavailable: ShortcutBinding?,
+        onSelect: @escaping (ShortcutBinding) -> Void
+    ) -> some View {
+        HStack {
+            Spacer()
+            AddShortcutMenu(title: title, presets: presets, unavailable: unavailable, onSelect: onSelect)
+        }
+        .padding(.bottom, 12)
+    }
+
+    @ViewBuilder
+    private var holdRow: some View {
+        if let hold = appState.holdShortcut {
+            SettingsRow(icon: "hand.raised", title: "Hold to talk", subtitle: "Hold to dictate. Release to finish.") {
+                HStack(spacing: 4) {
+                    ShortcutMenu(
+                        title: "Hold to talk shortcut",
+                        current: hold,
+                        presets: ShortcutBinding.holdPresets,
+                        unavailable: appState.toggleShortcut,
+                        onSelect: { appState.setHoldShortcut($0) }
+                    )
+                    InlineIconButton(systemName: "xmark", label: "Remove hold to talk shortcut") {
+                        appState.setHoldShortcut(nil)
+                    }
+                }
+            }
+        } else {
+            SettingsRow(
+                icon: "hand.raised",
+                title: "Hold to talk",
+                subtitle: "Off. Add a shortcut to dictate while holding a key."
+            )
         }
     }
 
@@ -249,6 +296,8 @@ struct ShortcutMenu: View {
 
 /// "Add shortcut", shown only while an action has no shortcut.
 struct AddShortcutMenu: View {
+    /// Accessibility label, e.g. "Add hands-free shortcut".
+    let title: String
     let presets: [ShortcutBinding]
     let unavailable: ShortcutBinding?
     let onSelect: (ShortcutBinding) -> Void
@@ -269,6 +318,6 @@ struct AddShortcutMenu: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel("Add hands-free shortcut")
+        .accessibilityLabel(title)
     }
 }

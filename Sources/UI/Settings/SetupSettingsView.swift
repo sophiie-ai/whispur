@@ -43,7 +43,7 @@ struct SetupSettingsView: View {
                 ProgressView(value: appState.setupProgress)
 
                 HStack(spacing: 10) {
-                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
+                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
                     ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
                 }
             }
@@ -86,7 +86,7 @@ struct SetupSettingsView: View {
                 SetupChecklistRow(
                     title: "Review your shortcuts",
                     detail: appState.shortcutSummary,
-                    isComplete: true,
+                    isComplete: appState.hasAnyShortcut,
                     actionTitle: "Shortcuts",
                     action: { openTab(.dictation) }
                 )
