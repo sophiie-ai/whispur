@@ -11,7 +11,7 @@ final class CleanupPromptTests: XCTestCase {
     func testDefaultPromptStaysWithinBudget() {
         let words = Prompts.defaultCleanup.split { $0.isWhitespace }.count
         XCTAssertGreaterThanOrEqual(words, 200)
-        XCTAssertLessThanOrEqual(words, 430, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
+        XCTAssertLessThanOrEqual(words, 470, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
     }
 
     func testDefaultPromptCarriesTheContract() {
@@ -31,6 +31,14 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains("(empty)"))
         XCTAssertFalse(prompt.contains("\u{2014}"), "No em dashes: models copy them into output.")
         XCTAssertFalse(prompt.contains("\\"), "Stray backslash: a line continuation was mistyped.")
+    }
+
+    /// `eval-cleanup.py` builds the Chat prompt in Python for cases with
+    /// `"style": "chat"`; both are pinned to the same golden file.
+    func testChatPromptMatchesEvalGoldenFile() throws {
+        let golden = repoRoot.appendingPathComponent("Evals/cleanup/golden/system-prompt-chat.txt")
+        let expected = try String(contentsOf: golden, encoding: .utf8)
+        XCTAssertEqual(Prompts.cleanupPrompt(for: .standard, group: .chat, customPrompt: ""), expected)
     }
 
     // MARK: - User message

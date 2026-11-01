@@ -38,8 +38,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PROMPTS_SWIFT = "Sources/Pipeline/Prompts.swift"
+STYLES_SWIFT = "Sources/Pipeline/WritingStyles.swift"
 CASES_PATH = ROOT / "Evals/cleanup/cases.jsonl"
 GOLDEN_PATH = ROOT / "Evals/cleanup/golden/user-message.txt"
+GOLDEN_CHAT_PROMPT_PATH = ROOT / "Evals/cleanup/golden/system-prompt-chat.txt"
+# A case's `style` is the kind of app it is dictated into: an AppGroup raw
+# value, or "default" for an app outside every group. Every group is on the
+# Default writing style, as on a fresh install.
+APP_STYLES = ("default", "chat", "email", "docs", "code")
 USER_AGENT = "whispur-cleanup-eval/1.0"
 
 # Mirrors LLMProviderID.defaultModel and OpenAIChatFormat.body in
@@ -126,11 +132,11 @@ def swift_multiline_literal(source: str, name: str) -> str:
     return "".join(out)
 
 
-def load_prompt_source(which: str) -> str:
+def load_swift_source(which: str, path: str = PROMPTS_SWIFT) -> str:
     if which == "new":
-        return (ROOT / PROMPTS_SWIFT).read_text()
+        return (ROOT / path).read_text()
     return subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"origin/main:{PROMPTS_SWIFT}"],
+        ["git", "-C", str(ROOT), "show", f"origin/main:{path}"],
         check=True, capture_output=True, text=True,
     ).stdout
 
@@ -189,15 +195,36 @@ def cleanup_max_tokens(chars: int) -> int:
 class RequestBuilder:
     def __init__(self, which: str):
         self.which = which
-        source = load_prompt_source(which)
+        source = load_swift_source(which)
         self.system_prompt = swift_multiline_literal(source, "defaultCleanup")
         self.contract = (swift_multiline_literal(source, "cleanupOutputContract")
                          if "static let cleanupOutputContract" in source else None)
+        # Per-app formatting sections (Prompts.cleanupPrompt(for:group:)).
+        # A prompt without them uses the shared prompt in every app.
+        styles = load_swift_source(which, STYLES_SWIFT)
+        self.group_sections = {}
+        if "static let chatFormatting" in styles:
+            self.group_sections["chat"] = swift_multiline_literal(styles, "chatFormatting")
+        marker = re.search(r'static let styleInsertionMarker = "([^"]*)"', styles)
+        self.marker = marker.group(1) if marker else None
 
-    def build(self, transcript: str, vocabulary: list[str]) -> tuple[str, str]:
+    def system_prompt_for(self, style: str) -> str:
+        """Mirrors Prompts.cleanupPrompt(for: .standard, group:, customPrompt: "")."""
+        if style not in APP_STYLES:
+            raise SystemExit(f"unknown case style {style!r}; expected one of {', '.join(APP_STYLES)}")
+        section = self.group_sections.get(style)
+        if section is None:
+            return self.system_prompt
+        at = self.system_prompt.index(self.marker)
+        block = (f"App: {style.capitalize()}. This formatting rule takes priority over the cleaning rules "
+                 f"above and the examples below where they conflict:\n{section}\n\n")
+        return self.system_prompt[:at] + block + self.system_prompt[at:]
+
+    def build(self, transcript: str, vocabulary: list[str], style: str = "default") -> tuple[str, str]:
+        system_prompt = self.system_prompt_for(style)
         if self.contract is not None:
-            return self.system_prompt, new_user_message(transcript, vocabulary, self.contract)
-        return current_request(self.system_prompt, transcript, vocabulary)
+            return system_prompt, new_user_message(transcript, vocabulary, self.contract)
+        return current_request(system_prompt, transcript, vocabulary)
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +416,9 @@ def self_test() -> int:
     print(f"user message matches golden: {ok}")
     if not ok:
         print("--- built ---\n" + built + "\n--- golden ---\n" + expected)
+    chat_ok = builder.system_prompt_for("chat") == GOLDEN_CHAT_PROMPT_PATH.read_text()
+    print(f"chat system prompt matches golden: {chat_ok}")
+    ok = ok and chat_ok
     words = len(builder.system_prompt.split())
     print(f"new system prompt: {words} words, {len(builder.system_prompt)} chars")
     current = RequestBuilder("current")
@@ -435,7 +465,8 @@ def main() -> int:
 
     jobs = []
     for case in cases:
-        system_prompt, user_message = builder.build(case["input"], case.get("vocabulary", []))
+        system_prompt, user_message = builder.build(case["input"], case.get("vocabulary", []),
+                                                    case.get("style", "default"))
         max_tokens = cleanup_max_tokens(len(case["input"]))
         for run in range(args.runs):
             jobs.append((case, run, system_prompt, user_message, max_tokens))

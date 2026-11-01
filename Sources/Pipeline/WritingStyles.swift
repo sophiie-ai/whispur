@@ -86,29 +86,48 @@ extension Prompts {
     /// paragraph of the default prompt.
     static let styleInsertionMarker = "Output only the cleaned text, with no preamble"
 
-    /// The system prompt for a style. Default returns `defaultCleanup`
+    /// Chat apps get messages, not documents: spoken enumerations stay
+    /// prose there. Added for every style but Custom.
+    static let chatFormatting = """
+        - Chat message: keep enumerations ("first ... second ...", "number one ...") as prose, \
+          ordinal words included, never a numbered list. Lists dictated with "bullet" or "next \
+          item" still apply.
+        """
+
+    /// The system prompt for a style, in an app of `group` (nil for apps
+    /// outside every group). Default outside Chat returns `defaultCleanup`
     /// unchanged; Custom returns the user's prompt (or the default when it is
-    /// empty); every other style is the default prompt with one tone and
-    /// formatting section added, so the shared rules, examples and output
+    /// empty) whatever the app; every other style is the default prompt with
+    /// one tone and formatting section added, plus the Chat formatting
+    /// section in Chat apps, so the shared rules, examples and output
     /// contract stay identical.
-    static func cleanupPrompt(for style: WritingStyle, customPrompt: String) -> String {
+    static func cleanupPrompt(for style: WritingStyle, group: AppGroup? = nil, customPrompt: String) -> String {
         if style == .custom {
             let trimmed = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? defaultCleanup : customPrompt
+            return trimmed.isEmpty ? cleanupPrompt(for: .standard, group: group, customPrompt: "") : customPrompt
         }
-        guard let section = style.promptSection,
-              let marker = defaultCleanup.range(of: styleInsertionMarker) else {
-            return defaultCleanup
-        }
-        let block = """
-            Style: \(style.title). These style rules take priority over the cleaning rules above \
-            and the examples below where they conflict:
-            \(section)
+        guard let marker = defaultCleanup.range(of: styleInsertionMarker) else { return defaultCleanup }
+        var blocks = ""
+        if let section = style.promptSection {
+            blocks += """
+                Style: \(style.title). These style rules take priority over the cleaning rules above \
+                and the examples below where they conflict:
+                \(section)
 
 
-            """
+                """
+        }
+        if let group, let section = group.promptSection {
+            blocks += """
+                App: \(group.title). This formatting rule takes priority over the cleaning rules \
+                above and the examples below where they conflict:
+                \(section)
+
+
+                """
+        }
         var prompt = defaultCleanup
-        prompt.insert(contentsOf: block, at: marker.lowerBound)
+        prompt.insert(contentsOf: blocks, at: marker.lowerBound)
         return prompt
     }
 }
@@ -171,6 +190,16 @@ enum AppGroup: String, Codable, CaseIterable, Identifiable {
 
     static func group(for bundleID: String) -> AppGroup? {
         allCases.first { $0.bundleIDs.contains(bundleID) }
+    }
+
+    /// A formatting section every style but Custom gets in this group's
+    /// apps, whatever style the app is on. Nil when the shared prompt's
+    /// formatting fits.
+    var promptSection: String? {
+        switch self {
+        case .chat: return Prompts.chatFormatting
+        case .email, .docs, .code: return nil
+        }
     }
 }
 
@@ -290,13 +319,19 @@ final class StyleStore: ObservableObject {
     }
 
     /// The style and system prompt for an app. A Custom choice with no
-    /// custom prompt falls back to Default.
+    /// custom prompt falls back to Default. The app's group adds its
+    /// formatting section even when an override picked the style: Slack is
+    /// a chat app whatever style it is on.
     func choice(for bundleID: String?, customPrompt: String) -> CleanupStyleChoice {
         var style = settings.resolve(bundleID: bundleID).style
         if style == .custom, customPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             style = .standard
         }
-        return CleanupStyleChoice(style: style, systemPrompt: Prompts.cleanupPrompt(for: style, customPrompt: customPrompt))
+        let group = bundleID.flatMap(AppGroup.group(for:))
+        return CleanupStyleChoice(
+            style: style,
+            systemPrompt: Prompts.cleanupPrompt(for: style, group: group, customPrompt: customPrompt)
+        )
     }
 
     private func save() {
