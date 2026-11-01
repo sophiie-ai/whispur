@@ -22,7 +22,6 @@ final class AppState: ObservableObject {
     @AppStorage("deepContextEnabled") var deepContextEnabled: Bool = false
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
-    @AppStorage("customVocabulary") var customVocabulary: String = ""
     @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
@@ -53,6 +52,8 @@ final class AppState: ObservableObject {
     let overlayManager: OverlayPanelManager
     let sparkleUpdater: SparkleUpdater
     let learning: TranscriptLearning
+    /// The user's dictionary (terms plus where each came from).
+    let vocabulary: VocabularyStore
     let learningSuggestions: LearningSuggestionCenter
     private let learningToastPanel: LearningToastPanelManager
 
@@ -67,6 +68,8 @@ final class AppState: ObservableObject {
     ///     renders pass one backed by a temporary file.
     ///   - stats: Dictation counters, same as above.
     ///   - providerRequestLog: Provider request diagnostics, same as above.
+    ///   - vocabulary: The dictionary. Renders pass one on a scratch
+    ///     defaults suite.
     ///   - startsServices: Installs the shortcut listener and starts update
     ///     checks. Renders pass false so a second instance never listens to
     ///     the keyboard.
@@ -74,6 +77,7 @@ final class AppState: ObservableObject {
         historyStore: PipelineHistoryStore? = nil,
         stats: DictationStats? = nil,
         providerRequestLog: ProviderRequestLog? = nil,
+        vocabulary: VocabularyStore? = nil,
         startsServices: Bool = true
     ) {
         let loadedHoldShortcut = Self.loadHoldShortcut()
@@ -114,6 +118,7 @@ final class AppState: ObservableObject {
         self.overlayManager = overlayManager
         self.providerRequestLog = providerRequestLog
         self.learning = learning
+        self.vocabulary = vocabulary ?? VocabularyStore()
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
 
@@ -187,12 +192,11 @@ final class AppState: ObservableObject {
     private func setupLearning() {
         learning.isEnabled = learnFromEdits
         learning.suggestionCenter = learningSuggestions
-        learning.onLearnTerm = { [weak self] _, toTerm in
-            guard let self else { return }
-            self.appendToVocabulary(toTerm)
+        learning.onLearnTerm = { [weak self] fromTerm, toTerm in
+            self?.learnTerm(toTerm, from: fromTerm)
         }
         learningSuggestions.onAccept = { [weak self] suggestion in
-            self?.appendToVocabulary(suggestion.to)
+            self?.learnTerm(suggestion.to, from: suggestion.from)
         }
         learningToastPanel.bind(to: learningSuggestions)
         pipeline.onPasteCompleted = { [weak self] pasted in
@@ -201,16 +205,14 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func appendToVocabulary(_ term: String) {
+    /// Adds a word the user corrected to the dictionary, remembering the
+    /// word Whispur had written.
+    private func learnTerm(_ term: String, from original: String) {
         let trimmed = term.trimmingCharacters(in: .punctuationCharacters)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let existing = VocabularyParser.parse(customVocabulary)
-        guard !existing.contains(where: { $0.lowercased() == trimmed.lowercased() }) else { return }
-        let prefix = customVocabulary.isEmpty || customVocabulary.hasSuffix("\n")
-            ? customVocabulary
-            : customVocabulary + "\n"
-        customVocabulary = prefix + trimmed
+        let source = original.trimmingCharacters(in: .punctuationCharacters)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard vocabulary.add(trimmed, source: .learned(original: source)) else { return }
         syncPipelineConfig()
     }
 
@@ -536,7 +538,7 @@ final class AppState: ObservableObject {
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
         pipeline.sttLanguageSelection = sttLanguageSelection
-        pipeline.customVocabulary = VocabularyParser.parse(customVocabulary)
+        pipeline.customVocabulary = vocabulary.plainTerms
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording

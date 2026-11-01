@@ -28,7 +28,10 @@ final class SettingsRenderTests: XCTestCase {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
 
-        let appState = try Self.makeAppState(in: scratch)
+        let vocabularyDefaults = try XCTUnwrap(UserDefaults(suiteName: "ai.sophiie.whispur.render.vocabulary"))
+        vocabularyDefaults.removePersistentDomain(forName: "ai.sophiie.whispur.render.vocabulary")
+        defer { vocabularyDefaults.removePersistentDomain(forName: "ai.sophiie.whispur.render.vocabulary") }
+        let appState = try Self.makeAppState(in: scratch, vocabularyDefaults: vocabularyDefaults)
         let secrets = InMemorySecretStore()
         for key in KeychainKey.allCases {
             secrets.values[key] = key == .awsRegion ? "us-east-1" : "sk-render-0000000000abcd"
@@ -74,8 +77,30 @@ final class SettingsRenderTests: XCTestCase {
         ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
     ]
 
-    private static func makeAppState(in scratch: URL) throws -> AppState {
+    static let sampleTerms: [(text: String, learnedFrom: String?)] = [
+        ("Brisbane CBD", nil),
+        ("ElevenLabs", "eleven labs"),
+        ("TanStack Router", nil),
+        ("PlanetScale", nil),
+        ("kubectl", "cube cuddle"),
+        ("SwiftUI", nil),
+        ("Sophiie", "Sophie"),
+        ("Whispur", nil),
+    ]
+
+    private static func makeAppState(in scratch: URL, vocabularyDefaults: UserDefaults) throws -> AppState {
         let now = Date()
+        // Seed the old plain list so the migration path runs, then add the
+        // learned terms on top.
+        vocabularyDefaults.set(
+            sampleTerms.filter { $0.learnedFrom == nil }.reversed().map(\.text).joined(separator: "\n"),
+            forKey: VocabularyStore.legacyKey
+        )
+        let vocabulary = VocabularyStore(defaults: vocabularyDefaults)
+        for (index, term) in sampleTerms.enumerated().reversed() {
+            guard let original = term.learnedFrom else { continue }
+            vocabulary.add(term.text, source: .learned(original: original), at: now.addingTimeInterval(Double(-index) * 86_400))
+        }
         let items = sampleHistory.map { entry in
             PipelineResult(
                 rawTranscript: entry.text.lowercased(),
@@ -114,6 +139,7 @@ final class SettingsRenderTests: XCTestCase {
             historyStore: PipelineHistoryStore(fileURL: historyURL),
             stats: DictationStats(fileURL: statsURL),
             providerRequestLog: requestLog,
+            vocabulary: vocabulary,
             startsServices: false
         )
     }
