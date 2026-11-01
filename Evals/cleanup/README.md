@@ -35,6 +35,8 @@ Options:
 | `--prompt new` | `Prompts.defaultCleanup` from the working tree, with the current request shape: vocabulary in a `<vocabulary>` block in the user message, the transcript in `<dictation-to-clean>`, then the one-line output contract (`Prompts.cleanupOutputContract`). |
 | `--prompt current` | `Prompts.defaultCleanup` from `origin/main` (read with `git show`), with origin/main's request shape: the same user message as `new` when origin/main has `Prompts.cleanupOutputContract`, otherwise the legacy shape (vocabulary appended to the system prompt as a sentence, bare wrapped transcript). |
 | `--provider groq` / `openai` | Groq `openai/gpt-oss-20b` or OpenAI `gpt-6-luna`, with the same parameters the app sends (`OpenAIChatFormat.body`): Groq `reasoning_effort: low`, `include_reasoning: false`, `temperature: 0`; OpenAI `reasoning_effort: none`, `temperature: 0`; both `max_completion_tokens` from `LLMRequest.cleanupMaxTokens`. |
+| `--model ID` | Any other model on that provider (`openai/gpt-oss-120b`, `gpt-6.1-terra`, ...). Parameters follow `OpenAIChatFormat.parameterStyle`, so a model gets the request shape the app would send it. |
+| `--token-cap N` | Stop sending requests once the run has used N tokens (prompt + completion); the runs that finished are scored and saved. Use it to keep a Groq free-tier run inside a daily budget. |
 | `--runs N` | Runs per case (default 2). |
 | `--cases a,b` / `--split tune\|heldout` | Run a subset. |
 | `--show-heldout` | Print diffs for held-out failures too (hidden by default; see below). |
@@ -46,7 +48,7 @@ The system prompt is read straight out of the Swift source: the runner parses th
 standard escapes; interpolation is rejected). Keys are read from the environment and never printed.
 Groq's free tier allows 8,000 tokens per minute and counts the requested completion budget, so
 Groq runs go one request at a time behind a client-side token bucket that resyncs from the
-`x-ratelimit-*` headers and backs off on 429 (waits capped at 60 s and printed to stderr). Expect a full Groq run to take 30 to 60 minutes. The free tier also caps `openai/gpt-oss-20b` at 200,000 tokens per day: one `--runs 2` pass of the new prompt uses about 130k and of the current prompt about 280k, so a full Groq comparison needs a Dev-tier key or several days. The runner stops with a clear message when the daily quota is exhausted;
+`x-ratelimit-*` headers and backs off on 429 (waits capped at 60 s and printed to stderr). Expect a full Groq run to take 30 to 60 minutes. The free tier also caps `openai/gpt-oss-20b` at 200,000 tokens per day: one `--runs 2` pass of the new prompt uses about 130k and of the current prompt about 280k, so a full Groq comparison needs a Dev-tier key or several days. When the daily quota runs out the runner stops sending requests and scores the runs that finished;
 OpenAI runs six requests in parallel and takes about a minute.
 
 ## Cases
