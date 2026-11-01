@@ -63,6 +63,8 @@ final class AppState: ObservableObject {
     let styles: StyleStore
     let learningSuggestions: LearningSuggestionCenter
     private let learningToastPanel: LearningToastPanelManager
+    /// Dictations the user marked as wrong, as local eval cases.
+    let evalCases: MyEvalCaseStore
     /// The "Use raw" offer after a cleaned paste.
     let useRaw = UseRawController()
     private let useRawToastPanel = UseRawToastPanelManager()
@@ -92,6 +94,7 @@ final class AppState: ObservableObject {
         providerRequestLog: ProviderRequestLog? = nil,
         vocabulary: VocabularyStore? = nil,
         styles: StyleStore? = nil,
+        evalCases: MyEvalCaseStore? = nil,
         startsServices: Bool = true
     ) {
         // Before anything reads the language setting.
@@ -144,6 +147,7 @@ final class AppState: ObservableObject {
         )
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
+        self.evalCases = evalCases ?? MyEvalCaseStore()
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut

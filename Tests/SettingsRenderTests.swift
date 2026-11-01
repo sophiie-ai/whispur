@@ -79,6 +79,22 @@ final class SettingsRenderTests: XCTestCase {
                 try render(retrying, scheme: scheme, to: dir.appendingPathComponent("activity-retrying-\(suffix).png"))
                 appState.retrier.setStateForRendering(running: [], toast: nil)
             }
+            // Activity with a dictation expanded (Mark as wrong, Used raw,
+            // one already marked), and the Mark as wrong sheet.
+            let succeeded = appState.historyStore.items.filter { !$0.isFailed && $0.failure == nil }
+            if let open = succeeded.first {
+                let activity = ActivitySettingsView(
+                    historyStore: appState.historyStore,
+                    retrier: appState.retrier,
+                    evalCases: appState.evalCases,
+                    initiallyExpanded: open.id,
+                    onRetry: { _ in }
+                )
+                .background(SophiieTheme.Palette.surfaceWarm)
+                try render(activity, scheme: scheme, size: CGSize(width: 1000, height: 1400), to: dir.appendingPathComponent("activity-expanded-\(suffix).png"))
+                let sheet = MarkAsWrongSheet(item: open, onSave: { _, _ in }, onCancel: {})
+                try render(sheet, scheme: scheme, size: CGSize(width: 520, height: 600), to: dir.appendingPathComponent("activity-mark-wrong-sheet-\(suffix).png"))
+            }
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
             try render(needsSetup, scheme: scheme, to: dir.appendingPathComponent("dictation-needs-setup-\(suffix).png"))
@@ -139,7 +155,7 @@ final class SettingsRenderTests: XCTestCase {
             guard let original = term.learnedFrom else { continue }
             vocabulary.add(term.text, source: .learned(original: original), at: now.addingTimeInterval(Double(-index) * 86_400))
         }
-        let items = sampleHistory.map { entry in
+        var items = sampleHistory.map { entry in
             PipelineResult(
                 rawTranscript: entry.text.lowercased(),
                 cleanedText: entry.text,
@@ -149,6 +165,16 @@ final class SettingsRenderTests: XCTestCase {
                 timestamp: Calendar.current.date(byAdding: .day, value: -entry.daysAgo, to: now) ?? now
             )
         }
+        // The newest one went through "Use raw", with a raw transcript that
+        // reads like real speech.
+        items[0].rawTranscript = "um can we push the design review to thursday afternoon so everyone can see the new onboarding flow first"
+        items[0].usedRawAt = now
+        // One marked as wrong already.
+        let evalCases = MyEvalCaseStore(fileURL: scratch.appendingPathComponent("MyEvalCases.jsonl"))
+        evalCases.append(MyEvalCase(
+            id: MyEvalCase.makeID(dictationID: items[2].id, at: now),
+            input: items[2].rawTranscript, expected: items[2].cleanedText, vocabulary: [], tags: [.other]
+        ))
         let historyURL = scratch.appendingPathComponent("history.json")
         try JSONEncoder().encode(items).write(to: historyURL)
         // One failed dictation with its recording kept, one whose recording
@@ -219,6 +245,7 @@ final class SettingsRenderTests: XCTestCase {
             providerRequestLog: requestLog,
             vocabulary: vocabulary,
             styles: styles,
+            evalCases: evalCases,
             startsServices: false
         )
     }
