@@ -32,15 +32,17 @@ struct MetaMuseSTT: STTProvider {
         if !keywords.isEmpty {
             fields["keywords"] = Array(keywords)
         }
-        if let name = languageName(for: language) {
-            fields["languageBias"] = [name]
+        let names = languageNames(for: language)
+        if !names.isEmpty {
+            fields["languageBias"] = names
         }
         return fields
     }
 
-    static func languageName(for selection: STTLanguageSelection) -> String? {
-        guard let code = STTLanguageResolver.iso639_1(for: selection) else { return nil }
-        return Locale(identifier: "en_US").localizedString(forLanguageCode: code)
+    /// Every language the user speaks, as English names. `languageBias`
+    /// takes several and steers toward them without forcing one.
+    static func languageNames(for selection: STTLanguageSelection) -> [String] {
+        selection.isoCodes.compactMap { Locale(identifier: "en_US").localizedString(forLanguageCode: $0) }
     }
 
     /// The JSON `request` part for a batch call.

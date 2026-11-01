@@ -24,6 +24,11 @@ struct ProviderRequestLogEntry: Codable, Identifiable, Hashable {
     let errorMessage: String?
 }
 
+extension ProviderRequestLogEntry {
+    /// A script-guard note rather than an HTTP request.
+    var isScriptGuard: Bool { httpMethod == ProviderHTTPClient.scriptGuardMethod }
+}
+
 @MainActor
 final class ProviderRequestLog: ObservableObject {
     @Published private(set) var items: [ProviderRequestLogEntry] = []

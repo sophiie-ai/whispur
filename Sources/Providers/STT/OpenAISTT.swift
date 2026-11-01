@@ -41,21 +41,29 @@ struct OpenAISTT: STTProvider {
     }
 
     /// The text fields for one request, in send order (the file part is
-    /// added separately). No `response_format` is sent: every model returns
-    /// JSON with a `text` field by default.
-    static func formFields(model: String, language: STTLanguageSelection, vocabulary: [String]) -> [MultipartFormField] {
+    /// added separately). No `response_format` is sent by default: every
+    /// model returns JSON with a `text` field.
+    ///
+    /// `gpt-transcribe` gets every language the user speaks as `languages[]`
+    /// ("possible languages", a hint). The older models take one `language`,
+    /// so with several they auto-detect and the script guard checks the
+    /// result. `verbose` asks those models for `verbose_json` so a guard
+    /// re-run can read the confidence; `gpt-transcribe` has no such format.
+    static func formFields(model: String, language: STTLanguageSelection, vocabulary: [String], verbose: Bool = false) -> [MultipartFormField] {
         var fields = [MultipartFormField(name: "model", value: model)]
-        let languageCode = STTLanguageResolver.iso639_1(for: language)
 
         if usesKeywordShape(model: model) {
-            if let languageCode {
-                fields.append(MultipartFormField(name: "languages[]", value: languageCode))
+            for code in language.isoCodes {
+                fields.append(MultipartFormField(name: "languages[]", value: code))
             }
             for keyword in keywords(from: vocabulary) {
                 fields.append(MultipartFormField(name: "keywords[]", value: keyword))
             }
         } else {
-            if let languageCode {
+            if verbose {
+                fields.append(MultipartFormField(name: "response_format", value: "verbose_json"))
+            }
+            if let languageCode = STTLanguageResolver.iso639_1(for: language) {
                 fields.append(MultipartFormField(name: "language", value: languageCode))
             }
             if let prompt = WhisperVocabularyPrompt.build(from: vocabulary) {
@@ -88,6 +96,19 @@ struct OpenAISTT: STTProvider {
     }
 
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
+        let data = try await send(fileURL: fileURL, fields: Self.formFields(model: model, language: language, vocabulary: vocabulary))
+        return Self.parseTranscript(data)
+    }
+
+    func transcribeScored(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> ScoredTranscript {
+        guard !Self.usesKeywordShape(model: model) else {
+            return ScoredTranscript(text: try await transcribe(fileURL: fileURL, language: language, vocabulary: vocabulary), confidence: nil)
+        }
+        let data = try await send(fileURL: fileURL, fields: Self.formFields(model: model, language: language, vocabulary: vocabulary, verbose: true))
+        return WhisperVerboseTranscript.parse(data)
+    }
+
+    private func send(fileURL: URL, fields: [MultipartFormField]) async throws -> Data {
         guard let url = URL(string: "\(baseURL)/audio/transcriptions") else {
             throw STTError.apiError(provider: .openai, message: "Invalid endpoint URL.", statusCode: nil)
         }
@@ -98,8 +119,6 @@ struct OpenAISTT: STTProvider {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
-
-        let fields = Self.formFields(model: model, language: language, vocabulary: vocabulary)
 
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
@@ -128,7 +147,7 @@ struct OpenAISTT: STTProvider {
                 )
             }
 
-            return Self.parseTranscript(response.data)
+            return response.data
         } catch let error as STTError {
             throw error
         } catch let error as URLError where error.code == .timedOut {

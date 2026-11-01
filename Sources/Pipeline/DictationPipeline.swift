@@ -505,17 +505,16 @@ final class DictationPipeline: ObservableObject {
                     guard let self, let stream else { return }
                     self.report(outcome, for: stream)
                 },
+                accept: { [sttLanguageSelection] text in
+                    guard let check = ScriptGuard.check(text, for: sttLanguageSelection), check.fails else { return nil }
+                    let scripts = check.unexpectedScripts.map(\.rawValue).sorted().joined(separator: ", ")
+                    return "The streamed transcript used \(scripts) letters, which none of your languages use."
+                },
+                retryRejected: { [self] rejected in
+                    try await batchTranscript(wavURL: try await normalization.value, initial: rejected)
+                },
                 batch: { [self] in
-                    let wavURL = try await normalization.value
-                    phase = .transcribing
-                    guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
-                        throw STTError.missingAPIKey(provider: selectedSTT)
-                    }
-                    return try await sttProvider.transcribe(
-                        fileURL: wavURL,
-                        language: sttLanguageSelection,
-                        vocabulary: customVocabulary
-                    )
+                    try await batchTranscript(wavURL: try await normalization.value, initial: nil)
                 }
             )
             guard let normalizedRawTranscript = TranscriptDecision.normalizedRawTranscript(rawTranscript) else {
@@ -608,6 +607,32 @@ final class DictationPipeline: ObservableObject {
                 presentError(error.localizedDescription)
             }
         }
+    }
+
+    /// Transcribes the normalized recording with the selected provider,
+    /// with the script guard behind it for users who speak several
+    /// languages. `initial` is a streamed transcript the guard already
+    /// rejected.
+    private func batchTranscript(wavURL: URL, initial: String?) async throws -> String {
+        phase = .transcribing
+        guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
+            throw STTError.missingAPIKey(provider: selectedSTT)
+        }
+        return try await MultiLanguageTranscription.transcribe(
+            provider: sttProvider,
+            providerID: selectedSTT,
+            fileURL: wavURL,
+            language: sttLanguageSelection,
+            vocabulary: customVocabulary,
+            initial: initial,
+            onGuard: { [httpClient] report in
+                httpClient?.recordScriptGuard(
+                    providerID: report.provider.rawValue,
+                    summary: MultiLanguageTranscription.logSummary(report),
+                    keptText: report.chosenText
+                )
+            }
+        )
     }
 
     /// Decide whether a finished recording is worth sending to STT.

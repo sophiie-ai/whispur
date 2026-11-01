@@ -439,13 +439,27 @@ enum StreamingFallback {
         let elapsedMS: Int
     }
 
+    /// The streamed text was fine as text but `accept` turned it down
+    /// (the script guard). Reported like a stream failure.
+    struct Rejected: LocalizedError {
+        let reason: String
+        var errorDescription: String? { reason }
+    }
+
+    /// - Parameters:
+    ///   - accept: Returns nil to use the streamed text, or why it can't be
+    ///     used. A rejected stream goes to `retryRejected` (or `batch` when
+    ///     that's nil) with the rejected text.
     @MainActor
     static func transcript(
         stream: STTStreamingSession?,
         timeout: Duration,
         report: (Outcome) -> Void = { _ in },
+        accept: (String) -> String? = { _ in nil },
+        retryRejected: ((String) async throws -> String)? = nil,
         batch: () async throws -> String
     ) async throws -> String {
+        var rejectedText: String?
         if let stream {
             let started = ContinuousClock.now
             func elapsedMS() -> Int {
@@ -460,12 +474,19 @@ enum StreamingFallback {
                 } onCancel: {
                     stream.cancel()
                 }
-                report(Outcome(text: text, error: nil, elapsedMS: elapsedMS()))
-                return text
+                guard let reason = accept(text) else {
+                    report(Outcome(text: text, error: nil, elapsedMS: elapsedMS()))
+                    return text
+                }
+                report(Outcome(text: text, error: Rejected(reason: reason), elapsedMS: elapsedMS()))
+                rejectedText = text
             } catch {
                 if Task.isCancelled { throw CancellationError() }
                 report(Outcome(text: nil, error: error, elapsedMS: elapsedMS()))
             }
+        }
+        if let rejectedText, let retryRejected {
+            return try await retryRejected(rejectedText)
         }
         return try await batch()
     }

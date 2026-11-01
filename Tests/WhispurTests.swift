@@ -139,14 +139,10 @@ final class WhispurTests: XCTestCase {
         XCTAssertEqual(STTLanguageSelection(storageValue: "").storageValue, "")
         XCTAssertEqual(STTLanguageSelection(storageValue: "en-US").storageValue, "en-US")
         XCTAssertEqual(STTLanguageSelection(storageValue: "  ").storageValue, "")
-        if case .single(let code) = STTLanguageSelection(storageValue: "es-MX") {
-            XCTAssertEqual(code, "es-MX")
-        } else {
-            XCTFail("Expected .single")
-        }
-        if case .auto = STTLanguageSelection(storageValue: "") { } else {
-            XCTFail("Expected .auto")
-        }
+        XCTAssertEqual(STTLanguageSelection(storageValue: "es-MX").codes, ["es-MX"])
+        XCTAssertTrue(STTLanguageSelection(storageValue: "").isAuto)
+        XCTAssertEqual(STTLanguageSelection(storageValue: "en-US, es-MX,en-US,").codes, ["en-US", "es-MX"])
+        XCTAssertEqual(STTLanguageSelection(storageValue: "en-US,es-MX").storageValue, "en-US,es-MX")
     }
 
     func testSTTLanguageResolverISO639_1() {
@@ -154,17 +150,14 @@ final class WhispurTests: XCTestCase {
         XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "en-US")), "en")
         XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "es-MX")), "es")
         XCTAssertEqual(STTLanguageResolver.iso639_1(for: .single(code: "zh")), "zh")
+        XCTAssertNil(STTLanguageResolver.iso639_1(for: STTLanguageSelection(codes: ["en-US", "es-MX"])), "Several languages leave single-language providers on auto")
+        XCTAssertEqual(STTLanguageResolver.iso639_1(for: STTLanguageSelection(codes: ["en-US", "en-GB"])), "en", "Two variants are one language")
     }
 
     func testSTTLanguageResolverDeepgramMapsAutoToMulti() {
-        if case .multi = STTLanguageResolver.deepgram(for: .auto) { } else {
-            XCTFail("Expected .multi for .auto")
-        }
-        if case .single(let code) = STTLanguageResolver.deepgram(for: .single(code: "fr-FR")) {
-            XCTAssertEqual(code, "fr-FR")
-        } else {
-            XCTFail("Expected .single passthrough")
-        }
+        XCTAssertEqual(STTLanguageResolver.deepgram(for: .auto), .multi)
+        XCTAssertEqual(STTLanguageResolver.deepgram(for: .single(code: "fr-FR")), .single("fr-FR"))
+        XCTAssertEqual(STTLanguageResolver.deepgram(for: STTLanguageSelection(codes: ["en-US", "es-ES"])), .multi)
     }
 
     func testSTTLanguageResolverAppleLocaleForAutoIsNonEmpty() {
@@ -174,6 +167,14 @@ final class WhispurTests: XCTestCase {
 
     func testSTTLanguageResolverAppleLocalePassesSingleThrough() {
         XCTAssertEqual(STTLanguageResolver.appleLocale(for: .single(code: "ja-JP")), "ja-JP")
+    }
+
+    func testSTTLanguageResolverAppleLocalePrefersSystemLanguageAmongSeveral() {
+        let selection = STTLanguageSelection(codes: ["en-US", "es-MX"])
+        XCTAssertEqual(STTLanguageResolver.appleLocale(for: selection, systemIdentifier: "es_AR"), "es-MX")
+        XCTAssertEqual(STTLanguageResolver.appleLocale(for: selection, systemIdentifier: "de_DE"), "en-US")
+        XCTAssertEqual(STTLanguageResolver.appleLocale(for: .auto, systemIdentifier: "fr_CA"), "fr-FR")
+        XCTAssertEqual(STTLanguageResolver.appleLocale(for: .auto, systemIdentifier: "xx_YY"), "en-US")
     }
 
     // MARK: - Helpers
