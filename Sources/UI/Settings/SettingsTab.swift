@@ -28,8 +28,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Pages that appear in the sidebar. Styles ships in a later change.
-    static let visible: [SettingsTab] = allCases.filter { $0 != .styles }
+    /// Pages that appear in the sidebar.
+    static let visible: [SettingsTab] = allCases
 
     static func tabs(in group: Group) -> [SettingsTab] {
         visible.filter { $0.group == group }

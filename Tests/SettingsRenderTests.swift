@@ -16,7 +16,7 @@ final class SettingsRenderTests: XCTestCase {
     /// Tall enough to show every section of the scrolling pages.
     private static let tallSize = CGSize(width: 1000, height: 1900)
     /// Scrolling pages that also get a tall render.
-    private static let tallTabs: [SettingsTab] = [.providers, .preferences, .getStarted]
+    private static let tallTabs: [SettingsTab] = [.providers, .preferences, .getStarted, .styles]
 
     func testRenderSettingsPages() throws {
         let env = ProcessInfo.processInfo.environment
@@ -97,6 +97,10 @@ final class SettingsRenderTests: XCTestCase {
             forKey: VocabularyStore.legacyKey
         )
         let vocabulary = VocabularyStore(defaults: vocabularyDefaults)
+        vocabularyDefaults.removeObject(forKey: StyleStore.key)
+        let styles = StyleStore(defaults: vocabularyDefaults, hasCustomPrompt: false)
+        styles.setOverride(bundleID: "com.apple.Safari", name: "Safari", style: .formal)
+        styles.setOverride(bundleID: "com.apple.TextEdit", name: "TextEdit", style: .verbatim)
         for (index, term) in sampleTerms.enumerated().reversed() {
             guard let original = term.learnedFrom else { continue }
             vocabulary.add(term.text, source: .learned(original: original), at: now.addingTimeInterval(Double(-index) * 86_400))
@@ -140,6 +144,7 @@ final class SettingsRenderTests: XCTestCase {
             stats: DictationStats(fileURL: statsURL),
             providerRequestLog: requestLog,
             vocabulary: vocabulary,
+            styles: styles,
             startsServices: false
         )
     }

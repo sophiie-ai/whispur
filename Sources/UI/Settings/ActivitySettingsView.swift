@@ -85,6 +85,9 @@ private struct ActivityEntry: View {
                         if let llmModel = item.llmModel {
                             PreferenceBadge(title: llmModel, tone: .neutral)
                         }
+                        if let style = item.style {
+                            PreferenceBadge(title: "\(style.title) style", tone: .neutral)
+                        }
                     }
                 }
                 .transition(.opacity)

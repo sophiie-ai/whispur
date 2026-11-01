@@ -53,6 +53,13 @@ final class DictationPipeline: ObservableObject {
     var sttLanguageSelection: STTLanguageSelection = .auto
     var customVocabulary: [String] = []
     var systemPrompt: String = Prompts.defaultCleanup
+    /// Picks the cleanup style for the app the recording started in. When
+    /// nil, cleanup uses `systemPrompt` as is.
+    var cleanupStyle: ((_ bundleID: String?) -> CleanupStyleChoice)?
+    /// Reads the frontmost app's bundle id (injectable for tests).
+    var frontmostBundleID: () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    /// The app that was frontmost when the current recording started.
+    private(set) var recordingAppBundleID: String?
     var preserveClipboard: Bool = true
     var soundVolume: Float = 1.0
     /// When true, duck the system default output device while recording.
@@ -169,6 +176,7 @@ final class DictationPipeline: ObservableObject {
 
     func startRecording(triggerMode: RecordingTriggerMode = .hold) {
         guard canStartRecording else { return }
+        noteRecordingApp()
 
         cancelResetTask()
         if case .done = phase { phase = .idle }
@@ -179,6 +187,17 @@ final class DictationPipeline: ObservableObject {
         microphoneRequestTask = Task { [weak self] in
             await self?.requestMicrophoneAccessAndBeginRecording()
         }
+    }
+
+    /// Remembers the frontmost app as recording starts, so cleanup uses that
+    /// app's style even if the user switches apps while Whispur works.
+    func noteRecordingApp() {
+        recordingAppBundleID = frontmostBundleID()
+    }
+
+    /// The style and system prompt for the app the recording started in.
+    func cleanupChoice() -> CleanupStyleChoice? {
+        cleanupStyle?(recordingAppBundleID)
     }
 
     func updateTriggerMode(_ triggerMode: RecordingTriggerMode) {
@@ -456,6 +475,8 @@ final class DictationPipeline: ObservableObject {
 
             var cleanedText: String?
             var llmModel: String?
+            let styleChoice = cleanupChoice()
+            var usedStyle: WritingStyle?
 
             // Skip LLM cleanup for very short transcripts: an LLM tends to
             // answer "thanks" instead of cleaning it. They are pasted raw.
@@ -466,7 +487,7 @@ final class DictationPipeline: ObservableObject {
                 do {
                     let response = try await llmProvider.complete(
                         request: LLMRequest(
-                            systemPrompt: systemPrompt,
+                            systemPrompt: styleChoice?.systemPrompt ?? systemPrompt,
                             userMessage: CleanupMessage.userMessage(
                                 transcript: normalizedRawTranscript,
                                 vocabulary: customVocabulary
@@ -478,6 +499,7 @@ final class DictationPipeline: ObservableObject {
                     )
                     cleanedText = response.text
                     llmModel = response.model
+                    usedStyle = styleChoice?.style
                 } catch {
                     logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
                 }
@@ -510,7 +532,9 @@ final class DictationPipeline: ObservableObject {
                 sttProvider: selectedSTT,
                 llmProvider: selectedLLM,
                 llmModel: llmModel,
-                timestamp: Date()
+                timestamp: Date(),
+                appBundleID: recordingAppBundleID,
+                style: usedStyle
             )
 
             lastResult = result
@@ -666,6 +690,11 @@ struct PipelineResult: Identifiable, Codable {
     let llmProvider: LLMProviderID
     let llmModel: String?
     let timestamp: Date
+    /// The app that was frontmost when recording started. Nil for results
+    /// saved before styles existed.
+    let appBundleID: String?
+    /// The cleanup style used, or nil when cleanup didn't run.
+    let style: WritingStyle?
 
     init(
         rawTranscript: String,
@@ -673,7 +702,9 @@ struct PipelineResult: Identifiable, Codable {
         sttProvider: STTProviderID,
         llmProvider: LLMProviderID,
         llmModel: String?,
-        timestamp: Date
+        timestamp: Date,
+        appBundleID: String? = nil,
+        style: WritingStyle? = nil
     ) {
         self.id = UUID()
         self.rawTranscript = rawTranscript
@@ -682,5 +713,7 @@ struct PipelineResult: Identifiable, Codable {
         self.llmProvider = llmProvider
         self.llmModel = llmModel
         self.timestamp = timestamp
+        self.appBundleID = appBundleID
+        self.style = style
     }
 }

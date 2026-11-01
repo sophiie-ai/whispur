@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Preferences: permissions, sound and output, the recording indicator, the
-/// cleanup prompt override, and the app version. Shortcuts live on the
-/// Dictation page.
+/// Preferences: permissions, sound and output, the recording indicator, and
+/// the app version. Shortcuts live on the Dictation page and the custom
+/// cleanup prompt on the Styles page.
 struct PreferencesSettingsView: View {
     @ObservedObject var appState: AppState
     let setup: SettingsSetupState
-    @State private var showsDefaultPrompt = false
 
     var body: some View {
         SettingsPage {
@@ -14,7 +13,6 @@ struct PreferencesSettingsView: View {
             permissionsSection
             outputSection
             indicatorSection
-            cleanupSection
             aboutSection
         }
     }
@@ -148,44 +146,6 @@ struct PreferencesSettingsView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                 }
-            }
-        }
-    }
-
-    // MARK: - Cleanup prompt
-
-    private var cleanupSection: some View {
-        SettingsSection(
-            "Cleanup prompt",
-            footer: "Optional. When set, this replaces the built-in cleanup prompt for every dictation. Leave it empty to use Whispur's default."
-        ) {
-            SettingsCard {
-                CardContent {
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextEditor(text: $appState.customSystemPrompt)
-                            .font(.system(.body, design: .monospaced))
-                            .scrollContentBackground(.hidden)
-                            .frame(minHeight: 160)
-                            .padding(8)
-                            .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.control, style: .continuous))
-                            .accessibilityLabel("Custom cleanup prompt")
-
-                        HStack {
-                            PreferenceBadge(
-                                title: appState.customSystemPrompt.isEmpty ? "Using default" : "Custom prompt active",
-                                tone: appState.customSystemPrompt.isEmpty ? .neutral : .good
-                            )
-                            Spacer()
-                            if !appState.customSystemPrompt.isEmpty {
-                                Button("Reset to default") { appState.customSystemPrompt = "" }
-                                    .buttonStyle(.sophiieSecondary)
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                }
-                CardDivider(leadingInset: 0)
-                DefaultPromptDisclosure(isExpanded: $showsDefaultPrompt)
             }
         }
     }

@@ -54,6 +54,8 @@ final class AppState: ObservableObject {
     let learning: TranscriptLearning
     /// The user's dictionary (terms plus where each came from).
     let vocabulary: VocabularyStore
+    /// Cleanup style per app.
+    let styles: StyleStore
     let learningSuggestions: LearningSuggestionCenter
     private let learningToastPanel: LearningToastPanelManager
 
@@ -70,6 +72,7 @@ final class AppState: ObservableObject {
     ///   - providerRequestLog: Provider request diagnostics, same as above.
     ///   - vocabulary: The dictionary. Renders pass one on a scratch
     ///     defaults suite.
+    ///   - styles: Per-app cleanup styles, same as above.
     ///   - startsServices: Installs the shortcut listener and starts update
     ///     checks. Renders pass false so a second instance never listens to
     ///     the keyboard.
@@ -78,6 +81,7 @@ final class AppState: ObservableObject {
         stats: DictationStats? = nil,
         providerRequestLog: ProviderRequestLog? = nil,
         vocabulary: VocabularyStore? = nil,
+        styles: StyleStore? = nil,
         startsServices: Bool = true
     ) {
         let loadedHoldShortcut = Self.loadHoldShortcut()
@@ -119,6 +123,9 @@ final class AppState: ObservableObject {
         self.providerRequestLog = providerRequestLog
         self.learning = learning
         self.vocabulary = vocabulary ?? VocabularyStore()
+        self.styles = styles ?? StyleStore(
+            hasCustomPrompt: !(UserDefaults.standard.string(forKey: "customSystemPrompt") ?? "").isEmpty
+        )
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
 
@@ -548,6 +555,12 @@ final class AppState: ObservableObject {
         // `customSystemPrompt` is the single user-editable override. When
         // empty, the pipeline falls back to the built-in cleanup prompt.
         pipeline.systemPrompt = customSystemPrompt.isEmpty ? Prompts.defaultCleanup : customSystemPrompt
+        // Per-app styles pick the prompt for the app the recording started
+        // in; Custom uses the prompt above.
+        pipeline.cleanupStyle = { [weak self] bundleID in
+            guard let self else { return CleanupStyleChoice(style: .standard, systemPrompt: Prompts.defaultCleanup) }
+            return self.styles.choice(for: bundleID, customPrompt: self.customSystemPrompt)
+        }
     }
 
     var sttLanguageSelection: STTLanguageSelection {

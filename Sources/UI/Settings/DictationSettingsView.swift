@@ -15,6 +15,7 @@ struct DictationSettingsView: View {
     @ObservedObject var historyStore: PipelineHistoryStore
     @ObservedObject var stats: DictationStats
     @ObservedObject var vocabulary: VocabularyStore
+    @ObservedObject var styles: StyleStore
     let isReady: Bool
     let openTab: (SettingsTab) -> Void
 
@@ -115,8 +116,25 @@ struct DictationSettingsView: View {
                 ) {
                     openTab(.dictionary)
                 }
+                CardDivider()
+                SettingsLinkRow(
+                    icon: "textformat",
+                    title: "Styles",
+                    subtitle: "Choose a writing style for each app",
+                    value: Self.stylesSummary(styles.settings)
+                ) {
+                    openTab(.styles)
+                }
             }
         }
+    }
+
+    /// "4 groups", plus how many apps have their own style.
+    static func stylesSummary(_ settings: StyleSettings) -> String {
+        let count = settings.overrides.count
+        let base = "\(AppGroup.allCases.count) groups"
+        guard count > 0 else { return base }
+        return base + (count == 1 ? ", 1 app" : ", \(count) apps")
     }
 
     static func termCountLabel(_ count: Int) -> String {

@@ -105,6 +105,13 @@ final class SettingsPagesTests: XCTestCase {
         XCTAssertEqual(DictationSettingsView.termCountLabel(3), "3 terms")
     }
 
+    func testStylesSummary() {
+        var settings = StyleSettings.initial
+        XCTAssertEqual(DictationSettingsView.stylesSummary(settings), "4 groups")
+        settings.overrides = [AppStyleOverride(bundleID: "a", name: "A", style: .formal)]
+        XCTAssertEqual(DictationSettingsView.stylesSummary(settings), "4 groups, 1 app")
+    }
+
     func testPreviewTextIsOneLineAndFallsBackToRaw() {
         let multiline = PipelineResult(
             rawTranscript: "raw", cleanedText: "First line\n\n  second line ",
