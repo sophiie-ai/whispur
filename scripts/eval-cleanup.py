@@ -12,8 +12,10 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
                   user message = CleanupMessage (vocabulary block, wrapped
                   transcript, trailing output contract).
 --prompt current  system prompt = Prompts.defaultCleanup at origin/main (via
-                  git show), with origin/main's request shape: vocabulary
-                  appended to the system prompt, bare wrapped transcript.
+                  git show), with origin/main's request shape: the same
+                  CleanupMessage shape when origin/main has
+                  cleanupOutputContract, else the legacy shape (vocabulary
+                  appended to the system prompt, bare wrapped transcript).
 
 Keys come from GROQ_API_KEY / OPENAI_API_KEY and are never printed. See
 Evals/cleanup/README.md for the scoring rules.
@@ -189,10 +191,11 @@ class RequestBuilder:
         self.which = which
         source = load_prompt_source(which)
         self.system_prompt = swift_multiline_literal(source, "defaultCleanup")
-        self.contract = swift_multiline_literal(source, "cleanupOutputContract") if which == "new" else None
+        self.contract = (swift_multiline_literal(source, "cleanupOutputContract")
+                         if "static let cleanupOutputContract" in source else None)
 
     def build(self, transcript: str, vocabulary: list[str]) -> tuple[str, str]:
-        if self.which == "new":
+        if self.contract is not None:
             return self.system_prompt, new_user_message(transcript, vocabulary, self.contract)
         return current_request(self.system_prompt, transcript, vocabulary)
 
@@ -335,12 +338,13 @@ QUOTE_MAP = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', " ":
 LOOSE_PUNCT_RE = re.compile(r"[.,;:!。、]")
 
 
-def normalize(text: str, loose: bool = False) -> str:
+def normalize(text: str, loose: bool = False, strict_period: bool = False) -> str:
     """Light normalization applied to both sides before comparing.
 
     - zero-width spaces dropped, curly quotes and NBSP straightened
     - runs of spaces/tabs collapsed, each line trimmed, blank lines dropped
-    - one trailing "." removed (a final period is optional; "?" and "!" are not)
+    - one trailing "." removed (a final period is optional; "?" and "!" are not),
+      unless strict_period (a bare address or command must not gain a period)
     - "" and "EMPTY" are the same outcome (both mean no speech to the app)
     - loose cases also drop . , ; : ! and lowercase, for cases that test
       content rather than punctuation
@@ -350,7 +354,7 @@ def normalize(text: str, loose: bool = False) -> str:
     text = "\n".join(line for line in lines if line)
     if text.upper() == "EMPTY":
         return ""
-    if text.endswith(".") and not text.endswith(".."):
+    if not strict_period and text.endswith(".") and not text.endswith(".."):
         text = text[:-1]
     if loose:
         text = re.sub(r" +", " ", LOOSE_PUNCT_RE.sub("", text)).lower()
@@ -359,8 +363,9 @@ def normalize(text: str, loose: bool = False) -> str:
 
 def score(case: dict, output: str) -> bool:
     loose = case.get("loose_punctuation", False)
-    got = normalize(output, loose)
-    return any(got == normalize(t, loose) for t in [case["expected"], *case.get("alternates", [])])
+    strict = case.get("strict_period", False)
+    got = normalize(output, loose, strict)
+    return any(got == normalize(t, loose, strict) for t in [case["expected"], *case.get("alternates", [])])
 
 
 def pct(values: list[float], q: float) -> float:

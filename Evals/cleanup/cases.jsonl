@@ -48,3 +48,14 @@
 {"id": "empty-hesitation", "split": "tune", "input": "um uh hmm", "expected": "EMPTY", "tags": ["empty"], "critical": false}
 {"id": "short-thanks", "split": "tune", "input": "thanks", "expected": "Thanks.", "alternates": ["Thanks!"], "tags": ["short"], "critical": false}
 {"id": "trailing-thanks-watching", "split": "tune", "input": "let's ship it on Friday after the freeze thanks for watching", "expected": "Let's ship it on Friday after the freeze.", "tags": ["boilerplate"], "critical": false}
+{"id": "email-bare-spoken", "split": "tune", "input": "jake at sophiie dot ai", "expected": "jake@sophiie.ai", "tags": ["email", "bare"], "critical": true, "strict_period": true}
+{"id": "email-vocab-respell", "split": "tune", "input": "Jake at sophie.ai", "vocabulary": ["Sophiie"], "expected": "jake@sophiie.ai", "tags": ["email", "bare", "vocabulary"], "critical": true, "strict_period": true}
+{"id": "email-no-vocab", "split": "tune", "input": "Jake at sophie.ai", "expected": "jake@sophie.ai", "tags": ["email", "bare"], "critical": true, "strict_period": true}
+{"id": "email-mid-sentence", "split": "tune", "input": "email it to priya dot shah at gmail dot com", "expected": "Email it to priya.shah@gmail.com.", "tags": ["email"], "critical": true}
+{"id": "url-path", "split": "tune", "input": "go to whispur dot app slash download", "expected": "Go to whispur.app/download.", "tags": ["url"], "critical": true}
+{"id": "url-domains", "split": "tune", "input": "compare the pricing on stripe dot com and fly dot io", "expected": "Compare the pricing on stripe.com and fly.io.", "tags": ["url"], "critical": true}
+{"id": "at-stays-office", "split": "tune", "input": "meet me at the office at noon", "expected": "Meet me at the office at noon.", "tags": ["email", "must-stay-words"], "critical": true}
+{"id": "at-stays-look", "split": "tune", "input": "let's look at it after lunch", "expected": "Let's look at it after lunch.", "tags": ["email", "must-stay-words"], "critical": true}
+{"id": "url-bare-github", "split": "heldout", "input": "github dot com slash sophiie dash ai slash whispur", "expected": "github.com/sophiie-ai/whispur", "tags": ["url", "bare"], "critical": true, "strict_period": true}
+{"id": "email-support-please", "split": "heldout", "input": "forward it to support at whispur dot app please", "expected": "Forward it to support@whispur.app, please.", "alternates": ["Forward it to support@whispur.app please."], "tags": ["email"], "critical": true}
+{"id": "at-stays-google", "split": "heldout", "input": "I'm at google today", "expected": "I'm at Google today.", "alternates": ["I'm at google today."], "tags": ["email", "must-stay-words"], "critical": true}
