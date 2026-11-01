@@ -72,6 +72,10 @@ struct ProvidersSettingsView: View {
 
                 panel(for: appState.selectedSTT.setupDescriptor, style: .active, activeNote: nil)
 
+                if appState.selectedSTT.supportsStreaming {
+                    StreamingToggle(isOn: $appState.streamWhileTalking)
+                }
+
                 otherProvidersLabel
 
                 VStack(spacing: 8) {
@@ -267,3 +271,18 @@ private struct STTLanguagePicker: View {
     }
 }
 
+
+/// Opt-in live streaming, shown only for providers that support it.
+private struct StreamingToggle: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Stream audio while you talk", isOn: $isOn)
+            Text("Text is ready sooner after you stop. If the stream fails, Whispur sends the recording instead.")
+                .font(SophiieTheme.Typography.caption)
+                .foregroundStyle(SophiieTheme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}

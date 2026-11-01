@@ -18,6 +18,10 @@ final class AudioRecorder: ObservableObject {
     /// Fires once when the first non-silent buffer arrives.
     var onRecordingReady: (() -> Void)?
 
+    /// Receives every captured buffer on the audio thread, for streaming.
+    /// Set it before `startRecording` and clear it after `stopRecording`.
+    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
+
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
@@ -191,6 +195,8 @@ final class AudioRecorder: ObservableObject {
                 logger.error("Failed to write audio buffer: \(error.localizedDescription, privacy: .public)")
             }
         }
+
+        onAudioBuffer?(buffer)
 
         let scaledLevel = min(rms * 12, 1)
         if scaledLevel > smoothedLevel {

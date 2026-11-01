@@ -130,6 +130,30 @@ final class ProviderHTTPClient {
         }
     }
 
+    /// Lists a finished streaming session in the Requests tab next to the
+    /// HTTP traffic. `durationMS` is the time from release to the result.
+    func recordStream(
+        providerID: String,
+        endpointURL: String,
+        durationMS: Int,
+        responsePreview: String,
+        errorMessage: String?
+    ) {
+        Task {
+            await record(
+                providerID: providerID,
+                kind: .stt,
+                endpointURL: endpointURL,
+                httpMethod: "WS",
+                statusCode: nil,
+                durationMS: durationMS,
+                requestSummary: "WebSocket stream. Live audio sent while recording; time shown is from release to the final transcript.",
+                responseBodyPreview: String(responsePreview.prefix(500)),
+                errorMessage: errorMessage
+            )
+        }
+    }
+
     static func transportErrorMessage(for error: Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {

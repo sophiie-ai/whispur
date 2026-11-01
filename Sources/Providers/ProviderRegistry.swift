@@ -53,6 +53,12 @@ final class ProviderRegistry {
         }
     }
 
+    /// The selected provider's live-streaming side, when it has one.
+    func makeStreamingProvider(for id: STTProviderID) -> (any STTStreamingProvider)? {
+        guard id.supportsStreaming else { return nil }
+        return makeSTTProvider(for: id) as? any STTStreamingProvider
+    }
+
     /// Returns provider IDs that have their API keys configured.
     func availableSTTProviders() -> [STTProviderID] {
         STTProviderID.allCases.filter { keychain.hasKeysFor(stt: $0) }

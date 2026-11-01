@@ -61,6 +61,15 @@ final class DictationPipeline: ObservableObject {
     /// 0...100. 0 = no ducking, 100 = full mute. Only consulted when
     /// `muteSystemAudioWhileRecording` is true.
     var systemAudioReductionPercent: Int = 100
+    /// Opt-in: stream audio to providers that support it while the user
+    /// talks. The recording is still written and is the fallback.
+    var streamingEnabled: Bool = false
+
+    /// How long to wait after release for a streamed transcript before
+    /// falling back to a batch request with the same recording.
+    static let streamFinishTimeout: Duration = .seconds(5)
+
+    private var streamingSession: STTStreamingSession?
 
     private let systemAudioMuter = SystemAudioMuter()
 
@@ -189,7 +198,13 @@ final class DictationPipeline: ObservableObject {
 
         recorder.onRecordingReady = nil
 
-        guard let stopped = recorder.stopRecording() else {
+        let stopped = recorder.stopRecording()
+        recorder.onAudioBuffer = nil
+        let stream = streamingSession
+        streamingSession = nil
+
+        guard let stopped else {
+            stream?.cancel()
             systemAudioMuter.restore()
             resetAudioSamples()
             presentError("No audio was captured.")
@@ -203,7 +218,7 @@ final class DictationPipeline: ObservableObject {
         resetAudioSamples()
         processingTask?.cancel()
         processingTask = Task { [weak self] in
-            await self?.processRecording(at: stopped.url, metrics: stopped.metrics)
+            await self?.processRecording(at: stopped.url, metrics: stopped.metrics, stream: stream)
         }
     }
 
@@ -221,6 +236,9 @@ final class DictationPipeline: ObservableObject {
 
         recorder.onRecordingReady = nil
         _ = recorder.stopRecording()
+        recorder.onAudioBuffer = nil
+        streamingSession?.cancel()
+        streamingSession = nil
         recorder.cleanup()
         systemAudioMuter.restore()
 
@@ -301,9 +319,14 @@ final class DictationPipeline: ObservableObject {
             }
         }
 
+        startStreamingIfEnabled()
+
         do {
             try recorder.startRecording()
         } catch {
+            recorder.onAudioBuffer = nil
+            streamingSession?.cancel()
+            streamingSession = nil
             presentError(error.localizedDescription)
             return
         }
@@ -324,7 +347,45 @@ final class DictationPipeline: ObservableObject {
         logger.info("Recording session started")
     }
 
-    private func processRecording(at recordedURL: URL, metrics: RecordingMetrics) async {
+    /// Opens a live session for the selected provider when streaming is on
+    /// and the provider supports it. Audio flows from the recorder's tap.
+    private func startStreamingIfEnabled() {
+        streamingSession?.cancel()
+        streamingSession = nil
+        recorder.onAudioBuffer = nil
+
+        guard streamingEnabled,
+              selectedSTT.supportsStreaming,
+              let provider = registry.makeStreamingProvider(for: selectedSTT)
+        else { return }
+
+        let session = provider.makeStreamingSession(language: sttLanguageSelection, vocabulary: customVocabulary)
+        let converter = LivePCMConverter(targetSampleRate: provider.streamingSampleRate)
+        recorder.onAudioBuffer = { buffer in
+            session.append(converter.convert(buffer))
+        }
+        session.start()
+        streamingSession = session
+        logger.info("Streaming to \(self.selectedSTT.rawValue, privacy: .public)")
+    }
+
+    /// Lists a finished stream in the Requests tab and the log.
+    private func report(_ outcome: StreamingFallback.Outcome, for stream: STTStreamingSession) {
+        if let error = outcome.error {
+            logger.warning("Streaming failed, using batch transcription: \(error.localizedDescription, privacy: .public)")
+        } else {
+            logger.info("Streamed transcript arrived \(outcome.elapsedMS, privacy: .public) ms after release")
+        }
+        httpClient?.recordStream(
+            providerID: stream.providerID.rawValue,
+            endpointURL: stream.endpointDescription,
+            durationMS: outcome.elapsedMS,
+            responsePreview: outcome.text ?? "",
+            errorMessage: outcome.error.map { $0.localizedDescription + " Fell back to batch transcription." }
+        )
+    }
+
+    private func processRecording(at recordedURL: URL, metrics: RecordingMetrics, stream: STTStreamingSession?) async {
         defer {
             processingTask = nil
         }
@@ -338,23 +399,25 @@ final class DictationPipeline: ObservableObject {
         // rationale. Providers hallucinate confidently on silent audio, so
         // gating aggressively here saves both a request and a bad paste.
         if !recordingHasSpeech(metrics: metrics) {
+            stream?.cancel()
             try? FileManager.default.removeItem(at: recordedURL)
             dismissForNoSpeech()
             return
         }
 
         do {
-            phase = .normalizingAudio
-            let wavURL = try await Task.detached(priority: .userInitiated) {
+            // The recording is always normalized, even while a stream is
+            // finishing: it is the fallback if streaming fails.
+            phase = stream == nil ? .normalizingAudio : .transcribing
+            let normalization = Task.detached(priority: .userInitiated) {
                 try AudioNormalization.normalize(recordedURL)
-            }.value
-            defer {
-                try? FileManager.default.removeItem(at: wavURL)
             }
-
-            phase = .transcribing
-            guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
-                throw STTError.missingAPIKey(provider: selectedSTT)
+            defer {
+                Task.detached {
+                    if let wavURL = try? await normalization.value {
+                        try? FileManager.default.removeItem(at: wavURL)
+                    }
+                }
             }
 
             // Warm the LLM connection in parallel with STT. By the time the
@@ -366,10 +429,25 @@ final class DictationPipeline: ObservableObject {
                 client.warmConnection(to: origin)
             }
 
-            let rawTranscript = try await sttProvider.transcribe(
-                fileURL: wavURL,
-                language: sttLanguageSelection,
-                vocabulary: customVocabulary
+            let rawTranscript = try await StreamingFallback.transcript(
+                stream: stream,
+                timeout: Self.streamFinishTimeout,
+                report: { [weak self] outcome in
+                    guard let self, let stream else { return }
+                    self.report(outcome, for: stream)
+                },
+                batch: { [self] in
+                    let wavURL = try await normalization.value
+                    phase = .transcribing
+                    guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
+                        throw STTError.missingAPIKey(provider: selectedSTT)
+                    }
+                    return try await sttProvider.transcribe(
+                        fileURL: wavURL,
+                        language: sttLanguageSelection,
+                        vocabulary: customVocabulary
+                    )
+                }
             )
             guard let normalizedRawTranscript = TranscriptDecision.normalizedRawTranscript(rawTranscript) else {
                 dismissForNoSpeech()

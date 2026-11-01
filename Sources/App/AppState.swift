@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
     @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple
     /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
     @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
+    /// Opt-in live streaming for providers that support it.
+    @AppStorage("streamWhileTalking") var streamWhileTalking: Bool = false
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     /// Empty = use the official OpenAI endpoint. Set to point STT/LLM at an
     /// OpenAI-compatible gateway (Azure OpenAI, internal proxy, Ollama, etc.).
@@ -492,6 +494,7 @@ final class AppState: ObservableObject {
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
         pipeline.systemAudioReductionPercent = systemAudioReductionPercent
+        pipeline.streamingEnabled = streamWhileTalking
 
         // `customSystemPrompt` is the single user-editable override. When
         // empty, the pipeline falls back to the built-in cleanup prompt.
