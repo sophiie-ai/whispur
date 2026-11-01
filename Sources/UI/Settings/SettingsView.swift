@@ -146,11 +146,14 @@ struct SettingsView: View {
                 historyStore: historyStore,
                 stats: appState.stats,
                 vocabulary: appState.vocabulary,
+                styles: appState.styles,
                 isReady: setupState.isComplete,
                 openTab: open
             )
-        case .dictionary, .styles:
+        case .dictionary:
             DictionarySettingsView(appState: appState, vocabulary: appState.vocabulary)
+        case .styles:
+            StylesSettingsView(appState: appState, styles: appState.styles, historyStore: historyStore)
         case .getStarted:
             GetStartedSettingsView(appState: appState, setup: setupState, openTab: open)
         case .providers:
