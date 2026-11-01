@@ -54,7 +54,7 @@ struct ProviderModelPicker: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(width: 240)
+            .fixedSize()
             .accessibilityLabel("\(providerName) model")
         }
     }

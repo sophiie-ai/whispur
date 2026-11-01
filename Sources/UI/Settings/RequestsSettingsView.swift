@@ -36,32 +36,33 @@ struct RequestsSettingsView: View {
     @State private var selectedEntryID: ProviderRequestLogEntry.ID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            PreferenceCard(
-                "Provider Requests",
-                detail: "Review recent STT and cleanup API calls, including status, timing, and response previews.",
-                icon: "network"
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
+            PageHeader(
+                SettingsTab.requests.title,
+                pill: errorCount == 0 ? nil : (errorCount == 1 ? "1 error" : "\(errorCount) errors"),
+                pillTone: .warning,
+                subtitle: SettingsTab.requests.summary
             ) {
-                VStack(alignment: .leading, spacing: 16) {
-                    RequestsHeaderRow(
-                        totalCount: appState.providerRequestLog.items.count,
-                        shownCount: filteredEntries.count,
-                        errorCount: errorCount,
-                        onClear: {
-                            appState.providerRequestLog.clear()
-                            selectedEntryID = nil
-                        }
-                    )
-                    RequestsFilterBar(
-                        providerOptions: providerOptions,
-                        providerFilter: $providerFilter,
-                        statusFilter: $statusFilter
-                    )
-                    contentArea
+                Button("Clear Log") {
+                    appState.providerRequestLog.clear()
+                    selectedEntryID = nil
                 }
+                .buttonStyle(.sophiieSecondary)
+                .disabled(appState.providerRequestLog.items.isEmpty)
             }
+
+            RequestsFilterBar(
+                providerOptions: providerOptions,
+                providerFilter: $providerFilter,
+                statusFilter: $statusFilter,
+                summary: "\(filteredEntries.count) of \(appState.providerRequestLog.items.count) shown"
+            )
+
+            contentArea
         }
-        .padding(24)
+        .padding(.horizontal, 32)
+        .padding(.top, SettingsView.titleBarHeight + 6)
+        .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -77,7 +78,12 @@ struct RequestsSettingsView: View {
             RequestsInspectorPane(entry: selectedEntry)
                 .frame(minWidth: 300)
         }
-        .frame(maxWidth: .infinity, minHeight: 460, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SophiieTheme.Radius.panel, style: .continuous)
+                .strokeBorder(SophiieTheme.Palette.border, lineWidth: 1)
+        )
     }
 
     private var providerOptions: [String] {
@@ -112,31 +118,11 @@ struct RequestsSettingsView: View {
 
 // MARK: - Subviews
 
-private struct RequestsHeaderRow: View {
-    let totalCount: Int
-    let shownCount: Int
-    let errorCount: Int
-    let onClear: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            PreferenceBadge(title: "\(totalCount) saved", tone: .neutral)
-            PreferenceBadge(title: "\(shownCount) shown", tone: .neutral)
-            PreferenceBadge(title: "\(errorCount) errors", tone: errorCount == 0 ? .good : .warning)
-
-            Spacer()
-
-            Button("Clear Log", action: onClear)
-                .buttonStyle(.sophiieSecondary)
-                .disabled(totalCount == 0)
-        }
-    }
-}
-
 private struct RequestsFilterBar: View {
     let providerOptions: [String]
     @Binding var providerFilter: String
     @Binding var statusFilter: ProviderRequestStatusFilter
+    let summary: String
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
@@ -170,6 +156,10 @@ private struct RequestsFilterBar: View {
             }
 
             Spacer(minLength: 0)
+
+            Text(summary)
+                .font(.system(size: 12))
+                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 }
@@ -183,8 +173,9 @@ private struct RequestsListPane: View {
         Group {
             if filteredEntries.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("No Matching Requests")
-                        .font(.headline)
+                    Text("No matching requests")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(SophiieTheme.Palette.ink)
 
                     Text(isLogEmpty
                         ? "Make a provider-backed request and it will appear here with status, duration, and the provider response."
@@ -202,6 +193,7 @@ private struct RequestsListPane: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onAppear {
                     if selectedEntryID == nil {
                         selectedEntryID = filteredEntries.first?.id
@@ -215,7 +207,7 @@ private struct RequestsListPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
+        .background(SophiieTheme.Palette.surface)
     }
 }
 
@@ -248,8 +240,9 @@ private struct RequestsInspectorPane: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Select a Request")
-                            .font(.headline)
+                        Text("Select a request")
+                            .font(.system(size: 13.5, weight: .medium))
+                            .foregroundStyle(SophiieTheme.Palette.ink)
 
                         Text("The inspector will show the sanitized request summary and the provider response preview.")
                             .font(.subheadline)
@@ -261,7 +254,7 @@ private struct RequestsInspectorPane: View {
             .padding(18)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SophiieTheme.Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
+        .background(SophiieTheme.Palette.surface)
     }
 
     private func statusLabel(for entry: ProviderRequestLogEntry) -> String {

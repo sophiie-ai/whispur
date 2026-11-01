@@ -66,12 +66,14 @@ final class AppState: ObservableObject {
     ///   - historyStore: Saved dictations. Defaults to the on-disk store;
     ///     renders pass one backed by a temporary file.
     ///   - stats: Dictation counters, same as above.
+    ///   - providerRequestLog: Provider request diagnostics, same as above.
     ///   - startsServices: Installs the shortcut listener and starts update
     ///     checks. Renders pass false so a second instance never listens to
     ///     the keyboard.
     init(
         historyStore: PipelineHistoryStore? = nil,
         stats: DictationStats? = nil,
+        providerRequestLog: ProviderRequestLog? = nil,
         startsServices: Bool = true
     ) {
         let loadedHoldShortcut = Self.loadHoldShortcut()
@@ -81,7 +83,7 @@ final class AppState: ObservableObject {
         _toggleShortcut = Published(initialValue: sanitizedToggleShortcut)
 
         let keychain = KeychainManager.shared
-        let providerRequestLog = ProviderRequestLog()
+        let providerRequestLog = providerRequestLog ?? ProviderRequestLog()
         let httpClient = ProviderHTTPClient(requestLog: providerRequestLog)
         let registry = ProviderRegistry(keychain: keychain, httpClient: httpClient)
         let recorder = AudioRecorder()

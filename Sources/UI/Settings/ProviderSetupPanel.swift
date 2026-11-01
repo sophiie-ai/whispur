@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The one key setup component for speech and cleanup providers. The active
-/// provider renders open and emphasised; every other provider renders as a
-/// compact row (name, status, chevron) that expands in place.
+/// The one key setup component for speech and cleanup providers, laid out
+/// as card content. The active provider renders its setup open under the
+/// card's provider picker; every other provider renders as a compact row
+/// (name, status, chevron) that expands in place.
 struct ProviderSetupPanel: View {
     enum Style: Equatable {
         case active
@@ -42,27 +43,13 @@ struct ProviderSetupPanel: View {
 
             if showsDetails {
                 details
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
-                    .padding(.top, isActive ? 0 : 4)
+                    .padding(.leading, isActive ? SettingsMetrics.textInset : 0)
+                    .padding(.top, isActive ? 2 : 0)
+                    .padding(.bottom, 14)
                     .transition(.opacity)
             }
         }
-        .background(background, in: shape)
-        .overlay(shape.strokeBorder(borderColor, lineWidth: isActive ? 1.5 : 1))
         .sophiieAnimation(value: showsDetails)
-    }
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
-    }
-
-    private var background: Color {
-        isActive ? SophiieTheme.Palette.surfaceSelected : SophiieTheme.Palette.surfaceSubtle
-    }
-
-    private var borderColor: Color {
-        isActive ? SophiieTheme.Palette.highlight : SophiieTheme.Palette.border
     }
 
     // MARK: - Header
@@ -71,40 +58,20 @@ struct ProviderSetupPanel: View {
     private var header: some View {
         switch style {
         case .active:
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ACTIVE")
-                    .font(SophiieTheme.Typography.captionStrong)
-                    .tracking(SophiieTheme.Typography.eyebrowTracking)
-                    .foregroundStyle(SophiieTheme.Palette.interactive)
-                HStack(spacing: 10) {
-                    Text(descriptor.name)
-                        .font(SophiieTheme.Typography.title)
-                        .tracking(SophiieTheme.Typography.titleTracking)
-                        .foregroundStyle(SophiieTheme.Palette.ink)
-                    Spacer()
-                    PreferenceBadge(title: status.title, tone: status.tone)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Active provider, \(descriptor.name), \(status.title)")
-            .accessibilityAddTraits(.isHeader)
-            .padding(16)
+            // The card's provider picker row is the header.
+            EmptyView()
         case let .row(isExpanded):
             Button(action: onToggle) {
-                HStack(spacing: 10) {
-                    Text(descriptor.name)
-                        .font(SophiieTheme.Typography.label)
-                        .foregroundStyle(SophiieTheme.Palette.ink)
-                    Spacer()
-                    PreferenceBadge(title: status.title, tone: status.tone)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SophiieTheme.Palette.muted)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .accessibilityHidden(true)
+                SettingsRow(icon: nil, title: descriptor.name) {
+                    HStack(spacing: 10) {
+                        PreferenceBadge(title: status.title, tone: status.tone)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(SophiieTheme.Palette.muted)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .accessibilityHidden(true)
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
