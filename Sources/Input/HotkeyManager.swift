@@ -160,10 +160,14 @@ final class HotkeyManager {
     /// so they let us still fire cancel even when the tap path misses.
     private var globalEscMonitor: Any?
     private var accessibilityTimer: Timer?
+    /// Set by `start`, so a recheck never installs a listener in an instance
+    /// that was never started (renders and tests).
+    private var started = false
 
     // MARK: - Lifecycle
 
     func start() {
+        started = true
         checkAccessibilityAndInstall()
         scheduleAccessibilityPollIfNeeded()
         installGlobalEscMonitor()
@@ -189,6 +193,7 @@ final class HotkeyManager {
     }
 
     func stop() {
+        started = false
         accessibilityTimer?.invalidate()
         accessibilityTimer = nil
         teardownEventTap()
@@ -230,6 +235,17 @@ final class HotkeyManager {
             return !state.tapOrHold.isArming
         }
         if cancelTimer { cancelTapOrHoldTimer() }
+    }
+
+    /// Re-reads the Accessibility grant now instead of on the next poll, and
+    /// installs the event tap once it is granted. No-op before `start`.
+    func recheckAccessibility() {
+        guard started else { return }
+        checkAccessibilityAndInstall()
+        if eventTap != nil {
+            accessibilityTimer?.invalidate()
+            accessibilityTimer = nil
+        }
     }
 
     func requestAccessibility() {

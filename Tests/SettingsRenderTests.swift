@@ -138,7 +138,7 @@ final class SettingsRenderTests: XCTestCase {
         ("Whispur", nil),
     ]
 
-    private static func makeAppState(in scratch: URL, vocabularyDefaults: UserDefaults) throws -> AppState {
+    static func makeAppState(in scratch: URL, vocabularyDefaults: UserDefaults) throws -> AppState {
         let now = Date()
         // Seed the old plain list so the migration path runs, then add the
         // learned terms on top.

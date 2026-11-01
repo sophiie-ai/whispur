@@ -33,7 +33,7 @@ struct PreferencesSettingsView: View {
                 SettingsRow(icon: "mic", title: "Microphone", subtitle: "Needed to capture speech from the selected input device.") {
                     permissionControls(
                         granted: setup.microphoneGranted,
-                        grant: ("Allow", appState.requestMicrophoneAccess),
+                        grant: (appState.microphoneAccessRefused ? "Turn On" : "Allow", appState.requestMicrophoneAccess),
                         open: appState.openMicrophoneSettings
                     )
                 }
