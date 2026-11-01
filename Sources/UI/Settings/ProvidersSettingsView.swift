@@ -35,13 +35,13 @@ struct ProvidersSettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                speechCard
-                languagesCard
-                cleanupCard
-            }
-            .padding(24)
+        SettingsPage {
+            PageHeader(SettingsTab.providers.title, subtitle: SettingsTab.providers.summary)
+            speechSection
+            otherSpeechSection
+            languageSection
+            cleanupSection
+            otherCleanupSection
         }
         .onChange(of: appState.selectedSTT) { _, provider in
             if expandedSTT == provider { expandedSTT = nil }
@@ -55,77 +55,77 @@ struct ProvidersSettingsView: View {
 
     // MARK: - Speech
 
-    private var speechCard: some View {
-        PreferenceCard(
-            "Speech to Text",
-            detail: "Whispur sends each recording to the active provider.",
-            icon: "waveform.badge.mic"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                activePicker(title: "Speech provider") {
-                    Picker("Speech provider", selection: $appState.selectedSTT) {
+    private var speechSection: some View {
+        SettingsSection("Speech to text", footer: "Whispur sends each recording to the active provider.") {
+            SettingsCard {
+                let active = appState.selectedSTT.setupDescriptor
+                SettingsRow(icon: "waveform.badge.mic", title: "Speech provider", subtitle: credentials.status(for: active.keys).title) {
+                    RowPicker("Speech provider", selection: $appState.selectedSTT) {
                         ForEach(STTProviderID.allCases) { provider in
                             Text(provider.displayName).tag(provider)
                         }
                     }
                 }
-
-                panel(for: appState.selectedSTT.setupDescriptor, style: .active, activeNote: nil)
+                panel(for: active, style: .active, activeNote: nil)
 
                 if appState.selectedSTT.supportsStreaming {
-                    StreamingToggle(isOn: $appState.streamWhileTalking)
-                }
-
-                otherProvidersLabel
-
-                VStack(spacing: 8) {
-                    ForEach(STTProviderID.allCases.filter { $0 != appState.selectedSTT }) { provider in
-                        panel(
-                            for: provider.setupDescriptor,
-                            style: .row(isExpanded: expandedSTT == provider),
-                            activeNote: nil,
-                            onToggle: {
-                                withSophiieAnimation {
-                                    expandedSTT = expandedSTT == provider ? nil : provider
-                                }
-                                if expandedSTT == provider { focusMissingKey(of: provider.setupDescriptor) }
-                            },
-                            onUse: { appState.selectedSTT = provider }
-                        )
+                    CardDivider()
+                    SettingsRow(
+                        icon: "dot.radiowaves.left.and.right",
+                        title: "Stream audio while you talk",
+                        subtitle: "Text is ready sooner after you stop. If the stream fails, Whispur sends the recording instead."
+                    ) {
+                        SettingsSwitch(label: "Stream audio while you talk", isOn: $appState.streamWhileTalking)
                     }
                 }
             }
         }
     }
 
-    private var languagesCard: some View {
-        PreferenceCard(
-            "Preferred Language",
-            detail: "Pick the language you speak. Whispur sends this as a hint to the selected speech provider. Auto-detect asks the provider to identify the language itself, which works best when you switch between languages.",
-            icon: "character.bubble"
-        ) {
-            STTLanguagePicker(appState: appState)
+    private var otherSpeechSection: some View {
+        SettingsSection("Other speech providers") {
+            SettingsCard {
+                let others = STTProviderID.allCases.filter { $0 != appState.selectedSTT }
+                ForEach(Array(others.enumerated()), id: \.element) { index, provider in
+                    if index > 0 { CardDivider(leadingInset: 0) }
+                    panel(
+                        for: provider.setupDescriptor,
+                        style: .row(isExpanded: expandedSTT == provider),
+                        activeNote: nil,
+                        onToggle: {
+                            withSophiieAnimation {
+                                expandedSTT = expandedSTT == provider ? nil : provider
+                            }
+                            if expandedSTT == provider { focusMissingKey(of: provider.setupDescriptor) }
+                        },
+                        onUse: { appState.selectedSTT = provider }
+                    )
+                }
+            }
+        }
+    }
+
+    private var languageSection: some View {
+        SettingsSection("Language", footer: "Whispur sends this as a hint to the speech provider. Auto-detect lets the provider identify the language, which works best when you switch between languages.") {
+            SettingsCard {
+                STTLanguageRow(appState: appState)
+            }
         }
     }
 
     // MARK: - Cleanup
 
-    private var cleanupCard: some View {
-        PreferenceCard(
-            "Cleanup Model",
-            detail: "Adds punctuation, removes filler, and smooths dictation before paste.",
-            icon: "wand.and.stars"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                activePicker(title: "Cleanup provider") {
-                    Picker("Cleanup provider", selection: $appState.selectedLLM) {
+    private var cleanupSection: some View {
+        SettingsSection("Cleanup", footer: "Adds punctuation, removes filler, and smooths dictation before paste.") {
+            SettingsCard {
+                let active = appState.selectedLLM.setupDescriptor
+                SettingsRow(icon: "wand.and.stars", title: "Cleanup provider", subtitle: credentials.status(for: active.keys).title) {
+                    RowPicker("Cleanup provider", selection: $appState.selectedLLM) {
                         ForEach(LLMProviderID.allCases) { provider in
                             Text(provider.displayName).tag(provider)
                         }
                     }
                 }
-
-                let active = appState.selectedLLM.setupDescriptor
                 panel(
                     for: active,
                     style: .active,
@@ -133,53 +133,34 @@ struct ProvidersSettingsView: View {
                         ? nil
                         : "Until a key is saved, Whispur pastes the raw transcript without cleanup."
                 )
+            }
+        }
+    }
 
-                otherProvidersLabel
-
-                VStack(spacing: 8) {
-                    ForEach(LLMProviderID.allCases.filter { $0 != appState.selectedLLM }) { provider in
-                        panel(
-                            for: provider.setupDescriptor,
-                            style: .row(isExpanded: expandedLLM == provider),
-                            activeNote: nil,
-                            onToggle: {
-                                withSophiieAnimation {
-                                    expandedLLM = expandedLLM == provider ? nil : provider
-                                }
-                                if expandedLLM == provider { focusMissingKey(of: provider.setupDescriptor) }
-                            },
-                            onUse: { appState.selectedLLM = provider }
-                        )
-                    }
+    private var otherCleanupSection: some View {
+        SettingsSection("Other cleanup providers") {
+            SettingsCard {
+                let others = LLMProviderID.allCases.filter { $0 != appState.selectedLLM }
+                ForEach(Array(others.enumerated()), id: \.element) { index, provider in
+                    if index > 0 { CardDivider(leadingInset: 0) }
+                    panel(
+                        for: provider.setupDescriptor,
+                        style: .row(isExpanded: expandedLLM == provider),
+                        activeNote: nil,
+                        onToggle: {
+                            withSophiieAnimation {
+                                expandedLLM = expandedLLM == provider ? nil : provider
+                            }
+                            if expandedLLM == provider { focusMissingKey(of: provider.setupDescriptor) }
+                        },
+                        onUse: { appState.selectedLLM = provider }
+                    )
                 }
             }
         }
     }
 
     // MARK: - Building blocks
-
-    private func activePicker<P: View>(title: String, @ViewBuilder picker: () -> P) -> some View {
-        HStack {
-            Text(title)
-                .font(SophiieTheme.Typography.label)
-                .foregroundStyle(SophiieTheme.Palette.ink)
-                .accessibilityHidden(true)
-            Spacer()
-            picker()
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 240)
-        }
-    }
-
-    private var otherProvidersLabel: some View {
-        Text("OTHER PROVIDERS")
-            .font(SophiieTheme.Typography.captionStrong)
-            .tracking(SophiieTheme.Typography.eyebrowTracking)
-            .foregroundStyle(SophiieTheme.Palette.muted)
-            .padding(.top, 6)
-            .accessibilityAddTraits(.isHeader)
-    }
 
     private func panel(
         for descriptor: ProviderDescriptor,
@@ -215,7 +196,7 @@ struct ProvidersSettingsView: View {
     }
 }
 
-private struct STTLanguagePicker: View {
+private struct STTLanguageRow: View {
     @ObservedObject var appState: AppState
 
     private static let autoTag = "__auto__"
@@ -239,21 +220,18 @@ private struct STTLanguagePicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker("Language", selection: selectionBinding) {
+        SettingsRow(
+            icon: "character.bubble",
+            title: "Preferred language",
+            subtitle: footnote(for: appState.selectedSTT, selection: appState.sttLanguageSelection)
+        ) {
+            RowPicker("Language", selection: selectionBinding) {
                 Text("Auto-detect").tag(Self.autoTag)
                 Divider()
                 ForEach(STTLanguageCatalog.all) { language in
                     Text(language.displayName).tag(language.code)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 260)
-
-            Text(footnote(for: appState.selectedSTT, selection: appState.sttLanguageSelection))
-                .font(.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
         }
     }
 
@@ -272,17 +250,3 @@ private struct STTLanguagePicker: View {
 }
 
 
-/// Opt-in live streaming, shown only for providers that support it.
-private struct StreamingToggle: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle("Stream audio while you talk", isOn: $isOn)
-            Text("Text is ready sooner after you stop. If the stream fails, Whispur sends the recording instead.")
-                .font(SophiieTheme.Typography.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}

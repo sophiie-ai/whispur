@@ -13,6 +13,10 @@ import XCTest
 @MainActor
 final class SettingsRenderTests: XCTestCase {
     private static let size = CGSize(width: 1000, height: 760)
+    /// Tall enough to show every section of the scrolling pages.
+    private static let tallSize = CGSize(width: 1000, height: 1900)
+    /// Scrolling pages that also get a tall render.
+    private static let tallTabs: [SettingsTab] = [.providers, .preferences, .getStarted]
 
     func testRenderSettingsPages() throws {
         let env = ProcessInfo.processInfo.environment
@@ -41,6 +45,9 @@ final class SettingsRenderTests: XCTestCase {
                 defaults.set(tab.rawValue, forKey: SettingsView.selectedTabKey)
                 let view = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: ready, defaults: defaults)
                 try render(view, scheme: scheme, to: dir.appendingPathComponent("\(tab.rawValue)-\(suffix).png"))
+                if Self.tallTabs.contains(tab) {
+                    try render(view, scheme: scheme, size: Self.tallSize, to: dir.appendingPathComponent("\(tab.rawValue)-full-\(suffix).png"))
+                }
             }
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
@@ -57,6 +64,14 @@ final class SettingsRenderTests: XCTestCase {
         (1, "The settings window should open on the dictation page by default instead of setup."),
         (2, "Let's walk through the quarterly roadmap after standup and then split the work into smaller tickets."),
         (3, "Thanks for the quick turnaround on the quote."),
+    ]
+
+    static let sampleRequests: [(provider: String, kind: ProviderRequestKind, url: String, status: Int?)] = [
+        ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
+        ("anthropic", .llm, "https://api.anthropic.com/v1/messages", 200),
+        ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
+        ("anthropic", .llm, "https://api.anthropic.com/v1/messages", 429),
+        ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
     ]
 
     private static func makeAppState(in scratch: URL) throws -> AppState {
@@ -78,21 +93,39 @@ final class SettingsRenderTests: XCTestCase {
         let stats = #"{"totalWords":18240,"dailyWords":{},"totalDictations":1284}"#
         try Data(stats.utf8).write(to: statsURL)
 
+        let requestLog = ProviderRequestLog(fileURL: scratch.appendingPathComponent("provider-requests.json"))
+        for (index, entry) in sampleRequests.enumerated() {
+            requestLog.record(ProviderRequestLogEntry(
+                id: UUID(),
+                timestamp: now.addingTimeInterval(Double(index - sampleRequests.count) * 90),
+                providerID: entry.provider,
+                kind: entry.kind,
+                endpointURL: entry.url,
+                httpMethod: "POST",
+                statusCode: entry.status,
+                durationMS: 300 + index * 70,
+                requestSummary: "POST \(entry.url)\n\nHeaders:\nAuthorization: <redacted>",
+                responseBodyPreview: entry.status == 200 ? #"{"text":"Sounds good, ship it."}"# : #"{"error":"rate limited"}"#,
+                errorMessage: entry.status == 200 ? nil : "Rate limited. Try again shortly."
+            ))
+        }
+
         return AppState(
             historyStore: PipelineHistoryStore(fileURL: historyURL),
             stats: DictationStats(fileURL: statsURL),
+            providerRequestLog: requestLog,
             startsServices: false
         )
     }
 
     // MARK: - Rendering
 
-    private func render<V: View>(_ view: V, scheme: ColorScheme, to url: URL) throws {
+    private func render<V: View>(_ view: V, scheme: ColorScheme, size: CGSize = SettingsRenderTests.size, to url: URL) throws {
         let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-        let rect = CGRect(origin: .zero, size: Self.size)
+        let rect = CGRect(origin: .zero, size: size)
         let host = NSHostingView(rootView: view
             .environment(\.colorScheme, scheme)
-            .frame(width: Self.size.width, height: Self.size.height))
+            .frame(width: size.width, height: size.height))
         host.frame = rect
         host.appearance = appearance
 
@@ -105,12 +138,12 @@ final class SettingsRenderTests: XCTestCase {
 
         let rep = try XCTUnwrap(NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: Int(Self.size.width * 2),
-            pixelsHigh: Int(Self.size.height * 2),
+            pixelsWide: Int(size.width * 2),
+            pixelsHigh: Int(size.height * 2),
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ))
-        rep.size = Self.size
+        rep.size = size
         // Resolve dynamic colours against the requested appearance while drawing.
         appearance?.performAsCurrentDrawingAppearance {
             host.cacheDisplay(in: rect, to: rep)

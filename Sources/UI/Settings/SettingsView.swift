@@ -149,50 +149,17 @@ struct SettingsView: View {
                 openTab: open
             )
         case .dictionary, .styles:
-            LegacyPage(tab: .dictionary) {
-                PromptsSettingsView(appState: appState)
-            }
+            DictionarySettingsView(appState: appState)
         case .getStarted:
-            LegacyPage(tab: .getStarted) {
-                SetupSettingsView(appState: appState, openTab: open)
-            }
+            GetStartedSettingsView(appState: appState, setup: setupState, openTab: open)
         case .providers:
-            LegacyPage(tab: .providers) {
-                ProvidersSettingsView(appState: appState, credentials: credentials, tester: tester, layout: providersLayout)
-            }
+            ProvidersSettingsView(appState: appState, credentials: credentials, tester: tester, layout: providersLayout)
         case .preferences:
-            LegacyPage(tab: .preferences) {
-                GeneralSettingsView(appState: appState)
-            }
+            PreferencesSettingsView(appState: appState, setup: setupState)
         case .activity:
-            LegacyPage(tab: .activity) {
-                RunLogView(appState: appState)
-            }
+            ActivitySettingsView(historyStore: historyStore)
         case .requests:
-            LegacyPage(tab: .requests) {
-                RequestsSettingsView(appState: appState)
-            }
-        }
-    }
-}
-
-/// A page that still uses the pre-redesign layout under the new header.
-private struct LegacyPage<Content: View>: View {
-    let tab: SettingsTab
-    let content: Content
-
-    init(tab: SettingsTab, @ViewBuilder content: () -> Content) {
-        self.tab = tab
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            PageHeader(tab.title, subtitle: tab.summary)
-                .padding(.horizontal, 24)
-                .padding(.top, SettingsView.titleBarHeight + 6)
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            RequestsSettingsView(appState: appState)
         }
     }
 }

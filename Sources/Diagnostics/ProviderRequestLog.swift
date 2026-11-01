@@ -31,13 +31,20 @@ final class ProviderRequestLog: ObservableObject {
     private let maxItems: Int
     private let fileURL: URL
 
-    init(maxItems: Int = 25) {
+    /// - Parameter fileURL: Where the log lives. Defaults to
+    ///   `Application Support/Whispur/provider-requests.json`; renders pass a
+    ///   temporary file.
+    init(maxItems: Int = 25, fileURL: URL? = nil) {
         self.maxItems = maxItems
 
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let directoryURL = appSupport.appendingPathComponent("Whispur", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        self.fileURL = directoryURL.appendingPathComponent("provider-requests.json")
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let directoryURL = appSupport.appendingPathComponent("Whispur", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            self.fileURL = directoryURL.appendingPathComponent("provider-requests.json")
+        }
 
         load()
     }
