@@ -39,6 +39,17 @@ final class SettingsRenderTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "ai.sophiie.whispur.render"))
         defer { defaults.removePersistentDomain(forName: "ai.sophiie.whispur.render") }
 
+        // Select the longest sample device so the Input device row shows its
+        // worst case. The preference lives in the standard defaults, so put
+        // the real value back afterwards.
+        let inputKey = "preferredAudioInputUID"
+        let savedInput = UserDefaults.standard.object(forKey: inputKey)
+        defer {
+            if let savedInput { UserDefaults.standard.set(savedInput, forKey: inputKey) } else { UserDefaults.standard.removeObject(forKey: inputKey) }
+        }
+        appState.preferredAudioInputUID = Self.sampleInputDevices[1].uid
+        let devices = Self.sampleInputDevices
+
         let ready = SettingsView.PermissionsOverride(microphone: true, accessibility: true)
         let missing = SettingsView.PermissionsOverride(microphone: true, accessibility: false)
 
@@ -47,6 +58,7 @@ final class SettingsRenderTests: XCTestCase {
             for tab in SettingsTab.visible {
                 defaults.set(tab.rawValue, forKey: SettingsView.selectedTabKey)
                 let view = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: ready, defaults: defaults)
+                    .environment(\.listInputDevices) { devices }
                 try render(view, scheme: scheme, to: dir.appendingPathComponent("\(tab.rawValue)-\(suffix).png"))
                 if Self.tallTabs.contains(tab) {
                     try render(view, scheme: scheme, size: Self.tallSize, to: dir.appendingPathComponent("\(tab.rawValue)-full-\(suffix).png"))
@@ -59,6 +71,12 @@ final class SettingsRenderTests: XCTestCase {
     }
 
     // MARK: - Fixtures
+
+    static let sampleInputDevices: [AudioDevice] = [
+        AudioDevice(id: 1, name: "MacBook Pro Microphone", uid: "render-builtin"),
+        AudioDevice(id: 2, name: "MacBook Pro Microphone (Built-in) — Studio Display Camera Array", uid: "render-long"),
+        AudioDevice(id: 3, name: "AirPods Pro", uid: "render-airpods"),
+    ]
 
     static let sampleHistory: [(daysAgo: Int, text: String)] = [
         (0, "Can we push the design review to Thursday afternoon so everyone can see the new onboarding flow first?"),

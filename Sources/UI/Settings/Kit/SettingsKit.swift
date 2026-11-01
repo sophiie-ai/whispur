@@ -446,24 +446,38 @@ struct InlineIconButton: View {
     }
 }
 
-/// A native pop-up picker sized to its content, for a row's trailing edge.
+/// A native pop-up picker for a row's trailing edge.
+///
+/// A pop-up's natural width is its WIDEST option, so by default it is fixed
+/// to that size. Pass `maxWidth` when the options are open-ended (device
+/// names): the button then stays within that width and truncates the
+/// selected title, while the opened menu still shows every option in full.
 struct RowPicker<Value: Hashable, Options: View>: View {
     let label: String
     @Binding var selection: Value
+    var maxWidth: CGFloat?
     let options: Options
 
-    init(_ label: String, selection: Binding<Value>, @ViewBuilder options: () -> Options) {
+    init(_ label: String, selection: Binding<Value>, maxWidth: CGFloat? = nil, @ViewBuilder options: () -> Options) {
         self.label = label
         _selection = selection
+        self.maxWidth = maxWidth
         self.options = options()
     }
 
     var body: some View {
-        Picker(label, selection: $selection) { options }
+        let picker = Picker(label, selection: $selection) { options }
             .labelsHidden()
             .pickerStyle(.menu)
-            .fixedSize()
             .accessibilityLabel(label)
+        if let maxWidth {
+            picker
+                .frame(maxWidth: maxWidth, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+        } else {
+            picker.fixedSize()
+        }
     }
 }
 
