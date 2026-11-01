@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.22.0](https://github.com/sophiie-ai/whispur/compare/v0.21.0...v0.22.0) (2026-11-01)
+
+
+### Features
+
+* **stt:** add Meta Muse as a speech provider with streaming ([#72](https://github.com/sophiie-ai/whispur/issues/72)) ([a5fbcfc](https://github.com/sophiie-ai/whispur/commit/a5fbcfc9f1b1f714a34fab770230a4bc6c56fdc3))
+* **stt:** add Mistral Voxtral as a speech provider ([#69](https://github.com/sophiie-ai/whispur/issues/69)) ([28a2940](https://github.com/sophiie-ai/whispur/commit/28a294060bd8e7c0c5d6822adc99705cfcc7f0ce))
+* **stt:** default OpenAI to gpt-transcribe and add model pickers ([#68](https://github.com/sophiie-ai/whispur/issues/68)) ([684e64d](https://github.com/sophiie-ai/whispur/commit/684e64d4998ea2b4a20a18221b0088bc634abf75))
+* **stt:** stream audio while you talk, starting with ElevenLabs ([#71](https://github.com/sophiie-ai/whispur/issues/71)) ([2c2d478](https://github.com/sophiie-ai/whispur/commit/2c2d47819c43cd6f2dc724acbcda4f5b40d7f7c5))
+* **stt:** use SpeechAnalyzer for Apple dictation on macOS 26 ([#70](https://github.com/sophiie-ai/whispur/issues/70)) ([c8c971a](https://github.com/sophiie-ai/whispur/commit/c8c971a3199dc8e7c663685f82112f65501a48c5))
+
 ## [0.21.0](https://github.com/sophiie-ai/whispur/compare/v0.20.1...v0.21.0) (2026-11-01)
 
 
