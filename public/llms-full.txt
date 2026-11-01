@@ -19,7 +19,7 @@ Hold Fn to dictate and release to paste. Press Command + Fn for hands-free recor
 Text lands in the app you are already using: email, Slack, your editor, a prompt box. Your clipboard is restored afterwards.
 
 ### Five speech engines
-Apple speech recognition with no key needed, or OpenAI Whisper, Groq, Deepgram and ElevenLabs with your own API key.
+Apple speech recognition with no key needed, or OpenAI, Groq, Deepgram and ElevenLabs with your own API key.
 
 ### Optional AI cleanup
 Run transcripts through Claude, OpenAI, Groq or AWS Bedrock to fix punctuation and misheard words. Edit the prompt and add your own vocabulary.
@@ -47,8 +47,8 @@ Start with Apple speech recognition and no API key, or add a key for a cloud pro
 | Provider | Notes |
 | --- | --- |
 | Apple speech recognition | Built into macOS, no key, default |
-| OpenAI Whisper | whisper-1, or any OpenAI-compatible endpoint |
-| Groq | Whisper Large v3 |
+| OpenAI | gpt-transcribe by default, whisper-1 until February 2027, or any OpenAI-compatible endpoint |
+| Groq | Whisper Large v3 or v3 Turbo |
 | Deepgram | Nova-3 |
 | ElevenLabs | Scribe v2 |
 
@@ -87,7 +87,7 @@ Yes. Whispur is MIT licensed, with no account and no subscription. Apple speech 
 No. Whispur has no backend server. Audio and transcripts go only to the speech and cleanup providers you configure, using your own API keys, which are stored in the macOS Keychain.
 
 ### Which speech-to-text engines does Whispur support?
-Apple speech recognition built into macOS, OpenAI Whisper, Groq Whisper Large v3, Deepgram Nova-3 and ElevenLabs Scribe v2. The OpenAI provider also accepts a custom OpenAI-compatible base URL.
+Apple speech recognition built into macOS, OpenAI GPT Transcribe, Groq Whisper Large v3, Deepgram Nova-3 and ElevenLabs Scribe v2. The OpenAI provider also accepts a custom OpenAI-compatible base URL.
 
 ### Which Macs are supported?
 Macs running macOS 14 Sonoma or later. The current release build runs on Apple silicon.

@@ -1,8 +1,19 @@
 import Foundation
 
-/// OpenAI Whisper API speech-to-text provider.
+/// OpenAI speech-to-text provider (`/audio/transcriptions`).
+///
+/// `gpt-transcribe` takes vocabulary as `keywords[]` and language hints as
+/// `languages[]`. The older models (`whisper-1`, `gpt-4o-*-transcribe`, and
+/// whatever a compatible gateway serves) take a single `language` and a
+/// free-text `prompt`.
 struct OpenAISTT: STTProvider {
     static let providerID: STTProviderID = .openai
+    static let defaultModel = "gpt-transcribe"
+    static let defaultBaseURL = "https://api.openai.com/v1"
+
+    /// Keyword hints sent to `gpt-transcribe`. The API documents no limit, so
+    /// stay in line with the other providers' biasing caps.
+    static let maxKeywords = 50
 
     private let apiKey: String
     private let httpClient: ProviderHTTPClient
@@ -13,8 +24,8 @@ struct OpenAISTT: STTProvider {
     init(
         apiKey: String,
         httpClient: ProviderHTTPClient,
-        baseURL: String = "https://api.openai.com/v1",
-        model: String = "whisper-1",
+        baseURL: String = OpenAISTT.defaultBaseURL,
+        model: String = OpenAISTT.defaultModel,
         timeoutSeconds: TimeInterval = 30
     ) {
         self.apiKey = apiKey
@@ -22,6 +33,58 @@ struct OpenAISTT: STTProvider {
         self.baseURL = baseURL
         self.model = model
         self.timeoutSeconds = timeoutSeconds
+    }
+
+    /// True for models that use the `keywords` / `languages` request shape.
+    static func usesKeywordShape(model: String) -> Bool {
+        model == "gpt-transcribe" || model.hasPrefix("gpt-transcribe-")
+    }
+
+    /// The text fields for one request, in send order (the file part is
+    /// added separately). No `response_format` is sent: every model returns
+    /// JSON with a `text` field by default.
+    static func formFields(model: String, language: STTLanguageSelection, vocabulary: [String]) -> [MultipartFormField] {
+        var fields = [MultipartFormField(name: "model", value: model)]
+        let languageCode = STTLanguageResolver.iso639_1(for: language)
+
+        if usesKeywordShape(model: model) {
+            if let languageCode {
+                fields.append(MultipartFormField(name: "languages[]", value: languageCode))
+            }
+            for keyword in keywords(from: vocabulary) {
+                fields.append(MultipartFormField(name: "keywords[]", value: keyword))
+            }
+        } else {
+            if let languageCode {
+                fields.append(MultipartFormField(name: "language", value: languageCode))
+            }
+            if let prompt = WhisperVocabularyPrompt.build(from: vocabulary) {
+                fields.append(MultipartFormField(name: "prompt", value: prompt))
+            }
+        }
+        return fields
+    }
+
+    /// One keyword per vocabulary term. The API rejects the whole request
+    /// when a keyword contains `<`, `>`, or a line break, so those are
+    /// stripped rather than risking a failed dictation.
+    static func keywords(from vocabulary: [String]) -> [String] {
+        let terms = vocabulary.map { term in
+            term.unicodeScalars
+                .filter { !"<>\r\n".unicodeScalars.contains($0) }
+                .reduce(into: "") { $0.unicodeScalars.append($1) }
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return Array(terms.filter { !$0.isEmpty }.prefix(maxKeywords))
+    }
+
+    /// Reads `text` from the JSON body. A gateway that ignores the default
+    /// and answers in plain text still works.
+    static func parseTranscript(_ data: Data) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
@@ -36,22 +99,12 @@ struct OpenAISTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
-        // Whisper accepts a single ISO-639-1 `language` or nothing (auto).
-        let languageParam = STTLanguageResolver.iso639_1(for: language)
-
-        let promptParam = WhisperVocabularyPrompt.build(from: vocabulary)
+        let fields = Self.formFields(model: model, language: language, vocabulary: vocabulary)
 
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: "audio.wav", mimeType: "audio/wav", data: audioData)
-        body.appendMultipart(boundary: boundary, name: "model", value: model)
-        body.appendMultipart(boundary: boundary, name: "response_format", value: "text")
-        if let languageParam {
-            body.appendMultipart(boundary: boundary, name: "language", value: languageParam)
-        }
-        if let promptParam {
-            body.appendMultipart(boundary: boundary, name: "prompt", value: promptParam)
-        }
+        body.appendMultipart(boundary: boundary, fields: fields)
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
@@ -63,10 +116,7 @@ struct OpenAISTT: STTProvider {
                 requestBodySummary: """
                 multipart form-data
                 file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
-                model: \(model)
-                response_format: text
-                language: \(languageParam ?? "auto")
-                prompt: \(promptParam ?? "-")
+                \(fields.map { "\($0.name): \($0.value)" }.joined(separator: "\n"))
                 """
             )
 
@@ -78,9 +128,7 @@ struct OpenAISTT: STTProvider {
                 )
             }
 
-            let text = String(data: response.data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return text
+            return Self.parseTranscript(response.data)
         } catch let error as STTError {
             throw error
         } catch let error as URLError where error.code == .timedOut {

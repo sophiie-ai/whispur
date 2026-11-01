@@ -142,6 +142,10 @@ struct ProviderSetupPanel: View {
 
             keyCheckRow
 
+            if let modelPicker = descriptor.modelPicker {
+                ProviderModelPicker(picker: modelPicker, providerName: descriptor.name)
+            }
+
             if !descriptor.overrides.isEmpty {
                 advanced
             }

@@ -22,20 +22,19 @@ final class ProviderRegistry {
         switch id {
         case .openai:
             guard let key = keychain.get(.openaiAPIKey) else { return nil }
-            let baseURL = Self.baseURLOverride(forKey: "openaiSTTBaseURL")
-            let model = Self.textOverride(forKey: "openaiSTTModel")
-            if baseURL != nil || model != nil {
-                return OpenAISTT(
-                    apiKey: key,
-                    httpClient: httpClient,
-                    baseURL: baseURL ?? "https://api.openai.com/v1",
-                    model: model ?? "whisper-1"
-                )
-            }
-            return OpenAISTT(apiKey: key, httpClient: httpClient)
+            return OpenAISTT(
+                apiKey: key,
+                httpClient: httpClient,
+                baseURL: Self.baseURLOverride(forKey: "openaiSTTBaseURL") ?? OpenAISTT.defaultBaseURL,
+                model: Self.sttModel(for: id) ?? OpenAISTT.defaultModel
+            )
         case .groqWhisper:
             guard let key = keychain.get(.groqAPIKey) else { return nil }
-            return GroqWhisperSTT(apiKey: key, httpClient: httpClient)
+            return GroqWhisperSTT(
+                apiKey: key,
+                httpClient: httpClient,
+                model: Self.sttModel(for: id) ?? GroqWhisperSTT.defaultModel
+            )
         case .deepgram:
             guard let key = keychain.get(.deepgramAPIKey) else { return nil }
             return DeepgramSTT(apiKey: key, httpClient: httpClient)
@@ -108,6 +107,13 @@ final class ProviderRegistry {
     /// The user's custom model for an LLM provider, or its default.
     static func modelOverride(for id: LLMProviderID) -> String {
         textOverride(forKey: id.customModelStorageKey) ?? id.defaultModel
+    }
+
+    /// The user's model choice for a speech provider, or its default.
+    /// `nil` for providers without a model picker.
+    static func sttModel(for id: STTProviderID) -> String? {
+        guard let key = id.modelStorageKey else { return id.defaultModel }
+        return textOverride(forKey: key) ?? id.defaultModel
     }
 
     private static func textOverride(forKey key: String) -> String? {

@@ -276,6 +276,16 @@ struct ProviderDescriptor: Identifiable, Equatable {
     let note: String
     let keyCheck: ProviderKeyCheck?
     let overrides: [OverrideField]
+    var modelPicker: ModelPicker? = nil
+
+    /// A menu of known models. Picking the default clears the stored value,
+    /// so a later default change still reaches the user.
+    struct ModelPicker: Equatable {
+        let storageKey: String
+        let options: [STTModelOption]
+
+        var defaultModel: String { options.first?.id ?? "" }
+    }
 }
 
 extension STTProviderID {
@@ -289,17 +299,18 @@ extension STTProviderID {
             overrides: self == .openai
                 ? [
                     .init(kind: .baseURL, storageKey: "openaiSTTBaseURL", label: "Custom Base URL", defaultValue: ProviderKeyCheck.openAIDefaultBaseURL),
-                    .init(kind: .model, storageKey: "openaiSTTModel", label: "Custom Model", defaultValue: "whisper-1"),
+                    .init(kind: .model, storageKey: "openaiSTTModel", label: "Custom Model", defaultValue: OpenAISTT.defaultModel),
                 ]
-                : []
+                : [],
+            modelPicker: modelStorageKey.map { ProviderDescriptor.ModelPicker(storageKey: $0, options: modelOptions) }
         )
     }
 
     private var setupNote: String {
         switch self {
         case .apple: "Runs on-device. No key needed."
-        case .openai: "Whisper transcription through the OpenAI API, or any compatible gateway."
-        case .groqWhisper: "Fast hosted Whisper Large v3. Shares its key with Groq cleanup."
+        case .openai: "GPT Transcribe through the OpenAI API, or any compatible gateway. Whisper shuts down in February 2027."
+        case .groqWhisper: "Fast hosted Whisper. Groq bills each recording as at least 10 seconds. Shares its key with Groq cleanup."
         case .deepgram: "Nova-3 transcription with multilingual auto-detect."
         case .elevenlabs: "Scribe transcription with keyword biasing."
         }
