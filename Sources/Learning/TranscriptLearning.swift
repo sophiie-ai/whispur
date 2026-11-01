@@ -85,7 +85,13 @@ final class TranscriptLearning {
             return
         }
 
-        guard let currentValue = Self.copyValue(snapshot.element) else {
+        // Off the main thread: an Accessibility read waits on the other app
+        // and can take a long time in a large or busy field.
+        let element = snapshot.element
+        let readValue = await Task.detached(priority: .utility) {
+            Self.copyValue(element)
+        }.value
+        guard let currentValue = readValue else {
             logger.debug("Learning reconcile skipped: element no longer readable")
             return
         }
@@ -150,7 +156,7 @@ final class TranscriptLearning {
         return (element as! AXUIElement)
     }
 
-    private static func copyValue(_ element: AXUIElement) -> String? {
+    private nonisolated static func copyValue(_ element: AXUIElement) -> String? {
         var value: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value)
         guard err == .success else { return nil }

@@ -355,14 +355,12 @@ final class AppState: ObservableObject {
     }
 
     func startDictation(triggerMode: RecordingTriggerMode = .hold) {
+        StartLatencyTrace.mark("startDictation")
         syncPipelineConfig()
-        refreshPermissionSnapshot()
-
-        // Before the new recording begins, check whether the user edited
-        // the previous paste — if so, offer to learn those words.
         learning.isEnabled = learnFromEdits
-        if learnFromEdits {
-            Task { [weak self] in await self?.learning.reconcile() }
+        defer {
+            refreshPermissionSnapshotInBackground()
+            reconcileLearning()
         }
 
         guard hotkeyManager.isAccessibilityGranted else {
@@ -378,6 +376,15 @@ final class AppState: ObservableObject {
         pipeline.startRecording(triggerMode: triggerMode)
     }
 
+    /// Check whether the user edited the previous paste and, if so, offer
+    /// to learn those words. Runs after the recording has been asked to
+    /// start: it reads the focused field over Accessibility, which can take
+    /// a while in some apps, and must not hold back the overlay.
+    private func reconcileLearning() {
+        guard learnFromEdits else { return }
+        Task { [weak self] in await self?.learning.reconcile() }
+    }
+
     func stopDictation() {
         shortcutSessionController.reset()
         syncHotkeySessionState()
@@ -388,6 +395,7 @@ final class AppState: ObservableObject {
         if pipeline.canStopRecording {
             stopDictation()
         } else if canStartDictation {
+            StartLatencyTrace.begin("menu start")
             shortcutSessionController.beginManual(mode: .toggle)
             syncHotkeySessionState()
             startDictation(triggerMode: .toggle)
@@ -459,6 +467,16 @@ final class AppState: ObservableObject {
 
     func reopenSetupGuide() {
         showSetupGuide = true
+    }
+
+    /// Same as `refreshPermissionSnapshot`, with the read off the main
+    /// thread: reading the microphone status costs ~10-20 ms, too much for
+    /// the dictation start path.
+    private func refreshPermissionSnapshotInBackground() {
+        Task { [weak self] in
+            let granted = await Task.detached(priority: .utility) { AudioRecorder.hasMicrophoneAccess }.value
+            self?.microphoneAccessGranted = granted
+        }
     }
 
     func refreshPermissionSnapshot() {

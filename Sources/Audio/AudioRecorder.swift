@@ -11,9 +11,17 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "AudioRec
 ///
 /// The engine writes buffers in the input node's native format. The pipeline
 /// normalizes that file to 16 kHz mono WAV before sending it to STT.
-final class AudioRecorder: ObservableObject {
+///
+/// Starting the engine takes ~100 ms on a built-in mic and much longer on
+/// Bluetooth or a selected non-default device, so it runs on `controlQueue`
+/// instead of the main thread. Start, stop and cleanup are serialized on
+/// that queue: a stop that arrives while the engine is still starting waits
+/// for the start, then stops it. That serialization is what the unchecked
+/// Sendable relies on.
+final class AudioRecorder: ObservableObject, @unchecked Sendable {
     @Published var audioLevel: Float = 0
-    @Published private(set) var isRecording = false
+
+    var isRecording: Bool { recordingFlag.withLock { $0 } }
 
     /// Fires once when the first non-silent buffer arrives.
     var onRecordingReady: (() -> Void)?
@@ -26,6 +34,8 @@ final class AudioRecorder: ObservableObject {
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
     private let fileQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-file", qos: .userInitiated)
+    private let controlQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-control", qos: .userInteractive)
+    private let recordingFlag = OSAllocatedUnfairLock(initialState: false)
 
     private var readyFired = false
     private var smoothedLevel: Float = 0
@@ -49,18 +59,36 @@ final class AudioRecorder: ObservableObject {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
-    func startRecording() throws {
+    /// Starts the engine off the main thread and returns once it runs.
+    func startRecording() async throws {
+        audioLevel = 0
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            controlQueue.async { [self] in
+                do {
+                    try startEngine()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Runs on `controlQueue`.
+    private func startEngine() throws {
         guard !isRecording else { return }
+        let started = ProcessInfo.processInfo.systemUptime
         guard AVCaptureDevice.default(for: .audio) != nil else {
             throw AudioError.noInputDevice
         }
 
-        cleanup()
+        removeTempFile()
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         applyPreferredInputDevice(to: inputNode)
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        let inputReady = ProcessInfo.processInfo.systemUptime
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             throw AudioError.noInputDevice
@@ -74,7 +102,7 @@ final class AudioRecorder: ObservableObject {
 
         readyFired = false
         smoothedLevel = 0
-        audioLevel = 0
+        lastLevelPublishTime = 0
         audioEngine = engine
         audioFile = file
         tempFileURL = tempURL
@@ -98,16 +126,31 @@ final class AudioRecorder: ObservableObject {
             throw AudioError.recordingFailed("Audio engine failed to start: \(error.localizedDescription)")
         }
 
-        isRecording = true
+        recordingFlag.withLock { $0 = true }
+        let now = ProcessInfo.processInfo.systemUptime
         logger.info(
-            "Recording started. sampleRate=\(inputFormat.sampleRate, privacy: .public) channels=\(inputFormat.channelCount, privacy: .public)"
+            """
+            Recording started in \(Int((now - started) * 1000), privacy: .public) ms \
+            (input node \(Int((inputReady - started) * 1000), privacy: .public) ms, \
+            start \(Int((now - inputReady) * 1000), privacy: .public) ms). \
+            sampleRate=\(inputFormat.sampleRate, privacy: .public) channels=\(inputFormat.channelCount, privacy: .public)
+            """
         )
     }
 
+    /// Stops the engine and returns the recording. Waits for a start that
+    /// is still in flight, so it never misses an engine that is warming up.
     func stopRecording() -> (url: URL, metrics: RecordingMetrics)? {
+        let result = controlQueue.sync { stopEngine() }
+        audioLevel = 0
+        return result
+    }
+
+    /// Runs on `controlQueue`.
+    private func stopEngine() -> (url: URL, metrics: RecordingMetrics)? {
         guard isRecording else { return nil }
 
-        isRecording = false
+        recordingFlag.withLock { $0 = false }
 
         // removeTap guarantees no further tap callbacks, so bufferMetrics is
         // safe to read on the calling thread after this returns.
@@ -129,7 +172,6 @@ final class AudioRecorder: ObservableObject {
 
         readyFired = false
         smoothedLevel = 0
-        audioLevel = 0
         lastLevelPublishTime = 0
 
         logger.info("Recording stopped")
@@ -138,6 +180,11 @@ final class AudioRecorder: ObservableObject {
     }
 
     func cleanup() {
+        controlQueue.sync { removeTempFile() }
+    }
+
+    /// Runs on `controlQueue`.
+    private func removeTempFile() {
         if let url = tempFileURL {
             try? FileManager.default.removeItem(at: url)
         }

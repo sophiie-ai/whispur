@@ -11,6 +11,8 @@ final class OverlayPanelManager {
     private var cancelHandler: (() -> Void)?
     private var styleProvider: (() -> OverlayStyle)?
     private var currentStyle: OverlayStyle = .standard
+    /// Style the hosting view was built for; nil when it needs a rebuild.
+    private var hostedStyle: OverlayStyle?
 
     /// The overlay itself, including its own padding.
     private static let standardContentSize = CGSize(width: 430, height: 96)
@@ -33,8 +35,22 @@ final class OverlayPanelManager {
         cancelHandler = onCancel
         self.styleProvider = styleProvider
 
+        // Build the panel and its SwiftUI view ahead of time, hidden, so the
+        // first dictation doesn't pay for it on the way to the screen. One
+        // turn later, so it stays off the launch path.
+        DispatchQueue.main.async { [weak self, weak pipeline] in
+            guard let self, let pipeline, self.panel == nil else { return }
+            let style = styleProvider()
+            self.currentStyle = style
+            self.createPanel(pipeline: pipeline, style: style)
+        }
+
+        // DispatchQueue.main, not RunLoop.main: it runs in every run loop
+        // mode, so the overlay also appears while a menu is tracking. The
+        // hop lets `pipeline.phase` settle (@Published emits in willSet)
+        // before the view reads it.
         phaseCancellable = pipeline.$phase
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] phase in
                 guard let self else { return }
 
@@ -66,7 +82,7 @@ final class OverlayPanelManager {
     /// Force the panel to refresh with the latest style. Useful when the
     /// user flips the setting while an overlay is on screen.
     func refreshStyle(pipeline: DictationPipeline) {
-        guard panel != nil else { return }
+        guard panel?.isVisible == true else { return }
         show(pipeline: pipeline)
     }
 
@@ -76,13 +92,24 @@ final class OverlayPanelManager {
 
         if panel == nil {
             createPanel(pipeline: pipeline, style: style)
-        } else {
+        }
+        guard let panel else { return }
+        let wasVisible = panel.isVisible
+
+        // Keep one hosting view for a whole dictation; SwiftUI follows the
+        // phase on its own. Rebuild only for a new style or a fresh
+        // appearance, so a hidden panel never flashes its last frame.
+        if hostedStyle != style || !wasVisible {
             resizePanel(for: style)
+            panel.contentView = NSHostingView(rootView: rootView(pipeline: pipeline, style: style))
+            hostedStyle = style
         }
 
         positionPanel(for: style)
-        panel?.contentView = NSHostingView(rootView: rootView(pipeline: pipeline, style: style))
-        panel?.orderFrontRegardless()
+        panel.orderFrontRegardless()
+        if !wasVisible {
+            StartLatencyTrace.mark("overlay ordered front")
+        }
     }
 
     #if DEBUG
@@ -128,6 +155,7 @@ final class OverlayPanelManager {
         panel.contentView = hostingView
 
         self.panel = panel
+        hostedStyle = style
     }
 
     private func resizePanel(for style: OverlayStyle) {
