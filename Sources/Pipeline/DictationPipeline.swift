@@ -18,6 +18,9 @@ final class DictationPipeline: ObservableObject {
     /// True when we haven't heard audible input for ~1.3s while recording.
     /// Use this to prompt the user to check their mic/input device.
     @Published private(set) var isHearingSilence: Bool = false
+    /// Words heard so far while streaming, for the overlay. Empty when not
+    /// streaming.
+    @Published private(set) var liveTranscript: String = ""
 
     private var silentSampleCount: Int = 0
     private static let silenceLevelThreshold: Float = 0.05
@@ -76,7 +79,15 @@ final class DictationPipeline: ObservableObject {
     /// falling back to a batch request with the same recording.
     static let streamFinishTimeout: Duration = .seconds(5)
 
-    private var streamingSession: STTStreamingSession?
+    private var streamingSession: STTStreamingSession? {
+        didSet { if streamingSession == nil { liveTranscript = "" } }
+    }
+
+    /// Whether this recording streams, so the overlay can make room for
+    /// live words before the first ones arrive.
+    var streamsLiveTranscript: Bool {
+        streamingEnabled && selectedSTT.supportsStreaming
+    }
 
     private let systemAudioMuter = SystemAudioMuter()
 
@@ -84,6 +95,8 @@ final class DictationPipeline: ObservableObject {
     /// returns. Used by the learning module to snapshot the focused field
     /// before the user starts editing.
     var onPasteCompleted: ((String) -> Void)?
+    /// Fires once a pasted dictation is saved to history ("Use raw").
+    var onDictationPasted: ((PipelineResult) -> Void)?
 
     private var audioLevelCancellable: AnyCancellable?
     /// Bumped by every start, stop and cancel, so a recorder start that
@@ -430,6 +443,14 @@ final class DictationPipeline: ObservableObject {
 
         let session = provider.makeStreamingSession(language: sttLanguageSelection, vocabulary: customVocabulary)
         let converter = LivePCMConverter(targetSampleRate: provider.streamingSampleRate)
+        // Arrives on the socket's receive task; the audio path never waits
+        // on the overlay.
+        session.onPartial = { [weak self, weak session] text in
+            Task { @MainActor [weak self] in
+                guard let self, let session, self.streamingSession === session else { return }
+                self.liveTranscript = text
+            }
+        }
         recorder.onAudioBuffer = { buffer in
             session.append(converter.convert(buffer))
         }
@@ -568,6 +589,7 @@ final class DictationPipeline: ObservableObject {
 
             lastResult = result
             historyStore.add(result)
+            onDictationPasted?(result)
 
             phase = .done(finalTranscript)
             scheduleResetToIdle(after: .milliseconds(1200))
@@ -788,9 +810,10 @@ final class DictationPipeline: ObservableObject {
     #if DEBUG
     /// Puts the pipeline in a phase with a fixed waveform, without touching
     /// the recorder. Only for overlay renders in tests.
-    func setPhaseForRendering(_ phase: PipelinePhase, samples: [Float]? = nil) {
+    func setPhaseForRendering(_ phase: PipelinePhase, samples: [Float]? = nil, liveTranscript: String? = nil) {
         self.phase = phase
         if let samples { audioSamples = samples }
+        if let liveTranscript { self.liveTranscript = liveTranscript }
     }
     #endif
 
@@ -856,6 +879,8 @@ struct PipelineResult: Identifiable, Codable {
     /// Set when the dictation failed. Nil for every successful dictation and
     /// for results saved before failures were kept.
     var failure: DictationFailure?
+    /// When the user swapped the cleaned paste for the raw transcript.
+    var usedRawAt: Date?
 
     init(
         id: UUID = UUID(),

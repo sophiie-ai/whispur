@@ -74,6 +74,14 @@ struct PreferencesSettingsView: View {
                     SettingsSwitch(label: "Preserve clipboard contents after paste", isOn: $appState.preserveClipboard)
                 }
                 CardDivider()
+                SettingsRow(
+                    icon: "arrow.uturn.backward",
+                    title: "Offer the raw transcript",
+                    subtitle: "When cleanup changes your words, show \u{201C}Use raw\u{201D} for a few seconds after pasting. Press \u{2325}\u{2318}Z to swap in exactly what you said."
+                ) {
+                    SettingsSwitch(label: "Offer the raw transcript after a cleaned paste", isOn: $appState.useRawToastEnabled)
+                }
+                CardDivider()
                 SettingsRow(icon: "speaker.wave.2", title: "Start and stop sounds", subtitle: "Play a short sound when recording starts and ends.") {
                     SettingsSwitch(label: "Play start and stop sounds", isOn: $appState.soundEnabled)
                 }

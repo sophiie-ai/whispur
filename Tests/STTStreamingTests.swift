@@ -199,6 +199,25 @@ final class STTStreamingTests: XCTestCase {
 
     // MARK: - ElevenLabs format
 
+    func testLiveWordsAreTheCommittedSegmentsPlusTheInterimText() {
+        let session = elevenLabsSession(FakeStreamSocket())
+        var live: [String] = []
+        session.onPartial = { live.append($0) }
+        session.handle(.partial("can we"))
+        session.handle(.partial(" can we push "))
+        session.handle(.committed("Can we push the review?"))
+        session.handle(.partial("to Thursday"))
+        session.handle(.partial("  "))
+        XCTAssertEqual(live, [
+            "can we",
+            "can we push",
+            "Can we push the review?",
+            "Can we push the review? to Thursday",
+            "Can we push the review?",
+        ])
+        XCTAssertEqual(STTStreamingSession.liveText(committed: [], partial: "  "), "")
+    }
+
     func testElevenLabsURLCarriesManualCommitLanguageAndKeyterms() throws {
         let url = try XCTUnwrap(ElevenLabsRealtimeFormat.url(
             language: .single(code: "de-DE"),

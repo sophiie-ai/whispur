@@ -5,7 +5,14 @@ import SwiftUI
 struct ActivitySettingsView: View {
     @ObservedObject var historyStore: PipelineHistoryStore
     @ObservedObject var retrier: FailedDictationRetrier
+    @ObservedObject var evalCases: MyEvalCaseStore
+    /// The dictionary terms to save with a marked case.
+    var vocabulary: () -> [String] = { [] }
+    /// Opens this entry expanded (renders).
+    var initiallyExpanded: UUID?
     let onRetry: (UUID) -> Void
+
+    @State private var markingItem: PipelineResult?
 
     var body: some View {
         SettingsPage {
@@ -43,21 +50,79 @@ struct ActivitySettingsView: View {
                                         onDelete: { retrier.delete(item.id) }
                                     )
                                 } else {
-                                    ActivityEntry(item: item)
+                                    ActivityEntry(
+                                        item: item,
+                                        isMarkedWrong: evalCases.isMarked(item.id),
+                                        startsExpanded: item.id == initiallyExpanded,
+                                        onMarkWrong: { markingItem = item }
+                                    )
                                 }
                             }
                         }
                     }
                 }
+                evalCasesFooter
             }
+        }
+        .sheet(item: $markingItem) { item in
+            MarkAsWrongSheet(
+                item: item,
+                onSave: { expected, tags in
+                    let saved = evalCases.append(MyEvalCase(
+                        id: MyEvalCase.makeID(dictationID: item.id, at: Date()),
+                        input: item.rawTranscript,
+                        expected: expected,
+                        vocabulary: vocabulary(),
+                        tags: tags
+                    ))
+                    if saved { markingItem = nil }
+                },
+                onCancel: { markingItem = nil }
+            )
+        }
+    }
+
+    /// Where marked dictations go, and a way to find the file.
+    private var evalCasesFooter: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "checklist")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(SophiieTheme.Palette.muted)
+                .accessibilityHidden(true)
+            Text(evalCasesSummary)
+                .font(.system(size: 11.5))
+                .foregroundStyle(evalCases.lastError == nil ? SophiieTheme.Palette.muted : SophiieTheme.Palette.danger)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            TextAction(title: "Reveal file", systemImage: "folder") { evalCases.reveal() }
+                .help(evalCases.fileURL.path)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var evalCasesSummary: String {
+        if let error = evalCases.lastError { return "Couldn't save the case: \(error)" }
+        switch evalCases.count {
+        case 0: return "Dictations you mark as wrong become private test cases in MyEvalCases.jsonl, on this Mac only."
+        case 1: return "1 dictation marked as wrong, saved in MyEvalCases.jsonl on this Mac only."
+        default: return "\(evalCases.count) dictations marked as wrong, saved in MyEvalCases.jsonl on this Mac only."
         }
     }
 }
 
 private struct ActivityEntry: View {
     let item: PipelineResult
+    let isMarkedWrong: Bool
+    let onMarkWrong: () -> Void
 
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
+
+    init(item: PipelineResult, isMarkedWrong: Bool, startsExpanded: Bool, onMarkWrong: @escaping () -> Void) {
+        self.item = item
+        self.isMarkedWrong = isMarkedWrong
+        self.onMarkWrong = onMarkWrong
+        _isExpanded = State(initialValue: startsExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -66,7 +131,8 @@ private struct ActivityEntry: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.cleanedText)
+                        // After "Use raw" the app holds the raw transcript.
+                        Text(item.usedRawAt == nil ? item.cleanedText : item.rawTranscript)
                             .font(.system(size: 13))
                             .foregroundStyle(SophiieTheme.Palette.ink)
                             .lineLimit(isExpanded ? nil : 2)
@@ -86,6 +152,9 @@ private struct ActivityEntry: View {
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .contextMenu {
+                Button("Mark as Wrong…", action: onMarkWrong)
+            }
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
@@ -102,6 +171,18 @@ private struct ActivityEntry: View {
                         }
                         if item.failure?.retriedAt != nil {
                             PreferenceBadge(title: "Retried", tone: .good)
+                        }
+                        if item.usedRawAt != nil {
+                            PreferenceBadge(title: "Used raw", tone: .neutral)
+                        }
+                        Spacer(minLength: 8)
+                        if isMarkedWrong {
+                            Label("Marked as wrong", systemImage: "checkmark")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(SophiieTheme.Palette.muted)
+                        } else {
+                            TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
+                                .help("Save this dictation as a private test case for the cleanup prompt")
                         }
                     }
                 }

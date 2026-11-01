@@ -24,6 +24,8 @@ final class AppState: ObservableObject {
     @AppStorage("preserveClipboard") var preserveClipboard: Bool = true
     @AppStorage("customSystemPrompt") var customSystemPrompt: String = ""
     @AppStorage("learnFromEdits") var learnFromEdits: Bool = false
+    /// After a cleaned paste, offer the raw transcript for a few seconds.
+    @AppStorage("useRawToastEnabled") var useRawToastEnabled: Bool = true
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
     @AppStorage("overlayStyle") var overlayStyle: OverlayStyle = .standard
@@ -61,6 +63,12 @@ final class AppState: ObservableObject {
     let styles: StyleStore
     let learningSuggestions: LearningSuggestionCenter
     private let learningToastPanel: LearningToastPanelManager
+    /// Dictations the user marked as wrong, as local eval cases.
+    let evalCases: MyEvalCaseStore
+    /// The "Use raw" offer after a cleaned paste.
+    let useRaw = UseRawController()
+    private let useRawToastPanel = UseRawToastPanelManager()
+    private var appActivationObserver: NSObjectProtocol?
 
     private let shortcutSessionController = ShortcutSessionController()
     private var permissionObservers: [NSObjectProtocol] = []
@@ -86,6 +94,7 @@ final class AppState: ObservableObject {
         providerRequestLog: ProviderRequestLog? = nil,
         vocabulary: VocabularyStore? = nil,
         styles: StyleStore? = nil,
+        evalCases: MyEvalCaseStore? = nil,
         startsServices: Bool = true
     ) {
         // Before anything reads the language setting.
@@ -138,6 +147,7 @@ final class AppState: ObservableObject {
         )
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
+        self.evalCases = evalCases ?? MyEvalCaseStore()
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
@@ -147,6 +157,7 @@ final class AppState: ObservableObject {
         setupHotkeys()
         observePipeline()
         setupLearning()
+        setupUseRaw()
 
         overlayManager.bind(
             to: pipeline,
@@ -218,6 +229,59 @@ final class AppState: ObservableObject {
         pipeline.onPasteCompleted = { [weak self] pasted in
             guard let self, self.learnFromEdits else { return }
             self.learning.captureAfterPaste(pastedText: pasted)
+        }
+    }
+
+    private func setupUseRaw() {
+        useRawToastPanel.bind(to: useRaw, styleProvider: { [weak self] in self?.overlayStyle ?? .standard })
+        useRaw.setShortcutWatch = { [weak hotkeyManager] armed in
+            hotkeyManager?.useRawWatchEnabled = armed
+        }
+        hotkeyManager.onUseRawKey = { [weak self] key in
+            Task { @MainActor in
+                switch key {
+                case .useRaw: self?.useRaw.trigger()
+                case .otherKey: self?.useRaw.keyTyped()
+                }
+            }
+        }
+        useRaw.replace = { [weak self] offer in
+            let outcome = await PasteReplacer.replaceLastPaste(
+                pasted: offer.pastedText,
+                with: offer.rawTranscript,
+                preserveClipboard: self?.preserveClipboard ?? true
+            )
+            return outcome == .replaced
+        }
+        useRaw.onUsedRaw = { [weak self] offer in
+            guard let self else { return }
+            self.historyStore.markUsedRaw(offer.dictationID)
+            // The field now holds the raw text; learning should compare
+            // later edits against that, not against the cleaned paste.
+            if self.learnFromEdits {
+                self.learning.captureAfterPaste(pastedText: offer.rawTranscript)
+            }
+        }
+        pipeline.onDictationPasted = { [weak self] result in
+            guard let self else { return }
+            let app = NSWorkspace.shared.frontmostApplication
+            self.useRaw.offer(
+                for: result,
+                processID: app?.processIdentifier,
+                bundleID: app?.bundleIdentifier,
+                enabled: self.useRawToastEnabled
+            )
+        }
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let pid = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated {
+                guard let self, let offer = self.useRaw.visibleOffer, offer.processID != pid else { return }
+                self.useRaw.dismiss(.appChanged)
+            }
         }
     }
 
@@ -383,6 +447,7 @@ final class AppState: ObservableObject {
 
     func startDictation(triggerMode: RecordingTriggerMode = .hold) {
         StartLatencyTrace.mark("startDictation")
+        useRaw.dismiss(.newDictation)
         syncPipelineConfig()
         learning.isEnabled = learnFromEdits
         defer {

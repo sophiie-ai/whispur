@@ -64,7 +64,16 @@ make run
 
 - Hold shortcut: Press and hold your configured shortcut to record, then release to transcribe and paste.
 - Toggle shortcut: By default, press Command + Fn to start hands-free recording and press it again to stop and process. You can also pick Fn twice (press Fn twice to start, once to stop); set "Press 🌐 key to" to Do Nothing in System Settings > Keyboard so macOS doesn't open the Emoji & Symbols panel.
+- Live words: With "Stream audio while you talk" on (ElevenLabs Scribe and Meta Muse), the recording overlay shows the words heard so far: the last two lines under the standard overlay, or one line beside the compact pill's waveform.
+- Use raw: When cleanup changed your words, a small "Cleaned up · Use raw ⌥⌘Z" toast shows for 4 seconds after the paste. Press ⌥⌘Z (or click it) to swap the pasted text for exactly what you said. It works only in the app you dictated into and only until you type something else; turn it off in `Settings` → `Preferences`.
 - Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts. A failed dictation keeps its recording for 24 hours so you can retry it; the retried text is copied to the clipboard.
+- Mark as wrong: In `Settings` → `Activity`, expand a dictation and choose `Mark as wrong` (or right-click it). Fix what it should have said, tag it if you like, and Whispur appends one line to `~/Library/Application Support/Whispur/MyEvalCases.jsonl`. The file stays on your Mac; `Reveal file` in Activity opens it in Finder. Each line uses the same fields as `Evals/cleanup/cases.jsonl` with `"split": "mine"`, so you can score the cleanup prompt against your own dictations with the eval runner. Note: `scripts/eval-cleanup.py --cases` takes comma-separated case ids and the runner reads only `Evals/cleanup/cases.jsonl`, so until it accepts a cases file, run your cases from a scratch copy of the repo:
+
+  ```bash
+  git worktree add /tmp/whispur-mine && cd /tmp/whispur-mine
+  cp ~/Library/Application\ Support/Whispur/MyEvalCases.jsonl Evals/cleanup/cases.jsonl
+  python3 scripts/eval-cleanup.py --provider openai --prompt new
+  ```
 - Prompt tuning: Open `Settings` → `Prompts` to override the cleanup prompt or add domain vocabulary.
 - Cleanup model: Open `Settings` → `Providers` and set `Custom Model` on any cleanup provider to use a model other than the default.
 

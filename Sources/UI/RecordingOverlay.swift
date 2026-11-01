@@ -60,7 +60,20 @@ struct RecordingOverlay: View {
                 }
             case .recording:
                 overlayShell {
-                    recordingRow
+                    VStack(alignment: .leading, spacing: 10) {
+                        recordingRow
+                        if pipeline.streamsLiveTranscript, !pipeline.liveTranscript.isEmpty {
+                            LiveTranscriptText(
+                                text: pipeline.liveTranscript,
+                                budget: LiveTranscriptTail.standardBudget,
+                                lineLimit: 2,
+                                font: .system(size: 12.5),
+                                color: OnDark.inkSecondary
+                            )
+                            .transition(.opacity)
+                        }
+                    }
+                    .sophiieAnimation(value: pipeline.liveTranscript.isEmpty)
                 }
             case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
                 overlayShell {
@@ -202,6 +215,77 @@ struct RecordingOverlay: View {
     }
 }
 
+/// The end of the live transcript, cut at a word so the newest words
+/// always show. Pure, for tests.
+enum LiveTranscriptTail {
+    /// About two lines of the standard overlay.
+    static let standardBudget = 110
+    /// One line beside the compact pill's waveform.
+    static let compactBudget = 30
+
+    static func tail(_ text: String, budget: Int) -> (text: String, truncated: Bool) {
+        let words = text.split(whereSeparator: { $0.isWhitespace })
+        let joined = words.joined(separator: " ")
+        guard joined.count > budget, budget > 0 else { return (joined, false) }
+        var kept: [Substring] = []
+        var length = 0
+        for word in words.reversed() {
+            let added = kept.isEmpty ? word.count : word.count + 1
+            if length + added > budget { break }
+            kept.append(word)
+            length += added
+        }
+        // A single word longer than the budget: keep its end.
+        if kept.isEmpty, let last = words.last {
+            return (String(last.suffix(budget)), true)
+        }
+        return (kept.reversed().joined(separator: " "), true)
+    }
+}
+
+/// Live words, newest at the end. When older words were cut, the start of
+/// the first line fades out so the cut reads as "and before that".
+struct LiveTranscriptText: View {
+    let text: String
+    let budget: Int
+    let lineLimit: Int
+    let font: Font
+    let color: Color
+
+    var body: some View {
+        let tail = LiveTranscriptTail.tail(text, budget: budget)
+        Text(tail.text)
+            .font(font)
+            .foregroundStyle(color)
+            .lineLimit(lineLimit)
+            .truncationMode(.head)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .mask(alignment: .topLeading) {
+                if tail.truncated {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            LinearGradient(
+                                colors: [.black.opacity(0.1), .black],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .frame(width: 64)
+                            Color.black
+                        }
+                        .frame(height: 18)
+                        Color.black
+                    }
+                } else {
+                    Color.black
+                }
+            }
+            .accessibilityLabel("Live transcript")
+            .accessibilityValue(text)
+    }
+}
+
 private struct CompactWaveformView: View {
     let samples: [Float]
     var silence: Bool = false
@@ -250,16 +334,26 @@ private struct CompactWaveformView: View {
     }
 }
 
-private struct CompactRecordingOverlay: View {
+struct CompactRecordingOverlay: View {
     private typealias OnDark = SophiieTheme.Palette.OnDark
 
     @ObservedObject var pipeline: DictationPipeline
     @State private var pulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Widest the pill gets with live words beside the waveform. It hugs
+    /// shorter text.
+    static let liveWidth: CGFloat = 268
+    private static let liveTextMaxWidth: CGFloat = liveWidth - 56 - 8 - 20
+
+    private var showsLiveWords: Bool {
+        pipeline.phase == .recording && pipeline.streamsLiveTranscript && !pipeline.liveTranscript.isEmpty
+    }
+
     var body: some View {
         content
-            .frame(width: 76, height: 26)
+            .frame(width: showsLiveWords ? nil : 76, height: 26)
+            .fixedSize(horizontal: showsLiveWords, vertical: false)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(OnDark.background.opacity(0.95))
@@ -290,8 +384,22 @@ private struct CompactRecordingOverlay: View {
     private var content: some View {
         switch pipeline.phase {
         case .recording:
-            MiniWaveformView(samples: pipeline.audioSamples, silence: pipeline.isHearingSilence)
-                .frame(width: 56, height: 16)
+            HStack(spacing: 8) {
+                MiniWaveformView(samples: pipeline.audioSamples, silence: pipeline.isHearingSilence)
+                    .frame(width: 56, height: 16)
+                if showsLiveWords {
+                    LiveTranscriptText(
+                        text: pipeline.liveTranscript,
+                        budget: LiveTranscriptTail.compactBudget,
+                        lineLimit: 1,
+                        font: .system(size: 11.5, weight: .medium),
+                        color: OnDark.ink
+                    )
+                    .frame(maxWidth: Self.liveTextMaxWidth, alignment: .leading)
+                    .transition(.opacity)
+                }
+            }
+            .padding(.horizontal, showsLiveWords ? 10 : 0)
         case .requestingMicrophonePermission, .starting,
                 .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
             CompactDotsView(color: pipeline.phase == .requestingMicrophonePermission ? OnDark.warning : OnDark.accent)

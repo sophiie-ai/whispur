@@ -162,7 +162,12 @@ struct SettingsView: View {
         case .preferences:
             PreferencesSettingsView(appState: appState, setup: setupState)
         case .activity:
-            ActivitySettingsView(historyStore: historyStore, retrier: appState.retrier) { [weak appState] id in
+            ActivitySettingsView(
+                historyStore: historyStore,
+                retrier: appState.retrier,
+                evalCases: appState.evalCases,
+                vocabulary: { [weak appState] in appState?.vocabulary.plainTerms ?? [] }
+            ) { [weak appState] id in
                 appState?.retryFailedDictation(id)
             }
         case .requests:
