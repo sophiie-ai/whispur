@@ -4,10 +4,12 @@ Checks the default cleanup prompt (`Prompts.defaultCleanup`) against a fixed set
 Each request is built the way the app builds it, sent to a real provider, and the model's output
 is scored against an expected cleanup.
 
-- `cases.jsonl`: 90 cases (73 tune, 17 held-out), one JSON object per line.
-- `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it.
-  `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile` and `eval-cleanup.py --self-test`
-  both check against it, so the Swift and Python request builders can't drift apart.
+- `cases.jsonl`: 105 cases (85 tune, 20 held-out), one JSON object per line.
+- `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it,
+  and the system prompt for a Chat app (`system-prompt-chat.txt`).
+  `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile`,
+  `CleanupPromptTests.testChatPromptMatchesEvalGoldenFile` and `eval-cleanup.py --self-test`
+  check against them, so the Swift and Python request builders can't drift apart.
 - `../../scripts/eval-cleanup.py`: the runner (Python 3, standard library only).
 
 This directory is not part of the Xcode project (`project.yml` only builds `Sources/`, `Resources/`
@@ -57,6 +59,7 @@ Each line has:
 | `split` | `tune` or `heldout`. |
 | `input` | The raw transcript. |
 | `vocabulary` | Optional list of the user's custom terms. |
+| `style` | Optional. The kind of app the dictation goes into: `chat`, `email`, `docs`, `code` (an `AppGroup`), or `default` (an app outside every group; the default). Every group is on the Default writing style, as on a fresh install, so only `chat` changes the system prompt today: it adds the Chat formatting section (`Prompts.chatFormatting`) the way `Prompts.cleanupPrompt(for:group:customPrompt:)` does. With `--prompt current`, a prompt that has no group sections is used as is for every style. |
 | `expected` | The cleanup we want. `EMPTY` means "no speech". |
 | `alternates` | Optional other acceptable outputs. |
 | `tags` | Free-form labels (`answering`, `corrections`, `numbers`, `code`, `multilingual`, ...). |
@@ -98,8 +101,16 @@ loosening the scorer.
 - **Currency.** The currency word the speaker used is kept and no symbol is added unless they
   said one: `four thousand five hundred dollars` becomes `4,500 dollars`, not `$4,500`. Whispur
   doesn't know whether "dollars" means USD, AUD or CAD, so a `$` would be a guess.
-- **Lists.** Only from explicitly dictated items ("bullet", "next item", "new line"). `first ...
-  then ...` prose and sentences that mention a bullet stay prose.
+- **Lists.** Items dictated with "bullet" or "next item" become a bulleted list, in every app.
+  A clear enumeration of two or more items with ordinal markers ("first ... second ... third",
+  "number one ... number two", "one ... two ... three" after "three things") becomes a numbered
+  list in Docs, Email, Code and other apps, with any words before the first item as its heading;
+  in Chat apps it stays prose, ordinal words included. Everything else stays prose: `first ...
+  then ...` (one ordinal is not an enumeration, so the held-out `prose-first-then` keeps its prose
+  expectation), "first of all", sentences that mention a bullet, and short inline items with no
+  ordinals (`I need three things milk eggs and bread` becomes `I need three things: milk, eggs,
+  and bread.`: the sentence reads naturally and nothing marks the items as separate entries).
+  The list cases are tagged `new-lists`.
 - **Self-corrections.** A cue ("no", "sorry", "I mean", "actually", "wait", "make that", Spanish
   "perdón", "digo", "o sea", "mejor dicho") directly followed by a replacement for the words just
   before it keeps only the replacement (`schedule it for Tuesday oh sorry for Thursday` becomes
@@ -122,18 +133,17 @@ loosening the scorer.
 
 ## Latest results
 
-Run 2026-11-02 on all 90 cases (the 29 self-correction cases are tagged `new-corrections`).
-Corrections prompt (working tree): 428 words, about 690 input tokens per request including the
-user message. Previous prompt (origin/main, v0.24.0): 391 words, about 625.
+Run 2026-11-02 on all 105 cases, OpenAI `gpt-6-luna`, N=2. Self-correction cases are tagged
+`new-corrections` (29), enumeration and list cases `new-lists` (15).
 
-| Prompt | Provider | Runs passed | Critical failures | Held-out (N=2 / N=4) | `new-corrections` runs | p50 / p95 latency |
-|---|---|---|---|---|---|---|
-| v0.24.0 | OpenAI `gpt-6-luna`, N=2 | 176/180 | 0 | 32/34 / 64/68 | 56/58 | 0.99 s / 1.40 s |
-| corrections | OpenAI `gpt-6-luna`, N=2 | **178/180** | 0 | 32/34 / 64/68 | **58/58** | 0.98 s / 1.31 s |
-| v0.24.0 | Groq `gpt-oss-20b` | pending | | | | |
-| corrections | Groq `gpt-oss-20b` | pending | | | | |
+| Prompt | Words | Runs passed | Critical failures | Held-out | `new-corrections` | `new-lists` | p50 / p95 latency | Input tokens |
+|---|---|---|---|---|---|---|---|---|
+| v0.24.0 (origin/main) | 391 | 192/210 | 0 | 36/40 | 56/58 | 16/30 | 1.01 s / 1.41 s | 625 |
+| corrections (first layer) | 428 | on its 90 cases: 178/180 vs v0.24.0's 176/180 | 0 | 32/34 | 58/58 | | 0.98 s / 1.31 s | 690 |
+| corrections + lists | 464 | **208/210** | 0 | 38/40 | 58/58 | **30/30** | 0.84 s / 1.05 s | 750 |
+| any | | Groq `gpt-oss-20b`: pending | | | | | | |
 
-Groq results are pending: the free-tier quota was kept for a separate run, so neither prompt was
-scored on Groq. Both prompts fail the held-out `prose-first-then` (written as two sentences). The
-v0.24.0 prompt also flattens the line break in `linebreak-kept` (`Hello, Maya. The build passed.`),
-the reason for the new "Keep existing line breaks" rule.
+Groq results are pending: the free-tier quota was kept for a separate run, so none of these prompts
+was scored on Groq yet. Every prompt fails the held-out `prose-first-then` (written as two
+sentences). v0.24.0 also flattens the line break in `linebreak-kept` (`Hello, Maya. The build
+passed.`) and writes every ordinal enumeration as prose, including in Docs, Email and Code.

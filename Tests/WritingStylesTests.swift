@@ -36,6 +36,55 @@ final class WritingStylesTests: XCTestCase {
         }
     }
 
+    /// Only Chat adds a formatting section; it goes where style sections
+    /// go, after the style's own section, and changes nothing else.
+    func testChatAppsAddOneFormattingSection() throws {
+        XCTAssertEqual(AppGroup.chat.promptSection, Prompts.chatFormatting)
+        for group in [AppGroup.email, .docs, .code] {
+            XCTAssertNil(group.promptSection, "\(group)")
+            XCTAssertEqual(Prompts.cleanupPrompt(for: .standard, group: group, customPrompt: ""), Prompts.defaultCleanup)
+            XCTAssertEqual(Prompts.cleanupPrompt(for: .formal, group: group, customPrompt: ""),
+                           Prompts.cleanupPrompt(for: .formal, customPrompt: ""))
+        }
+
+        let marker = try XCTUnwrap(Prompts.defaultCleanup.range(of: Prompts.styleInsertionMarker))
+        let rules = String(Prompts.defaultCleanup[..<marker.lowerBound])
+        let contract = String(Prompts.defaultCleanup[marker.lowerBound...])
+        let chat = Prompts.cleanupPrompt(for: .standard, group: .chat, customPrompt: "")
+        XCTAssertTrue(chat.hasPrefix(rules))
+        XCTAssertTrue(chat.hasSuffix(contract))
+        let inserted = String(chat.dropFirst(rules.count).dropLast(contract.count))
+        XCTAssertTrue(inserted.hasPrefix("App: Chat."))
+        XCTAssertTrue(inserted.contains(Prompts.chatFormatting))
+        XCTAssertTrue(inserted.hasSuffix("\n\n"))
+
+        let casualChat = Prompts.cleanupPrompt(for: .casual, group: .chat, customPrompt: "")
+        let casual = Prompts.cleanupPrompt(for: .casual, customPrompt: "")
+        XCTAssertEqual(casualChat.replacingOccurrences(of: inserted, with: ""), casual, "Style section first, then Chat")
+
+        XCTAssertEqual(Prompts.cleanupPrompt(for: .custom, group: .chat, customPrompt: "Mine"), "Mine",
+                       "A custom prompt is the user's own, in every app")
+        XCTAssertEqual(Prompts.cleanupPrompt(for: .custom, group: .chat, customPrompt: " "), chat)
+        XCTAssertLessThanOrEqual(Prompts.chatFormatting.split { $0.isWhitespace }.count, 50)
+        XCTAssertFalse(Prompts.chatFormatting.contains("\u{2014}"))
+    }
+
+    @MainActor
+    func testChatFormattingFollowsTheAppNotTheStyleChoice() throws {
+        let suite = "ai.sophiie.whispur.tests.styles.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = StyleStore(defaults: defaults, hasCustomPrompt: false)
+        store.setOverride(bundleID: "com.tinyspeck.slackmacgap", name: "Slack", style: .formal)
+        store.setOverride(bundleID: "md.obsidian", name: "Obsidian", style: .formal)
+        XCTAssertEqual(store.choice(for: "com.tinyspeck.slackmacgap", customPrompt: "").systemPrompt,
+                       Prompts.cleanupPrompt(for: .formal, group: .chat, customPrompt: ""))
+        XCTAssertEqual(store.choice(for: "md.obsidian", customPrompt: "").systemPrompt,
+                       Prompts.cleanupPrompt(for: .formal, customPrompt: ""))
+        XCTAssertEqual(store.choice(for: nil, customPrompt: "").systemPrompt, Prompts.defaultCleanup)
+    }
+
     func testStyleSectionsStayShort() throws {
         for style in [WritingStyle.casual, .formal, .verbatim, .codeAware] {
             let section = try XCTUnwrap(style.promptSection)
@@ -99,11 +148,15 @@ final class WritingStylesTests: XCTestCase {
 
         let store = StyleStore(defaults: defaults, hasCustomPrompt: false)
         XCTAssertEqual(store.settings, .initial)
-        for bundleID in ["com.tinyspeck.slackmacgap", "com.apple.mail", "md.obsidian", "com.mitchellh.ghostty", "com.apple.Safari"] {
+        for bundleID in ["com.apple.mail", "md.obsidian", "com.mitchellh.ghostty", "com.apple.Safari"] {
             let choice = store.choice(for: bundleID, customPrompt: "")
             XCTAssertEqual(choice.style, .standard, bundleID)
             XCTAssertEqual(choice.systemPrompt, Prompts.defaultCleanup, bundleID)
         }
+        // Chat apps keep enumerations as prose, as before numbered lists existed.
+        let slack = store.choice(for: "com.tinyspeck.slackmacgap", customPrompt: "")
+        XCTAssertEqual(slack.style, .standard)
+        XCTAssertEqual(slack.systemPrompt, Prompts.cleanupPrompt(for: .standard, group: .chat, customPrompt: ""))
     }
 
     // MARK: - Store
@@ -147,7 +200,7 @@ final class WritingStylesTests: XCTestCase {
         store.setStyle(.casual, for: .chat)
         let slack = store.choice(for: "com.tinyspeck.slackmacgap", customPrompt: "")
         XCTAssertEqual(slack.style, .casual, "A group the user opted into keeps its style")
-        XCTAssertEqual(slack.systemPrompt, Prompts.cleanupPrompt(for: .casual, customPrompt: ""))
+        XCTAssertEqual(slack.systemPrompt, Prompts.cleanupPrompt(for: .casual, group: .chat, customPrompt: ""))
     }
 
     // MARK: - Bundle id capture
