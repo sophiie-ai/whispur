@@ -18,8 +18,8 @@ Hold Fn to dictate and release to paste. Press Command + Fn for hands-free recor
 ### Pastes where your cursor is
 Text lands in the app you are already using: email, Slack, your editor, a prompt box. Your clipboard is restored afterwards.
 
-### Five speech engines
-Apple speech recognition with no key needed, or OpenAI, Groq, Deepgram, ElevenLabs, Mistral and Meta Muse with your own API key.
+### Eight speech engines
+NVIDIA Parakeet on your Mac or Apple speech recognition with no key needed, or OpenAI, Groq, Deepgram, ElevenLabs, Mistral and Meta Muse with your own API key.
 
 ### Optional AI cleanup
 Run transcripts through Claude, OpenAI, Groq or AWS Bedrock to fix punctuation and misheard words. Edit the prompt and add your own vocabulary.
@@ -41,12 +41,13 @@ The Activity tab shows raw and cleaned transcripts. When a dictation fails, Whis
 
 ## Providers
 
-Start with Apple speech recognition and no API key, or add a key for a cloud provider when you want more accuracy or cleanup.
+Start with no API key: on Apple silicon Whispur uses NVIDIA Parakeet on your Mac, downloading its model in the background on first launch while Apple speech recognition fills in. Add a key for a cloud provider when you want more accuracy or cleanup.
 
 ### Speech to text
 | Provider | Notes |
 | --- | --- |
-| Apple speech recognition | Built into macOS, no key, default. Uses the newer SpeechAnalyzer model on macOS 26 and later |
+| Parakeet (on this Mac) | NVIDIA Parakeet Ultra on the Neural Engine, 25 European languages, no key. Default on Apple silicon without a cloud speech key. One-time ~630 MB download; waits for Wi-Fi on metered or Low Data Mode networks |
+| Apple speech recognition | Built into macOS, no key. Default on Intel Macs and the fallback while Parakeet downloads. Uses the newer SpeechAnalyzer model on macOS 26 and later |
 | OpenAI | gpt-transcribe by default, whisper-1 until February 2027, or any OpenAI-compatible endpoint |
 | Groq | Whisper Large v3 or v3 Turbo |
 | Deepgram | Nova-3 |
@@ -83,13 +84,13 @@ make run
 ## FAQ
 
 ### Is Whispur really free?
-Yes. Whispur is MIT licensed, with no account and no subscription. Apple speech recognition works without an API key. If you choose a cloud provider, that provider bills you directly for your own usage.
+Yes. Whispur is MIT licensed, with no account and no subscription. Parakeet and Apple speech recognition work without an API key. If you choose a cloud provider, that provider bills you directly for your own usage.
 
 ### Does Whispur see my audio or transcripts?
 No. Whispur has no backend server. Audio and transcripts go only to the speech and cleanup providers you configure, using your own API keys, which are stored in the macOS Keychain.
 
 ### Which speech-to-text engines does Whispur support?
-Apple speech recognition built into macOS, OpenAI GPT Transcribe, Groq Whisper Large v3, Deepgram Nova-3, ElevenLabs Scribe v2, Mistral Voxtral and Meta Muse. The OpenAI provider also accepts a custom OpenAI-compatible base URL.
+NVIDIA Parakeet running on your Mac, Apple speech recognition built into macOS, OpenAI GPT Transcribe, Groq Whisper Large v3, Deepgram Nova-3, ElevenLabs Scribe v2, Mistral Voxtral and Meta Muse. The OpenAI provider also accepts a custom OpenAI-compatible base URL.
 
 ### Which Macs are supported?
 Macs running macOS 14 Sonoma or later. The current release build runs on Apple silicon.
@@ -112,6 +113,7 @@ On GitHub at github.com/sophiie-ai/whispur. Issues and pull requests are welcome
 ## Privacy summary
 
 - No account and no backend server. Audio is recorded to a temporary file, converted to 16 kHz mono, and deleted after the dictation.
+- Parakeet runs entirely on your Mac once its model is downloaded from Hugging Face; recordings never leave the Mac.
 - Apple speech recognition uses the framework built into macOS; depending on the Mac and language, macOS may process audio on the device or with Apple's speech service.
 - Cloud providers receive audio or text directly from your Mac with your API key.
 - Recent transcripts and a provider request log are kept locally and can be cleared in Settings.

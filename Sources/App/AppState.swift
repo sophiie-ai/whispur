@@ -7,7 +7,10 @@ import SwiftUI
 /// Central application state used by the menu bar UI and settings window.
 @MainActor
 final class AppState: ObservableObject {
-    @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple {
+    /// Apple when nothing is stored. A user who never picked a provider and
+    /// has no cloud speech key gets Parakeet stored at launch instead
+    /// (`STTDefaultResolver`).
+    @AppStorage(STTDefaultResolver.selectedSTTKey) var selectedSTT: STTProviderID = .apple {
         didSet {
             guard selectedSTT != oldValue else { return }
             prepareLocalModel(for: selectedSTT)
@@ -92,7 +95,11 @@ final class AppState: ObservableObject {
     private var failedAudioPurgeTask: Task<Void, Never>?
     /// The on-device Parakeet model: download, warm-up, memory.
     let parakeetModel: ParakeetModelManager
+    /// Downloads the model in the background for users Parakeet became the
+    /// default for.
+    let parakeetAutoDownload: ParakeetAutoDownload
     private var parakeetCancellable: AnyCancellable?
+    private var networkConditions: NetworkConditionsMonitor?
     private let startsServices: Bool
 
     /// - Parameters:
@@ -117,6 +124,9 @@ final class AppState: ObservableObject {
     ) {
         // Before anything reads the language setting.
         Self.migrateSpokenLanguagesIfNeeded()
+        // Before anything reads the speech provider. Renders and tests
+        // never read the Keychain or change the stored provider.
+        if startsServices { Self.adoptDefaultSpeechProvider() }
         let loadedHoldShortcut = Self.loadHoldShortcut()
         let sanitizedToggleShortcut = Self.loadToggleShortcut(holdShortcut: loadedHoldShortcut)
 
@@ -171,6 +181,7 @@ final class AppState: ObservableObject {
         self.learningToastPanel = learningToastPanel
         self.evalCases = evalCases ?? MyEvalCaseStore()
         self.parakeetModel = .shared
+        self.parakeetAutoDownload = ParakeetAutoDownload(model: ParakeetModelManager.shared)
         self.startsServices = startsServices
 
         Self.applyBindings(
@@ -213,7 +224,44 @@ final class AppState: ObservableObject {
             self.sparkleUpdater.checkForUpdatesInBackground()
             // Low priority: the menu bar and shortcuts come first.
             if self.selectedSTT == .parakeet { self.parakeetModel.warm() }
+            self.startParakeetAutoDownload()
         }
+    }
+
+    /// Stores Parakeet for a user who never picked a speech provider, has no
+    /// cloud speech key, and has a Mac that runs it.
+    private static func adoptDefaultSpeechProvider() {
+        let keychain = KeychainManager.shared
+        STTDefaultResolver.adoptParakeetIfDefault(
+            defaults: .standard,
+            hasCloudSTTKey: { CloudSTTKeys.hasAny { keychain.get($0) } },
+            parakeetSupported: ParakeetSupport.isSupported
+        )
+    }
+
+    /// Starts the background model download when Parakeet was picked
+    /// automatically and its model isn't here yet. Watches the network only
+    /// while that download is pending.
+    private func startParakeetAutoDownload() {
+        guard parakeetAutoDownload.isActive, selectedSTT == .parakeet else { return }
+        parakeetAutoDownload.launch(selected: selectedSTT)
+        guard parakeetAutoDownload.isActive else { return }
+        networkConditions = NetworkConditionsMonitor { [weak self] constrained in
+            self?.parakeetAutoDownload.networkChanged(constrained: constrained)
+        }
+    }
+
+    /// Dictation transcribes with Apple on-device because Parakeet is
+    /// selected and its model isn't downloaded yet.
+    var isUsingSpeechFallback: Bool {
+        selectedSTT == .parakeet && !parakeetModel.isInstalled
+    }
+
+    /// "Parakeet (on this Mac) ready", or what fills in for it.
+    var speechReadyTitle: String {
+        isUsingSpeechFallback
+            ? "\(STTProviderID.apple.displayName) until Parakeet is ready"
+            : "\(selectedSTT.displayName) ready"
     }
 
     /// Republishes model changes (download finished, deleted) so readiness
@@ -224,8 +272,13 @@ final class AppState: ObservableObject {
             self?.objectWillChange.send()
         }
         parakeetModel.onInstalled = { [weak self] in
-            guard let self, self.selectedSTT == .parakeet else { return }
+            guard let self else { return }
+            self.parakeetAutoDownload.installed()
+            guard self.selectedSTT == .parakeet else { return }
             self.parakeetModel.warm()
+        }
+        parakeetModel.onUserStopped = { [weak self] in
+            self?.parakeetAutoDownload.userStopped()
         }
     }
 
@@ -234,6 +287,7 @@ final class AppState: ObservableObject {
     private func prepareLocalModel(for provider: STTProviderID) {
         // Renders and tests never download or load a model.
         guard startsServices else { return }
+        parakeetAutoDownload.selectionChanged(to: provider)
         if provider == .parakeet {
             if parakeetModel.isInstalled {
                 parakeetModel.warm()
@@ -358,7 +412,8 @@ final class AppState: ObservableObject {
     }
 
     var isSelectedSTTConfigured: Bool {
-        if selectedSTT == .parakeet { return parakeetModel.isInstalled }
+        // Without its model, Parakeet falls back to Apple on-device.
+        if selectedSTT == .parakeet { return true }
         return !selectedSTT.requiresAPIKey || keychain.hasKeysFor(stt: selectedSTT)
     }
 
@@ -561,16 +616,7 @@ final class AppState: ObservableObject {
     }
 
     private func unconfiguredSTTMessage() -> String {
-        guard selectedSTT == .parakeet else {
-            return "\(selectedSTT.displayName) is not configured. Add its API key or switch to Apple STT."
-        }
-        if case let .downloading(fraction, isPreparing) = parakeetModel.downloadState {
-            return isPreparing
-                ? "Parakeet is almost ready. Try again in a moment."
-                : "Parakeet is still downloading (\(Int(fraction * 100))%). Try again when it finishes."
-        }
-        parakeetModel.download()
-        return "Parakeet needs its model. The download has started; follow it in Settings > Providers."
+        "\(selectedSTT.displayName) is not configured. Add its API key or switch to Apple STT."
     }
 
     /// Check whether the user edited the previous paste and, if so, offer

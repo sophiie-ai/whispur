@@ -72,11 +72,9 @@ struct GetStartedSettingsView: View {
                 CardDivider()
                 step(
                     "Choose a speech provider",
-                    detail: setup.speechReady
-                        ? "\(appState.selectedSTT.displayName) is ready."
-                        : "The current speech provider still needs credentials.",
+                    detail: speechDetail,
                     isComplete: setup.speechReady,
-                    action: ("Providers", { openTab(.providers) })
+                    action: speechAction
                 )
                 CardDivider()
                 step(
@@ -96,6 +94,24 @@ struct GetStartedSettingsView: View {
                 )
             }
         }
+    }
+
+    private var speechDetail: String {
+        if appState.isUsingSpeechFallback {
+            let line = ParakeetDownloadCopy.line(for: appState.parakeetModel.downloadState) ?? ""
+            return "\(line). \(ParakeetDownloadCopy.fallbackNote)"
+        }
+        return setup.speechReady
+            ? "\(appState.selectedSTT.displayName) is ready."
+            : "The current speech provider still needs credentials."
+    }
+
+    /// Retry right here when the model download failed; Providers otherwise.
+    private var speechAction: (String, () -> Void) {
+        if appState.isUsingSpeechFallback, case .failed = appState.parakeetModel.downloadState {
+            return ("Retry", { appState.parakeetModel.download() })
+        }
+        return ("Providers", { openTab(.providers) })
     }
 
     private func step(_ title: String, detail: String, isComplete: Bool, action: (String, () -> Void)?) -> some View {

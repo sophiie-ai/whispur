@@ -23,7 +23,7 @@ enum ProviderRequestStatusFilter: String, CaseIterable, Identifiable {
             guard let statusCode = entry.statusCode else { return false }
             return (500 ... 599).contains(statusCode)
         case .transport:
-            return entry.statusCode == nil && !entry.isScriptGuard
+            return entry.statusCode == nil && !entry.isScriptGuard && !entry.isOnDevice
         }
     }
 }
@@ -297,6 +297,7 @@ private struct RequestsInspectorPane: View {
 
     private func statusLabel(for entry: ProviderRequestLogEntry) -> String {
         if entry.isScriptGuard { return "Script guard" }
+        if entry.isOnDevice { return entry.errorMessage == nil ? "On device" : "Failed" }
         if let statusCode = entry.statusCode {
             return "\(statusCode)"
         }
@@ -305,6 +306,7 @@ private struct RequestsInspectorPane: View {
 
     private func statusTone(for entry: ProviderRequestLogEntry) -> PreferenceBadge.Tone {
         if entry.isScriptGuard { return .neutral }
+        if entry.isOnDevice { return entry.errorMessage == nil ? .good : .critical }
         guard let statusCode = entry.statusCode else { return .warning }
         switch statusCode {
         case 200 ... 299: return .good

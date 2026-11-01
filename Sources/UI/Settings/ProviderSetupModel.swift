@@ -91,6 +91,8 @@ enum ProviderSetupStatus: Equatable {
     /// An on-device model that isn't downloaded yet.
     case needsDownload
     case downloading
+    /// An automatic model download waiting for an unmetered network.
+    case waitingForNetwork
 
     var title: String {
         switch self {
@@ -99,6 +101,7 @@ enum ProviderSetupStatus: Equatable {
         case .needsRegion: "Needs region"
         case .needsDownload: "Needs download"
         case .downloading: "Downloading"
+        case .waitingForNetwork: "Waiting for Wi-Fi"
         }
     }
 
@@ -112,6 +115,7 @@ enum ProviderSetupStatus: Equatable {
         switch localModel {
         case .installed: self = .ready
         case .downloading: self = .downloading
+        case .waitingForNetwork: self = .waitingForNetwork
         case .notDownloaded, .failed: self = .needsDownload
         }
     }
@@ -154,7 +158,7 @@ struct SettingsReadiness: Equatable {
         case .ready: break
         case .needsKey: missing.append("\(speechProviderName) key")
         case .needsRegion: missing.append("\(speechProviderName) region")
-        case .needsDownload, .downloading: missing.append("\(speechProviderName) model")
+        case .needsDownload, .downloading, .waitingForNetwork: missing.append("\(speechProviderName) model")
         }
 
         if !missing.isEmpty {
@@ -226,6 +230,13 @@ final class ProviderCredentials: ObservableObject {
     func status(for descriptor: ProviderDescriptor, localModel: ParakeetModelManager) -> ProviderSetupStatus {
         guard descriptor.hasLocalModel else { return status(for: descriptor.keys) }
         return ProviderSetupStatus(localModel: localModel.downloadState)
+    }
+
+    /// The status setup readiness counts. A missing Parakeet model doesn't
+    /// hold dictation back: Apple on-device transcribes until it's here
+    /// (`STTRoute`), so the provider counts as ready.
+    func readinessStatus(for descriptor: ProviderDescriptor, localModel: ParakeetModelManager) -> ProviderSetupStatus {
+        descriptor.hasLocalModel ? .ready : status(for: descriptor, localModel: localModel)
     }
 
     /// The masked form of a stored secret, or the plain value for

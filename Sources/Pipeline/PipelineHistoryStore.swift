@@ -68,6 +68,7 @@ final class PipelineHistoryStore: ObservableObject {
         error: String,
         wavURL: URL?,
         sttProvider: STTProviderID,
+        sttFallbackFrom: STTProviderID? = nil,
         llmProvider: LLMProviderID,
         appBundleID: String?,
         style: WritingStyle?,
@@ -91,7 +92,8 @@ final class PipelineHistoryStore: ObservableObject {
             timestamp: timestamp,
             appBundleID: appBundleID,
             style: style,
-            failure: DictationFailure(error: error, audioFileName: audioName)
+            failure: DictationFailure(error: error, audioFileName: audioName),
+            sttFallbackFrom: sttFallbackFrom
         )
         add(result)
         return result

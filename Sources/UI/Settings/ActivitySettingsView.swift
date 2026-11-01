@@ -162,6 +162,10 @@ private struct ActivityEntry: View {
                     transcriptBlock("Raw", item.rawTranscript)
                     HStack(spacing: 8) {
                         PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
+                        if let from = item.sttFallbackFrom {
+                            PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
+                                .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
+                        }
                         PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
                         if let llmModel = item.llmModel {
                             PreferenceBadge(title: llmModel, tone: .neutral)
@@ -264,7 +268,7 @@ struct FailedActivityEntry: View {
     }
 
     private var detail: String {
-        var parts = [item.sttProvider.displayName]
+        var parts = [item.sttProviderSummary]
         if let style = item.style { parts.append("\(style.title) style") }
         if !canRetry {
             parts.append("Recording no longer kept")

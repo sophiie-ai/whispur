@@ -36,6 +36,8 @@ enum ProviderRequestContext {
 extension ProviderRequestLogEntry {
     /// A script-guard note rather than an HTTP request.
     var isScriptGuard: Bool { httpMethod == ProviderHTTPClient.scriptGuardMethod }
+    /// A transcription that ran on this Mac rather than an HTTP request.
+    var isOnDevice: Bool { httpMethod == ProviderHTTPClient.onDeviceMethod }
 }
 
 @MainActor

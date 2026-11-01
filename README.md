@@ -26,7 +26,7 @@ Hold a shortcut to talk, or use an optional toggle shortcut for hands-free captu
 - Optional transcript cleanup with provider-selectable LLMs
 - Paste-back into the active app with clipboard preservation
 - Custom vocabulary and a single editable cleanup prompt for technical dictation
-- Local-first default path when you stick with Apple on-device transcription
+- Local-first by default: with no cloud speech key, Whispur uses NVIDIA Parakeet on Apple silicon (Apple on-device on Intel Macs), and Apple on-device transcribes while Parakeet's model downloads in the background
 - Sparkle-based auto-updates for signed releases
 
 ## Install
@@ -82,8 +82,8 @@ make run
 
 | Provider | Status | Notes |
 | --- | --- | --- |
-| Apple Speech Recognition | Available | On-device and local. Uses SpeechAnalyzer on macOS 26 and later |
-| Parakeet (on this Mac) | Available | NVIDIA Parakeet (Parakeet Ultra, 25 European languages) on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio). No key; a one-time ~630 MB model download to `~/Library/Application Support/Whispur/Models`. Model weights: CC BY 4.0 |
+| Apple Speech Recognition | Available | On-device and local. Uses SpeechAnalyzer on macOS 26 and later. The default on Intel Macs, and the fallback while Parakeet's model downloads |
+| Parakeet (on this Mac) | Available | NVIDIA Parakeet (Parakeet Ultra, 25 European languages) on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio). No key; a one-time ~630 MB model download to `~/Library/Application Support/Whispur/Models`. Model weights: CC BY 4.0. The default on Apple silicon for anyone who hasn't picked a provider and has no cloud speech key: the model downloads in the background on first launch (it waits out metered and Low Data Mode networks) and Whispur switches to it by itself once it's ready |
 | OpenAI | Available | GPT Transcribe (default) or Whisper, via API key |
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |

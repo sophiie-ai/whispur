@@ -245,7 +245,7 @@ struct OnboardingWindow: View {
 
             HStack(spacing: 10) {
                 PreferenceBadge(
-                    title: appState.isSelectedSTTConfigured ? "\(appState.selectedSTT.displayName) ready" : "\(appState.selectedSTT.displayName) needs setup",
+                    title: appState.isSelectedSTTConfigured ? appState.speechReadyTitle : "\(appState.selectedSTT.displayName) needs setup",
                     tone: appState.isSelectedSTTConfigured ? .good : .warning
                 )
                 PreferenceBadge(
@@ -253,6 +253,16 @@ struct OnboardingWindow: View {
                     tone: .neutral
                 )
             }
+
+            parakeetDownloadLine
+        }
+    }
+
+    /// The model download's progress while Apple fills in for Parakeet.
+    @ViewBuilder
+    private var parakeetDownloadLine: some View {
+        if appState.isUsingSpeechFallback {
+            ParakeetDownloadStatusLine(manager: appState.parakeetModel)
         }
     }
 
@@ -358,18 +368,27 @@ struct OnboardingWindow: View {
 
             SetupChecklistRow(
                 title: "Speech provider",
-                detail: appState.isSelectedSTTConfigured
-                    ? "\(appState.selectedSTT.displayName) is ready for dictation."
-                    : "The selected speech provider still needs credentials in Settings.",
+                detail: speechProviderDetail,
                 isComplete: appState.isSelectedSTTConfigured,
                 actionTitle: appState.isSelectedSTTConfigured ? nil : "Providers",
                 action: appState.isSelectedSTTConfigured ? nil : { openSettings(tab: .providers) }
             )
 
+            parakeetDownloadLine
+
             Text("Finish here and start dictating from the menu bar. Setup, providers, and prompt tuning all stay available in Settings.")
                 .font(.subheadline)
                 .foregroundStyle(SophiieTheme.Palette.muted)
         }
+    }
+
+    private var speechProviderDetail: String {
+        if appState.isUsingSpeechFallback {
+            return "Dictation works now: Apple's on-device recognition transcribes until Parakeet's model is downloaded, then Whispur switches to Parakeet by itself."
+        }
+        return appState.isSelectedSTTConfigured
+            ? "\(appState.selectedSTT.displayName) is ready for dictation."
+            : "The selected speech provider still needs credentials in Settings."
     }
 
     private var summaryCard: some View {

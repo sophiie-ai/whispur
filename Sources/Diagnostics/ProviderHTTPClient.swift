@@ -156,6 +156,32 @@ final class ProviderHTTPClient {
 
     /// The HTTP method shown for script-guard entries in the Requests tab.
     static let scriptGuardMethod = "GUARD"
+    /// The method shown for transcriptions that ran on this Mac.
+    static let onDeviceMethod = "LOCAL"
+
+    /// Lists an on-device transcription in the Requests tab, next to the
+    /// HTTP traffic: which provider ran it and how long it took.
+    func recordOnDevice(
+        providerID: String,
+        summary: String,
+        durationMS: Int,
+        responsePreview: String,
+        errorMessage: String?
+    ) {
+        Task {
+            await record(
+                providerID: providerID,
+                kind: .stt,
+                endpointURL: "On this Mac",
+                httpMethod: Self.onDeviceMethod,
+                statusCode: nil,
+                durationMS: durationMS,
+                requestSummary: summary,
+                responseBodyPreview: String(responsePreview.prefix(500)),
+                errorMessage: errorMessage
+            )
+        }
+    }
 
     /// Lists a script-guard firing in the Requests tab, next to the re-runs
     /// it caused.
