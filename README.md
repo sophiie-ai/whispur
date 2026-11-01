@@ -74,7 +74,7 @@ make run
 
 | Provider | Status | Notes |
 | --- | --- | --- |
-| Apple Speech Recognition | Available | On-device and local |
+| Apple Speech Recognition | Available | On-device and local. Uses SpeechAnalyzer on macOS 26 and later |
 | OpenAI | Available | GPT Transcribe (default) or Whisper, via API key |
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |
