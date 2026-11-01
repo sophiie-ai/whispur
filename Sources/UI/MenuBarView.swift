@@ -5,7 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("settings.selectedTab") private var selectedTabRaw = SettingsTab.setup.rawValue
+    @AppStorage(SettingsView.selectedTabKey) private var selectedTabRaw = ""
 
     @State private var isPresentingRecap = false
 
@@ -214,7 +214,7 @@ struct MenuBarView: View {
                 Spacer()
 
                 Button("Open") {
-                    openSettings(tab: .setup)
+                    openSettings(tab: .getStarted)
                 }
                 .buttonStyle(.sophiieSecondary)
                 .controlSize(.small)
@@ -244,11 +244,11 @@ struct MenuBarView: View {
             Spacer(minLength: 0)
 
             Button {
-                openSettings(tab: .general)
+                openSettings(tab: .dictation)
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "command")
-                    Text(appState.holdShortcut.menuTitle)
+                    Text(appState.holdShortcut?.menuTitle ?? appState.toggleShortcut?.menuTitle ?? "No shortcut")
                 }
                 .font(SophiieTheme.Typography.captionStrong)
                 .padding(.horizontal, 10)
@@ -353,7 +353,7 @@ struct MenuBarView: View {
             }
 
             Button("Settings") {
-                openSettings(tab: .general)
+                openSettings(tab: nil)
             }
             .keyboardShortcut(",", modifiers: .command)
 
@@ -373,8 +373,9 @@ struct MenuBarView: View {
         .controlSize(.small)
     }
 
-    private func openSettings(tab: SettingsTab) {
-        selectedTabRaw = tab.rawValue
+    /// Opens Settings on `tab`, or on its landing page when nil.
+    private func openSettings(tab: SettingsTab?) {
+        selectedTabRaw = tab?.rawValue ?? ""
         WindowUtilities.dismissMenuBarPopover()
         WindowUtilities.focusOrOpenWindow(id: .settings, using: openWindow)
     }

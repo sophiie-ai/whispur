@@ -261,13 +261,15 @@ struct OnboardingWindow: View {
     private var shortcutsStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
+                ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
                 ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
             }
 
             SetupChecklistRow(
                 title: "Push to talk",
-                detail: "Hold \(appState.holdShortcut.menuTitle) while speaking. Releasing the shortcut begins transcription immediately.",
+                detail: appState.holdShortcut.map {
+                    "Hold \($0.menuTitle) while speaking. Releasing the shortcut begins transcription immediately."
+                } ?? "Hold to talk is off. You can add a shortcut later in Settings.",
                 isComplete: true,
                 actionTitle: nil,
                 action: nil
@@ -280,7 +282,7 @@ struct OnboardingWindow: View {
                     : appState.toggleShortcutInstruction,
                 isComplete: true,
                 actionTitle: "Open Settings",
-                action: { openSettings(tab: .general) }
+                action: { openSettings(tab: .dictation) }
             )
         }
     }
@@ -294,7 +296,7 @@ struct OnboardingWindow: View {
                     : "You can finish setup later, but Whispur won’t be seamless until both permissions are granted.",
                 isComplete: appState.hasRequiredPermissions,
                 actionTitle: appState.hasRequiredPermissions ? nil : "Open Setup Guide",
-                action: appState.hasRequiredPermissions ? nil : { openSettings(tab: .setup) }
+                action: appState.hasRequiredPermissions ? nil : { openSettings(tab: .getStarted) }
             )
 
             SetupChecklistRow(
@@ -355,7 +357,7 @@ struct OnboardingWindow: View {
                 .buttonStyle(.sophiiePrimary)
             } else {
                 Button("Open Settings") {
-                    openSettings(tab: .setup)
+                    openSettings(tab: .getStarted)
                 }
                 .buttonStyle(.sophiieSecondary)
 

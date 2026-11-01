@@ -43,7 +43,7 @@ struct SetupSettingsView: View {
                 ProgressView(value: appState.setupProgress)
 
                 HStack(spacing: 10) {
-                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
+                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
                     ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
                 }
             }
@@ -86,9 +86,9 @@ struct SetupSettingsView: View {
                 SetupChecklistRow(
                     title: "Review your shortcuts",
                     detail: appState.shortcutSummary,
-                    isComplete: true,
+                    isComplete: appState.hasAnyShortcut,
                     actionTitle: "Shortcuts",
-                    action: { openTab(.general) }
+                    action: { openTab(.dictation) }
                 )
 
                 SetupChecklistRow(
@@ -116,8 +116,8 @@ struct SetupSettingsView: View {
                     .foregroundStyle(SophiieTheme.Palette.muted)
 
                 HStack(spacing: 10) {
-                    Button("Review Prompts") {
-                        openTab(.prompts)
+                    Button("Open Dictionary") {
+                        openTab(.dictionary)
                     }
                     .buttonStyle(.sophiiePrimary)
 

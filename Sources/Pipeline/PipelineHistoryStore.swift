@@ -11,13 +11,20 @@ final class PipelineHistoryStore: ObservableObject {
     private let maxItems: Int
     private let fileURL: URL
 
-    init(maxItems: Int = 25) {
+    /// - Parameter fileURL: Where the history lives. Defaults to
+    ///   `Application Support/Whispur/history.json`; tests and renders pass
+    ///   a temporary file.
+    init(maxItems: Int = 25, fileURL: URL? = nil) {
         self.maxItems = maxItems
 
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("Whispur", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.fileURL = dir.appendingPathComponent("history.json")
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSupport.appendingPathComponent("Whispur", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.fileURL = dir.appendingPathComponent("history.json")
+        }
 
         load()
     }

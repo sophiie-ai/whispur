@@ -22,18 +22,29 @@ final class DictationStats: ObservableObject {
     @Published private(set) var totalWords: Int = 0
     @Published private(set) var dailyWords: [String: Int] = [:]
     @Published private(set) var firstRecordedAt: Date?
+    /// Dictations recorded since stats began. Older stats files have no
+    /// count; `seedDictationCountIfMissing` fills it once from history.
+    @Published private(set) var totalDictations: Int = 0
+    private var hasDictationCount = false
 
     private let fileURL: URL
     private let calendar: Calendar
     private let dayFormatter: DateFormatter
 
-    init(calendar: Calendar = .current) {
+    /// - Parameter fileURL: Where the stats live. Defaults to
+    ///   `Application Support/Whispur/stats.json`; tests and renders pass a
+    ///   temporary file.
+    init(calendar: Calendar = .current, fileURL: URL? = nil) {
         self.calendar = calendar
 
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("Whispur", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.fileURL = dir.appendingPathComponent("stats.json")
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSupport.appendingPathComponent("Whispur", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.fileURL = dir.appendingPathComponent("stats.json")
+        }
 
         let formatter = DateFormatter()
         formatter.calendar = calendar
@@ -53,9 +64,21 @@ final class DictationStats: ObservableObject {
         let key = dayKey(for: date)
         dailyWords[key, default: 0] += wordCount
         totalWords += wordCount
+        totalDictations += 1
+        hasDictationCount = true
         if firstRecordedAt == nil {
             firstRecordedAt = date
         }
+        save()
+    }
+
+    /// Stats written before the dictation count existed start from the
+    /// number of saved history items rather than zero. No-op once a count
+    /// exists.
+    func seedDictationCountIfMissing(_ count: Int) {
+        guard !hasDictationCount else { return }
+        totalDictations = max(totalDictations, count)
+        hasDictationCount = true
         save()
     }
 
@@ -134,6 +157,7 @@ final class DictationStats: ObservableObject {
         var totalWords: Int
         var dailyWords: [String: Int]
         var firstRecordedAt: Date?
+        var totalDictations: Int?
     }
 
     private func load() {
@@ -144,6 +168,8 @@ final class DictationStats: ObservableObject {
             totalWords = snapshot.totalWords
             dailyWords = snapshot.dailyWords
             firstRecordedAt = snapshot.firstRecordedAt
+            totalDictations = snapshot.totalDictations ?? 0
+            hasDictationCount = snapshot.totalDictations != nil
         } catch {
             statsLogger.error("Failed to load stats: \(error.localizedDescription)")
         }
@@ -153,7 +179,8 @@ final class DictationStats: ObservableObject {
         let snapshot = Snapshot(
             totalWords: totalWords,
             dailyWords: dailyWords,
-            firstRecordedAt: firstRecordedAt
+            firstRecordedAt: firstRecordedAt,
+            totalDictations: hasDictationCount ? totalDictations : nil
         )
         do {
             let data = try JSONEncoder().encode(snapshot)

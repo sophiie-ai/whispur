@@ -106,6 +106,21 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
         return isDoublePress ? "\(joined) \(joined)" : joined
     }
 
+    /// One label per physical key, in press order, for keycap rendering
+    /// ("⌘", "fn"). A double press repeats the key; join it with "then".
+    var keycapLabels: [String] {
+        var keys: [String] = []
+        if modifiers.contains(.control) { keys.append("\u{2303}") }
+        if modifiers.contains(.option), keyCode != UInt16(kVK_RightOption) { keys.append("\u{2325}") }
+        if modifiers.contains(.shift) { keys.append("\u{21E7}") }
+        if modifiers.contains(.command) { keys.append("\u{2318}") }
+        if modifiers.contains(.function) { keys.append("fn") }
+        if let keyCode {
+            keys.append(Self.keyCodeName(keyCode))
+        }
+        return isDoublePress ? keys + keys : keys
+    }
+
     var menuTitle: String {
         switch self {
         case .fnKey:

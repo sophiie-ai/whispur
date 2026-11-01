@@ -24,7 +24,9 @@ final class HotkeyManager {
     }
 
     nonisolated(unsafe) var onEvent: ((Event) -> Void)?
-    nonisolated(unsafe) var holdBinding: ShortcutBinding = .fnKey
+    /// The hold-to-talk shortcut. nil when the user removed it: no key
+    /// starts a hold recording, and the hands-free shortcut still works.
+    nonisolated(unsafe) var holdBinding: ShortcutBinding? = .fnKey
     nonisolated(unsafe) var toggleBinding: ShortcutBinding? = nil {
         didSet {
             stateLock.withLock { state in
@@ -34,6 +36,25 @@ final class HotkeyManager {
         }
     }
     nonisolated(unsafe) var cancelWatchEnabled = false
+
+    /// The Settings master switch. While false, no shortcut starts or stops
+    /// dictation (Esc-to-cancel still works). Turning it off drops any
+    /// in-flight hold or toggle state so nothing fires when it comes back.
+    nonisolated(unsafe) var isEnabled = true {
+        didSet {
+            guard oldValue != isEnabled, !isEnabled else { return }
+            holdArmTimer?.cancel()
+            holdArmTimer = nil
+            stateLock.withLock { state in
+                state.holdActive = false
+                state.holdArming = false
+                state.holdSuppressed = false
+                state.toggleActive = false
+                state.doublePress.reset()
+                state.doublePressDown = false
+            }
+        }
+    }
 
     /// Delay before a bare-modifier hold binding (e.g. Fn alone) activates.
     /// Short taps within this window are ignored so macOS can handle its own
@@ -201,7 +222,7 @@ final class HotkeyManager {
         self.runLoopSource = source
         self.isMonitoring = true
 
-        logger.info("CGEventTap installed — monitoring for \(self.holdBinding.displayName)")
+        logger.info("CGEventTap installed — monitoring for \(self.holdBinding?.displayName ?? "no hold shortcut")")
     }
 
     private func teardownEventTap() {
@@ -299,11 +320,15 @@ final class HotkeyManager {
     /// Handle modifier key changes. Returns true if the event should be consumed.
     @discardableResult
     private nonisolated func handleFlagsChanged(_ event: NSEvent) -> Bool {
-        let keyCode = event.keyCode
+        logger.info("flagsChanged: keyCode=\(event.keyCode) mods=\(event.modifierFlags.rawValue)")
+        return handleModifierChange(keyCode: event.keyCode)
+    }
 
-        // Log every flagsChanged for debugging
+    /// A modifier key went down or up. Internal so tests can drive the
+    /// binding logic without synthesizing NSEvents.
+    @discardableResult
+    nonisolated func handleModifierChange(keyCode: UInt16) -> Bool {
         let isKnown = trackedModifierKeyCodes.contains(keyCode)
-        logger.info("flagsChanged: keyCode=\(keyCode) known=\(isKnown) mods=\(event.modifierFlags.rawValue)")
 
         DispatchQueue.main.async {
             self.eventCount += 1
@@ -334,7 +359,11 @@ final class HotkeyManager {
     }
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
-        let keyCode = event.keyCode
+        handleKeyDown(keyCode: event.keyCode)
+    }
+
+    @discardableResult
+    nonisolated func handleKeyDown(keyCode: UInt16) -> Bool {
         stateLock.withLock { state in
             _ = state.pressedKeyCodes.insert(keyCode)
         }
@@ -349,7 +378,7 @@ final class HotkeyManager {
         // Bare-modifier hold (e.g. Fn alone): if another key is pressed while
         // the modifier is held, treat it as a chord (e.g. Fn+Delete) and veto
         // both the pending arm and any re-arm until the modifier is released.
-        if holdBinding.keyCode == nil {
+        if let holdBinding, holdBinding.keyCode == nil {
             let cancelledArm = stateLock.withLock { state -> Bool in
                 guard Self.bindingIsActive(holdBinding, state: state) else { return false }
                 let wasArming = state.holdArming
@@ -369,7 +398,10 @@ final class HotkeyManager {
     }
 
     private nonisolated func handleKeyUp(_ event: NSEvent) {
-        let keyCode = event.keyCode
+        handleKeyUp(keyCode: event.keyCode)
+    }
+
+    nonisolated func handleKeyUp(keyCode: UInt16) {
         stateLock.withLock { state in
             _ = state.pressedKeyCodes.remove(keyCode)
         }
@@ -380,7 +412,9 @@ final class HotkeyManager {
 
     /// Check all bindings against current key state and fire events.
     private nonisolated func evaluateBindings(interruptDoublePress: Bool = false) {
-        let useThreshold = holdBinding.keyCode == nil && holdArmThreshold > 0
+        guard isEnabled else { return }
+        let holdBinding = self.holdBinding
+        let useThreshold = holdBinding.map { $0.keyCode == nil } == true && holdArmThreshold > 0
         let toggleBinding = self.toggleBinding
         let now = ProcessInfo.processInfo.systemUptime
 
@@ -444,7 +478,7 @@ final class HotkeyManager {
                 }
             }
 
-            let holdNowMatches = Self.bindingIsActive(holdBinding, state: state)
+            let holdNowMatches = holdBinding.map { Self.bindingIsActive($0, state: state) } ?? false
             let toggleNowActive = toggleBinding.map { binding in
                 !binding.isDoublePress && Self.bindingIsActive(binding, state: state)
             } ?? false
@@ -521,10 +555,11 @@ final class HotkeyManager {
             self.holdArmTimer = nil
 
             let shouldFire = self.stateLock.withLock { state -> Bool in
-                guard state.holdArming else { return false }
+                guard self.isEnabled, state.holdArming else { return false }
                 state.holdArming = false
                 // Re-check that the binding is still held when the timer fires.
-                guard Self.bindingIsActive(self.holdBinding, state: state) else {
+                guard let holdBinding = self.holdBinding,
+                      Self.bindingIsActive(holdBinding, state: state) else {
                     return false
                 }
                 state.holdActive = true
