@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/sophiie-ai/whispur/compare/v0.25.0...v0.26.0) (2026-11-01)
+
+
+### Features
+
+* **evals:** add model selection to the cleanup eval and a speech-to-text benchmark ([#93](https://github.com/sophiie-ai/whispur/issues/93)) ([4fce74b](https://github.com/sophiie-ai/whispur/commit/4fce74bcb8fef1a6c1cc567c0b0ecf29222b2ca9))
+
 ## [0.25.0](https://github.com/sophiie-ai/whispur/compare/v0.24.0...v0.25.0) (2026-11-01)
 
 
