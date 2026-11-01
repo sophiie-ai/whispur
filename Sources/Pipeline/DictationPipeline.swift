@@ -388,8 +388,11 @@ final class DictationPipeline: ObservableObject {
                 do {
                     let response = try await llmProvider.complete(
                         request: LLMRequest(
-                            systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
-                            userMessage: wrapForCleanup(normalizedRawTranscript),
+                            systemPrompt: systemPrompt,
+                            userMessage: CleanupMessage.userMessage(
+                                transcript: normalizedRawTranscript,
+                                vocabulary: customVocabulary
+                            ),
                             maxTokens: LLMRequest.cleanupMaxTokens(
                                 forTranscriptCharacters: normalizedRawTranscript.count
                             )
@@ -453,30 +456,6 @@ final class DictationPipeline: ObservableObject {
                 presentError(error.localizedDescription)
             }
         }
-    }
-
-    private func buildSystemPrompt(vocabulary: [String]) -> String {
-        let terms = vocabulary
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !terms.isEmpty else { return systemPrompt }
-        let joined = terms.joined(separator: ", ")
-        return systemPrompt + """
-
-
-        Preserve these proper nouns / terms exactly as spelled when they appear \
-        (do not paraphrase, translate, or correct them): \(joined).
-        """
-    }
-
-    /// Wrap the raw transcript in tags so the LLM treats it as data, not as
-    /// instructions addressed to it. The system prompt tells the model to
-    /// ignore the contents of the wrapper for any directive purpose. If the
-    /// transcript happens to contain a literal closing tag, neutralize it so
-    /// the model can't see a premature close.
-    private func wrapForCleanup(_ transcript: String) -> String {
-        let safe = transcript.replacingOccurrences(of: "</dictation-to-clean>", with: "<\u{200B}/dictation-to-clean>")
-        return "<dictation-to-clean>\n\(safe)\n</dictation-to-clean>"
     }
 
     /// Decide whether a finished recording is worth sending to STT.
