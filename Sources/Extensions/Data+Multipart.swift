@@ -17,3 +17,18 @@ extension Data {
         append("\r\n".data(using: .utf8)!)
     }
 }
+
+/// A plain-text multipart field. Request builders return these so tests can
+/// check exactly what a provider would send without parsing a body.
+struct MultipartFormField: Equatable {
+    let name: String
+    let value: String
+}
+
+extension Data {
+    mutating func appendMultipart(boundary: String, fields: [MultipartFormField]) {
+        for field in fields {
+            appendMultipart(boundary: boundary, name: field.name, value: field.value)
+        }
+    }
+}

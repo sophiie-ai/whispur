@@ -12,8 +12,8 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .openai: "OpenAI Whisper"
-        case .groqWhisper: "Groq Whisper Large v3"
+        case .openai: "OpenAI"
+        case .groqWhisper: "Groq Whisper"
         case .deepgram: "Deepgram"
         case .elevenlabs: "ElevenLabs"
         case .apple: "Apple (on-device)"
@@ -33,6 +33,50 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .apple: []
         }
     }
+
+    /// Models offered in the Settings picker, default first. Empty when the
+    /// provider has a single model.
+    var modelOptions: [STTModelOption] {
+        switch self {
+        case .openai:
+            [
+                STTModelOption(id: "gpt-transcribe", label: "GPT Transcribe"),
+                STTModelOption(id: "whisper-1", label: "Whisper (retiring Feb 2027)"),
+            ]
+        case .groqWhisper:
+            [
+                STTModelOption(id: "whisper-large-v3", label: "Whisper Large v3"),
+                STTModelOption(id: "whisper-large-v3-turbo", label: "Whisper Large v3 Turbo"),
+            ]
+        case .deepgram, .elevenlabs, .apple:
+            []
+        }
+    }
+
+    /// Model used when the user hasn't picked one.
+    ///
+    /// Like the cleanup models, only an explicit choice is ever persisted
+    /// (`modelStorageKey`), so changing the default here moves every user
+    /// who never picked a model onto the new one.
+    var defaultModel: String? {
+        modelOptions.first?.id
+    }
+
+    /// UserDefaults key for the user's model choice. OpenAI keeps the key
+    /// its custom-model field always used.
+    var modelStorageKey: String? {
+        switch self {
+        case .openai: "openaiSTTModel"
+        case .groqWhisper: "groqWhisperSTTModel"
+        case .deepgram, .elevenlabs, .apple: nil
+        }
+    }
+}
+
+/// One entry in a speech provider's model picker.
+struct STTModelOption: Equatable, Identifiable {
+    let id: String
+    let label: String
 }
 
 /// A provider that converts audio to text.

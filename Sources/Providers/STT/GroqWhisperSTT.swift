@@ -1,11 +1,13 @@
 import Foundation
 
-/// Groq Whisper Large v3 speech-to-text provider.
+/// Groq-hosted Whisper speech-to-text provider (Large v3 or Large v3 Turbo).
+/// Groq bills every request as at least 10 seconds of audio.
 ///
 /// Uses Groq's OpenAI-compatible `/audio/transcriptions` endpoint. The response
 /// is returned as raw text (not JSON) to match the shape expected by the pipeline.
 struct GroqWhisperSTT: STTProvider {
     static let providerID: STTProviderID = .groqWhisper
+    static let defaultModel = "whisper-large-v3"
 
     private let apiKey: String
     private let httpClient: ProviderHTTPClient
@@ -17,7 +19,7 @@ struct GroqWhisperSTT: STTProvider {
         apiKey: String,
         httpClient: ProviderHTTPClient,
         baseURL: String = "https://api.groq.com/openai/v1",
-        model: String = "whisper-large-v3",
+        model: String = GroqWhisperSTT.defaultModel,
         timeoutSeconds: TimeInterval = 30
     ) {
         self.apiKey = apiKey
