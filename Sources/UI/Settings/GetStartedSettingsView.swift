@@ -60,14 +60,14 @@ struct GetStartedSettingsView: View {
                     "Grant microphone access",
                     detail: "Whispur needs live audio input before it can capture speech.",
                     isComplete: setup.microphoneGranted,
-                    action: setup.microphoneGranted ? nil : ("Allow", { appState.requestMicrophoneAccess() })
+                    action: setup.microphoneGranted ? nil : (appState.microphoneAccessRefused ? "Turn On" : "Allow", { appState.requestMicrophoneAccess() })
                 )
                 CardDivider()
                 step(
                     "Enable accessibility access",
                     detail: "Lets Whispur trigger shortcuts globally and paste text back into the active app.",
                     isComplete: setup.accessibilityGranted,
-                    action: setup.accessibilityGranted ? nil : ("Open", { appState.requestAccessibilityAccess() })
+                    action: setup.accessibilityGranted ? nil : ("Grant", { appState.requestAccessibilityAccess() })
                 )
                 CardDivider()
                 step(

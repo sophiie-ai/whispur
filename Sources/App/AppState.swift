@@ -47,6 +47,9 @@ final class AppState: ObservableObject {
     /// The key used when `shortcutStyle` is `.tapOrHold`.
     @Published private(set) var tapOrHoldShortcut: ShortcutBinding
     @Published private(set) var microphoneAccessGranted = AudioRecorder.hasMicrophoneAccess
+    /// The user refused the microphone (or a profile restricts it): macOS
+    /// won't ask again, so the switch is in System Settings.
+    @Published private(set) var microphoneAccessRefused = false
 
     let pipeline: DictationPipeline
     let recorder: AudioRecorder
@@ -66,6 +69,8 @@ final class AppState: ObservableObject {
     /// Cleanup style per app.
     let styles: StyleStore
     let learningSuggestions: LearningSuggestionCenter
+    /// The "drag to allow" guide beside System Settings.
+    let permissionGuide = PermissionGuideController()
     private let learningToastPanel: LearningToastPanelManager
     /// Dictations the user marked as wrong, as local eval cases.
     let evalCases: MyEvalCaseStore
@@ -543,28 +548,73 @@ final class AppState: ObservableObject {
         NSPasteboard.general.setString(transcript, forType: .string)
     }
 
+    /// Asks for the microphone. macOS asks only once, so a refused
+    /// microphone opens System Settings with the guide instead.
     func requestMicrophoneAccess() {
-        guard !microphoneAccessGranted else { return }
-
-        Task {
-            _ = await AudioRecorder.requestMicrophoneAccess()
-            await MainActor.run {
-                self.refreshPermissionSnapshot()
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            refreshPermissionSnapshot()
+        case .notDetermined:
+            Task {
+                _ = await AudioRecorder.requestMicrophoneAccess()
+                await MainActor.run {
+                    self.refreshPermissionSnapshot()
+                }
             }
+        default:
+            showPermissionGuide(.microphone)
         }
     }
 
+    /// Registers Whispur with Accessibility (macOS shows its prompt once per
+    /// launch) and opens System Settings with the drag guide beside it.
     func requestAccessibilityAccess() {
-        hotkeyManager.requestAccessibility()
+        guard !AXIsProcessTrusted() else {
+            hotkeyManager.recheckAccessibility()
+            return
+        }
+        if !Self.didPromptAccessibility {
+            Self.didPromptAccessibility = true
+            hotkeyManager.requestAccessibility()
+        }
         refreshPermissionSnapshot()
+        showPermissionGuide(.accessibility)
     }
 
+    /// Opens the Microphone list: plainly when granted, with the guide
+    /// when not.
     func openMicrophoneSettings() {
-        openSystemSettingsPane("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        if microphoneAccessGranted {
+            openSystemSettingsPane(GuidedPermission.microphone.settingsURL)
+        } else {
+            showPermissionGuide(.microphone)
+        }
     }
 
+    /// Opens the Accessibility list: plainly when granted, with the guide
+    /// when not.
     func openAccessibilitySettings() {
-        openSystemSettingsPane("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        if AXIsProcessTrusted() {
+            openSystemSettingsPane(GuidedPermission.accessibility.settingsURL)
+        } else {
+            showPermissionGuide(.accessibility)
+        }
+    }
+
+    private static var didPromptAccessibility = false
+
+    /// Shows the guide for `permission`. Once it is granted, Whispur picks
+    /// the grant up straight away and comes back to the front, where
+    /// onboarding moves on by itself.
+    func showPermissionGuide(_ permission: GuidedPermission) {
+        permissionGuide.show(permission) { [weak self] outcome in
+            guard let self else { return }
+            self.hotkeyManager.recheckAccessibility()
+            self.refreshPermissionSnapshot()
+            if outcome == .granted {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     func markOnboardingCompleted() {
@@ -658,13 +708,18 @@ final class AppState: ObservableObject {
     /// the dictation start path.
     private func refreshPermissionSnapshotInBackground() {
         Task { [weak self] in
-            let granted = await Task.detached(priority: .utility) { AudioRecorder.hasMicrophoneAccess }.value
-            self?.microphoneAccessGranted = granted
+            let status = await Task.detached(priority: .utility) { AVCaptureDevice.authorizationStatus(for: .audio) }.value
+            self?.applyMicrophoneStatus(status)
         }
     }
 
     func refreshPermissionSnapshot() {
-        microphoneAccessGranted = AudioRecorder.hasMicrophoneAccess
+        applyMicrophoneStatus(AVCaptureDevice.authorizationStatus(for: .audio))
+    }
+
+    private func applyMicrophoneStatus(_ status: AVAuthorizationStatus) {
+        microphoneAccessGranted = status == .authorized
+        microphoneAccessRefused = status == .denied || status == .restricted
     }
 
     private func setupHotkeys() {
@@ -797,6 +852,7 @@ final class AppState: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.hotkeyManager.recheckAccessibility()
                 self?.refreshPermissionSnapshot()
             }
         }
@@ -808,8 +864,7 @@ final class AppState: ObservableObject {
         permissionObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
-    private func openSystemSettingsPane(_ rawURL: String) {
-        guard let url = URL(string: rawURL) else { return }
+    private func openSystemSettingsPane(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
 

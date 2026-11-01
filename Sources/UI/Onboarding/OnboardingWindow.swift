@@ -45,7 +45,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-private enum OnboardingStep: Int, CaseIterable, Identifiable {
+enum OnboardingStep: Int, CaseIterable, Identifiable {
     case welcome
     case microphone
     case accessibility
@@ -104,7 +104,22 @@ struct OnboardingWindow: View {
     @ObservedObject var appState: AppState
     let dismiss: () -> Void
 
-    @State private var step: OnboardingStep = .welcome
+    @State private var step: OnboardingStep
+    /// Mirrors of the permission state. The hotkey manager and the guide
+    /// publish on their own, so the window listens to them directly.
+    @State private var accessibilityGranted: Bool
+    @State private var guidedPermission: GuidedPermission?
+
+    /// How long a fresh grant's check shows before the step moves on.
+    static let grantedBeat: TimeInterval = 0.7
+
+    init(appState: AppState, initialStep: OnboardingStep = .welcome, dismiss: @escaping () -> Void) {
+        self.appState = appState
+        self.dismiss = dismiss
+        _step = State(initialValue: initialStep)
+        _accessibilityGranted = State(initialValue: appState.hotkeyManager.isAccessibilityGranted)
+        _guidedPermission = State(initialValue: appState.permissionGuide.activePermission)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -127,6 +142,25 @@ struct OnboardingWindow: View {
         .background(SophiieTheme.Palette.surfaceWarm)
         .foregroundStyle(SophiieTheme.Palette.ink)
         .tint(SophiieTheme.Palette.accent)
+        .onReceive(appState.hotkeyManager.$isAccessibilityGranted) { granted in
+            let wasGranted = accessibilityGranted
+            accessibilityGranted = granted
+            if granted, !wasGranted { advance(after: .accessibility) }
+        }
+        .onReceive(appState.$microphoneAccessGranted.removeDuplicates().dropFirst()) { granted in
+            if granted { advance(after: .microphone) }
+        }
+        .onReceive(appState.permissionGuide.$activePermission) { guidedPermission = $0 }
+    }
+
+    /// A permission just turned on while its step shows: let the check
+    /// register, then move on.
+    private func advance(after granted: OnboardingStep) {
+        guard step == granted else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.grantedBeat) {
+            guard step == granted, let next = OnboardingStep(rawValue: granted.rawValue + 1) else { return }
+            withSophiieAnimation { step = next }
+        }
     }
 
     private var header: some View {
@@ -226,36 +260,55 @@ struct OnboardingWindow: View {
         VStack(spacing: 10) {
             SetupChecklistRow(
                 title: "Grant microphone access",
-                detail: appState.microphoneAccessGranted
-                    ? "Whispur can capture speech from your active input device."
-                    : "Allow microphone access so Whispur can record your voice.",
+                detail: microphoneDetail,
                 isComplete: appState.microphoneAccessGranted,
-                actionTitle: appState.microphoneAccessGranted ? "Open Settings" : "Allow",
+                actionTitle: microphoneActionTitle,
                 action: appState.microphoneAccessGranted ? appState.openMicrophoneSettings : appState.requestMicrophoneAccess
             )
 
-            Text("If the system prompt was dismissed earlier, use Open Settings and enable Whispur manually in Privacy & Security > Microphone.")
+            Text(appState.microphoneAccessRefused && !appState.microphoneAccessGranted
+                ? "Whispur opens System Settings with a guide beside it. Once the switch is on, this step moves on by itself."
+                : "macOS asks once. If you said no earlier, Whispur takes you to the switch in System Settings.")
                 .font(.caption)
                 .foregroundStyle(SophiieTheme.Palette.muted)
         }
+    }
+
+    private var microphoneDetail: String {
+        if appState.microphoneAccessGranted { return "Whispur can capture speech from your active input device." }
+        if guidedPermission == .microphone { return "Waiting for you in System Settings. Switch on Whispur in the Microphone list." }
+        if appState.microphoneAccessRefused { return "Microphone access was turned off. Switch it back on in System Settings." }
+        return "Allow microphone access so Whispur can record your voice."
+    }
+
+    private var microphoneActionTitle: String {
+        if appState.microphoneAccessGranted { return "Open Settings" }
+        if guidedPermission == .microphone { return "Show Guide Again" }
+        return appState.microphoneAccessRefused ? "Open Settings" : "Allow"
     }
 
     private var accessibilityStep: some View {
         VStack(spacing: 10) {
             SetupChecklistRow(
                 title: "Enable accessibility access",
-                detail: appState.hotkeyManager.isAccessibilityGranted
-                    ? "Global shortcuts and paste-back are available."
-                    : "Whispur needs accessibility access for global shortcuts and text insertion.",
-                isComplete: appState.hotkeyManager.isAccessibilityGranted,
-                actionTitle: appState.hotkeyManager.isAccessibilityGranted ? "Open Settings" : "Grant Access",
-                action: appState.hotkeyManager.isAccessibilityGranted ? appState.openAccessibilitySettings : appState.requestAccessibilityAccess
+                detail: accessibilityDetail,
+                isComplete: accessibilityGranted,
+                actionTitle: accessibilityGranted ? "Open Settings" : (guidedPermission == .accessibility ? "Show Guide Again" : "Grant Access"),
+                action: accessibilityGranted ? appState.openAccessibilitySettings : appState.requestAccessibilityAccess
             )
 
-            Text("macOS may keep System Settings in front while you approve access. Return here after the toggle is enabled.")
+            Text("Whispur opens System Settings with a guide beside it. Drag Whispur into the list and switch it on; this step moves on by itself.")
                 .font(.caption)
                 .foregroundStyle(SophiieTheme.Palette.muted)
         }
+    }
+
+    private var accessibilityDetail: String {
+        if accessibilityGranted { return "Global shortcuts and paste-back are available." }
+        if guidedPermission == .accessibility {
+            return "Waiting for you in System Settings. Drag Whispur into the \(GuidedPermission.accessibility.listName) list, then switch it on."
+        }
+        return "Whispur needs accessibility access for global shortcuts and text insertion."
     }
 
     private var shortcutsStep: some View {
