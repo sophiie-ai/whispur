@@ -78,7 +78,7 @@ make run
 | OpenAI | Available | GPT Transcribe (default) or Whisper, via API key |
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |
-| ElevenLabs Scribe | Available | Cloud STT via API key |
+| ElevenLabs Scribe | Available | Cloud STT via API key. Optional live streaming while you talk |
 | Mistral Voxtral | Available | Voxtral Mini or Small Transcribe 3, via API key |
 
 ### Transcript cleanup

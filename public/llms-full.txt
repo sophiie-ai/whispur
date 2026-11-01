@@ -50,7 +50,7 @@ Start with Apple speech recognition and no API key, or add a key for a cloud pro
 | OpenAI | gpt-transcribe by default, whisper-1 until February 2027, or any OpenAI-compatible endpoint |
 | Groq | Whisper Large v3 or v3 Turbo |
 | Deepgram | Nova-3 |
-| ElevenLabs | Scribe v2 |
+| ElevenLabs | Scribe v2, or live streaming with Scribe v2 Realtime (opt-in) |
 | Mistral | Voxtral Mini Transcribe 3 by default, or Voxtral Small Transcribe 3 |
 
 ### Optional cleanup

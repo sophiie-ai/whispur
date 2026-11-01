@@ -23,6 +23,9 @@ struct ElevenLabsSTT: STTProvider {
 
     private static let endpointURL = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")
 
+    /// The key, for the realtime session's handshake header.
+    var streamingAPIKey: String { apiKey }
+
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         guard let url = Self.endpointURL else {
             throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
