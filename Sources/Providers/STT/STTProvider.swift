@@ -113,6 +113,25 @@ protocol STTProvider {
     ///     `contextualStrings` for Apple. Empty means no biasing.
     /// - Returns: The raw transcription text.
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String
+
+    /// Like `transcribe`, plus the provider's confidence when its API
+    /// returns one. Used by the script guard to pick between re-runs.
+    func transcribeScored(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> ScoredTranscript
+}
+
+extension STTProvider {
+    func transcribeScored(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> ScoredTranscript {
+        ScoredTranscript(text: try await transcribe(fileURL: fileURL, language: language, vocabulary: vocabulary), confidence: nil)
+    }
+}
+
+/// A transcript and how sure the provider was of it.
+struct ScoredTranscript: Equatable {
+    let text: String
+    /// Mean log probability per token (Whisper's `avg_logprob`, averaged
+    /// over segments by duration): closer to 0 is more confident. Nil when
+    /// the provider doesn't report one.
+    let confidence: Double?
 }
 
 // MARK: - Errors

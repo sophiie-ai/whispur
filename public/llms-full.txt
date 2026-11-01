@@ -32,7 +32,7 @@ The Activity tab shows raw and cleaned transcripts. The Requests tab lists every
 
 ### Also included
 - Choose your microphone
-- Pick your dictation language
+- Pick the languages you speak (several are fine; a guard re-transcribes when a result comes back in the wrong script)
 - Quiet system audio while recording
 - Compact recording overlay
 - Learn corrections from your edits (opt-in)

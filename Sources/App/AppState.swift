@@ -8,8 +8,9 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple
-    /// Empty string = auto-detect; otherwise a BCP-47 code like `en-US`.
-    @AppStorage("sttLanguageSelection") var sttLanguageSelectionStorage: String = ""
+    /// The languages the user speaks: comma-separated BCP-47 codes like
+    /// `en-US,es-MX`. Empty string = auto-detect.
+    @AppStorage(AppState.spokenLanguagesKey) var sttLanguageSelectionStorage: String = ""
     /// Opt-in live streaming for providers that support it.
     @AppStorage("streamWhileTalking") var streamWhileTalking: Bool = false
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
@@ -84,6 +85,8 @@ final class AppState: ObservableObject {
         styles: StyleStore? = nil,
         startsServices: Bool = true
     ) {
+        // Before anything reads the language setting.
+        Self.migrateSpokenLanguagesIfNeeded()
         let loadedHoldShortcut = Self.loadHoldShortcut()
         let sanitizedToggleShortcut = Self.loadToggleShortcut(holdShortcut: loadedHoldShortcut)
 
@@ -155,7 +158,6 @@ final class AppState: ObservableObject {
         guard startsServices else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            Self.migrateLegacyLanguagesPreferenceIfNeeded()
             Self.clearRetiredModesStorage()
             self.hotkeyManager.start()
             self.startPermissionMonitoring()
@@ -175,25 +177,24 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: "appRulesEnabled")
     }
 
-    /// One-shot migration of the prior multi-language CSV setting
-    /// (`sttLanguages`) into the new single-selection storage key
-    /// (`sttLanguageSelection`). Keeps the first entry as the user's single
-    /// preferred language; empty list becomes auto-detect.
-    private static func migrateLegacyLanguagesPreferenceIfNeeded() {
-        let defaults = UserDefaults.standard
-        let legacyKey = "sttLanguages"
-        let newKey = "sttLanguageSelection"
-        guard let legacy = defaults.string(forKey: legacyKey) else { return }
-        // Only migrate if the new key hasn't been set yet — don't overwrite a
-        // user who already made a choice in the new UI.
-        if defaults.object(forKey: newKey) == nil {
-            let firstCode = legacy
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { !$0.isEmpty } ?? ""
-            defaults.set(firstCode, forKey: newKey)
-        }
-        defaults.removeObject(forKey: legacyKey)
+    /// Where "Languages I speak" is stored.
+    nonisolated static let spokenLanguagesKey = "sttSpokenLanguages"
+    /// The single-language picker's key (auto or one BCP-47 code). Left in
+    /// place after migrating so an older build still reads it.
+    nonisolated static let singleLanguageKey = "sttLanguageSelection"
+    /// The original up-to-three languages CSV, from before the single picker.
+    nonisolated static let legacyLanguagesKey = "sttLanguages"
+
+    /// One-shot, lossless move into the "Languages I speak" set: one
+    /// language stays that one language, auto stays empty (auto), and an
+    /// original CSV list that was never migrated keeps every entry. Never
+    /// overwrites a set the user already has.
+    nonisolated static func migrateSpokenLanguagesIfNeeded(defaults: UserDefaults = .standard) {
+        defer { defaults.removeObject(forKey: legacyLanguagesKey) }
+        guard defaults.object(forKey: spokenLanguagesKey) == nil else { return }
+        let source = defaults.string(forKey: singleLanguageKey) ?? defaults.string(forKey: legacyLanguagesKey)
+        guard let source else { return }
+        defaults.set(STTLanguageSelection(storageValue: source).storageValue, forKey: spokenLanguagesKey)
     }
 
     private func setupLearning() {

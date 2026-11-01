@@ -106,9 +106,9 @@ struct ProvidersSettingsView: View {
     }
 
     private var languageSection: some View {
-        SettingsSection("Language", footer: "Whispur sends this as a hint to the speech provider. Auto-detect lets the provider identify the language, which works best when you switch between languages.") {
+        SettingsSection("Language", footer: "Leave it empty to let the provider detect the language. With two or more, providers that accept several get them all, and if a transcript comes back in a script none of your languages use (Arabic for a Spanish clip, say), Whispur transcribes it again in each of your languages and keeps the best.") {
             SettingsCard {
-                STTLanguageRow(appState: appState)
+                SpokenLanguagesRow(appState: appState)
             }
         }
     }
@@ -196,57 +196,101 @@ struct ProvidersSettingsView: View {
     }
 }
 
-private struct STTLanguageRow: View {
+/// "Languages I speak": a menu of checkable languages plus a chip per
+/// chosen language. Empty means auto-detect.
+private struct SpokenLanguagesRow: View {
     @ObservedObject var appState: AppState
 
-    private static let autoTag = "__auto__"
+    private var selection: STTLanguageSelection { appState.sttLanguageSelection }
 
-    private var selectionTag: String {
-        switch appState.sttLanguageSelection {
-        case .auto: return Self.autoTag
-        case .single(let code): return code
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(
+                icon: "character.bubble",
+                title: "Languages I speak",
+                subtitle: SpokenLanguagesRow.footnote(for: appState.selectedSTT, selection: selection)
+            ) {
+                Menu {
+                    Button {
+                        appState.sttLanguageSelection = .auto
+                    } label: {
+                        if selection.isAuto { Label("Auto-detect", systemImage: "checkmark") } else { Text("Auto-detect") }
+                    }
+                    Divider()
+                    ForEach(STTLanguageCatalog.all) { language in
+                        Toggle(language.displayName, isOn: binding(for: language.code))
+                    }
+                } label: {
+                    Text(menuTitle)
+                }
+                .menuStyle(.button)
+                .fixedSize()
+                .accessibilityLabel("Languages I speak")
+            }
+            if !selection.isAuto {
+                FlowLayout {
+                    ForEach(selection.codes, id: \.self) { code in
+                        RemovableChip(
+                            title: STTLanguageCatalog.displayName(for: code),
+                            removeLabel: "Remove \(STTLanguageCatalog.displayName(for: code))"
+                        ) {
+                            set(code, on: false)
+                        }
+                    }
+                }
+                .padding(.leading, SettingsMetrics.textInset)
+                .padding(.bottom, 12)
+            }
         }
     }
 
-    private var selectionBinding: Binding<String> {
+    private var menuTitle: String {
+        switch selection.codes.count {
+        case 0: "Auto-detect"
+        case 1: STTLanguageCatalog.displayName(for: selection.codes[0])
+        default: "\(selection.codes.count) languages"
+        }
+    }
+
+    private func binding(for code: String) -> Binding<Bool> {
         Binding(
-            get: { selectionTag },
-            set: { newTag in
-                appState.sttLanguageSelection = newTag == Self.autoTag
-                    ? .auto
-                    : .single(code: newTag)
-            }
+            get: { selection.codes.contains(code) },
+            set: { set(code, on: $0) }
         )
     }
 
-    var body: some View {
-        SettingsRow(
-            icon: "character.bubble",
-            title: "Preferred language",
-            subtitle: footnote(for: appState.selectedSTT, selection: appState.sttLanguageSelection)
-        ) {
-            RowPicker("Language", selection: selectionBinding) {
-                Text("Auto-detect").tag(Self.autoTag)
-                Divider()
-                ForEach(STTLanguageCatalog.all) { language in
-                    Text(language.displayName).tag(language.code)
-                }
-            }
-        }
+    private func set(_ code: String, on: Bool) {
+        let codes = selection.codes.filter { $0 != code } + (on ? [code] : [])
+        appState.sttLanguageSelection = STTLanguageSelection(codes: codes)
     }
 
-    private func footnote(for provider: STTProviderID, selection: STTLanguageSelection) -> String {
-        switch (provider, selection) {
-        case (.deepgram, .auto):
-            return "Deepgram will use nova-3's multilingual mode (English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch)."
-        case (.apple, .auto):
-            return "Apple has no auto mode, so Whispur falls back to your system language."
-        case (.openai, .auto), (.groqWhisper, .auto), (.elevenlabs, .auto), (.mistral, .auto), (.metaMuse, .auto):
-            return "The provider will detect the language on each recording."
-        default:
+    static func footnote(for provider: STTProviderID, selection: STTLanguageSelection) -> String {
+        if selection.isAuto {
+            switch provider {
+            case .deepgram:
+                return "Deepgram will use nova-3's multilingual mode."
+            case .apple:
+                return "Apple has no auto mode, so Whispur falls back to your system language."
+            default:
+                return "The provider will detect the language on each recording."
+            }
+        }
+        guard selection.isMultilingual else {
             return "Whispur will tell \(provider.displayName) which language to expect."
+        }
+        switch provider {
+        case .openai:
+            return OpenAISTT.usesKeywordShape(model: ProviderRegistry.sttModel(for: .openai) ?? "")
+                ? "OpenAI gets all of your languages as hints."
+                : "This OpenAI model takes one language, so it detects which of yours you're speaking."
+        case .deepgram:
+            return "Deepgram uses nova-3's multilingual mode with your languages as hints."
+        case .metaMuse:
+            return "Meta Muse is steered toward your languages."
+        case .apple:
+            return "Apple listens in one language: your system language if it's on the list, otherwise the first one."
+        case .groqWhisper, .elevenlabs, .mistral:
+            return "\(provider.displayName) takes one language, so it detects which of yours you're speaking."
         }
     }
 }
-
-

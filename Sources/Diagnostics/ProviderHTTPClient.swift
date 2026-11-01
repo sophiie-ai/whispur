@@ -154,6 +154,27 @@ final class ProviderHTTPClient {
         }
     }
 
+    /// The HTTP method shown for script-guard entries in the Requests tab.
+    static let scriptGuardMethod = "GUARD"
+
+    /// Lists a script-guard firing in the Requests tab, next to the re-runs
+    /// it caused.
+    func recordScriptGuard(providerID: String, summary: String, keptText: String) {
+        Task {
+            await record(
+                providerID: providerID,
+                kind: .stt,
+                endpointURL: "Transcript in an unexpected script, re-ran per language",
+                httpMethod: Self.scriptGuardMethod,
+                statusCode: nil,
+                durationMS: 0,
+                requestSummary: summary,
+                responseBodyPreview: String(keptText.prefix(500)),
+                errorMessage: nil
+            )
+        }
+    }
+
     static func transportErrorMessage(for error: Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {

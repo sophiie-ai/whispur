@@ -21,6 +21,21 @@ struct DeepgramSTT: STTProvider {
         self.timeoutSeconds = timeoutSeconds
     }
 
+    /// Deepgram language routing. No languages → `language=multi` (nova-3
+    /// code-switching). One → that code, for best single-language accuracy.
+    /// Several → `language=multi` plus one `language_hint` per language:
+    /// `language` takes a single value, and hints bias multi's detection
+    /// without restricting it (they apply only with `multi`).
+    static func languageQueryItems(for language: STTLanguageSelection) -> [URLQueryItem] {
+        switch STTLanguageResolver.deepgram(for: language) {
+        case let .single(code):
+            return [URLQueryItem(name: "language", value: code)]
+        case .multi:
+            return [URLQueryItem(name: "language", value: "multi")]
+                + language.isoCodes.map { URLQueryItem(name: "language_hint", value: $0) }
+        }
+    }
+
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         var query: [URLQueryItem] = [
@@ -41,18 +56,9 @@ struct DeepgramSTT: STTProvider {
             query.append(URLQueryItem(name: "keyterm", value: term))
         }
 
-        // Deepgram language routing: `.auto` → `language=multi` (nova-3
-        // code-switching across EN/ES/FR/DE/HI/RU/PT/JA/IT/NL); a specific
-        // selection passes through as BCP-47 for best single-language accuracy.
-        let languageSummary: String
-        switch STTLanguageResolver.deepgram(for: language) {
-        case .multi:
-            query.append(URLQueryItem(name: "language", value: "multi"))
-            languageSummary = "multi"
-        case .single(let code):
-            query.append(URLQueryItem(name: "language", value: code))
-            languageSummary = code
-        }
+        let languageItems = Self.languageQueryItems(for: language)
+        query.append(contentsOf: languageItems)
+        let languageSummary = languageItems.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: " ")
 
         components.queryItems = query
 
@@ -75,7 +81,7 @@ struct DeepgramSTT: STTProvider {
                 model: \(model)
                 smart_format: true
                 punctuate: true
-                language: \(languageSummary)
+                \(languageSummary)
                 keyterms: \(biasedTerms.isEmpty ? "-" : biasedTerms.joined(separator: ", "))
                 """
             )

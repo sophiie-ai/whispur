@@ -48,6 +48,14 @@ final class SettingsRenderTests: XCTestCase {
             if let savedInput { UserDefaults.standard.set(savedInput, forKey: inputKey) } else { UserDefaults.standard.removeObject(forKey: inputKey) }
         }
         appState.preferredAudioInputUID = Self.sampleInputDevices[1].uid
+        // Show "Languages I speak" with two languages chosen; same save and
+        // restore as above.
+        let languagesKey = AppState.spokenLanguagesKey
+        let savedLanguages = UserDefaults.standard.object(forKey: languagesKey)
+        defer {
+            if let savedLanguages { UserDefaults.standard.set(savedLanguages, forKey: languagesKey) } else { UserDefaults.standard.removeObject(forKey: languagesKey) }
+        }
+        appState.sttLanguageSelection = STTLanguageSelection(codes: ["en-US", "es-MX"])
         let devices = Self.sampleInputDevices
 
         let ready = SettingsView.PermissionsOverride(microphone: true, accessibility: true)
@@ -93,6 +101,7 @@ final class SettingsRenderTests: XCTestCase {
         ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
         ("anthropic", .llm, "https://api.anthropic.com/v1/messages", 429),
         ("deepgram", .stt, "https://api.deepgram.com/v1/listen", 200),
+        ("groqWhisper", .stt, ProviderHTTPClient.scriptGuardMethod, nil),
     ]
 
     static let sampleTerms: [(text: String, learnedFrom: String?)] = [
@@ -142,6 +151,22 @@ final class SettingsRenderTests: XCTestCase {
 
         let requestLog = ProviderRequestLog(fileURL: scratch.appendingPathComponent("provider-requests.json"))
         for (index, entry) in sampleRequests.enumerated() {
+            if entry.url == ProviderHTTPClient.scriptGuardMethod {
+                requestLog.record(ProviderRequestLogEntry(
+                    id: UUID(),
+                    timestamp: now.addingTimeInterval(Double(index - sampleRequests.count) * 90),
+                    providerID: entry.provider,
+                    kind: entry.kind,
+                    endpointURL: "Transcript in an unexpected script, re-ran per language",
+                    httpMethod: ProviderHTTPClient.scriptGuardMethod,
+                    statusCode: nil,
+                    durationMS: 0,
+                    requestSummary: "Script guard: the transcript used arabic letters (6 of 6), which none of your languages use.",
+                    responseBodyPreview: "Hola, qué tal.",
+                    errorMessage: nil
+                ))
+                continue
+            }
             requestLog.record(ProviderRequestLogEntry(
                 id: UUID(),
                 timestamp: now.addingTimeInterval(Double(index - sampleRequests.count) * 90),
