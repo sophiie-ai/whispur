@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/sophiie-ai/whispur/compare/v0.24.0...v0.25.0) (2026-11-01)
+
+
+### Features
+
+* **activity:** add Use raw after paste, live words while streaming, and Mark as wrong ([#94](https://github.com/sophiie-ai/whispur/issues/94)) ([d75213f](https://github.com/sophiie-ai/whispur/commit/d75213f562e01b0c51023149233b8d8dfcf66204))
+* **onboarding:** guide permission grants with a drag-to-allow panel beside System Settings ([#100](https://github.com/sophiie-ai/whispur/issues/100)) ([a290a0a](https://github.com/sophiie-ai/whispur/commit/a290a0a1ee57e21247519c76ecfd679289a32260))
+* **pipeline:** apply spoken edit commands in code and sharpen self-corrections ([#95](https://github.com/sophiie-ai/whispur/issues/95)) ([f36cd5a](https://github.com/sophiie-ai/whispur/commit/f36cd5afc1310c70395ee77760b0aa60e5dc60e4))
+* **pipeline:** turn spoken enumerations into numbered lists outside chat apps ([#96](https://github.com/sophiie-ai/whispur/issues/96)) ([af5d090](https://github.com/sophiie-ai/whispur/commit/af5d0908a2466f68fb77dbf4b10f94579a5d8c4f))
+* **shortcuts:** add a tap or hold shortcut style ([#99](https://github.com/sophiie-ai/whispur/issues/99)) ([2ce08d8](https://github.com/sophiie-ai/whispur/commit/2ce08d8d215b07b0f56e88eb7349eb84c7d0e87c))
+* **stt:** add an on-device Parakeet provider ([#101](https://github.com/sophiie-ai/whispur/issues/101)) ([9e50243](https://github.com/sophiie-ai/whispur/commit/9e50243523b5606d0ca33e17ca7b23db279a7fb6))
+
 ## [0.24.0](https://github.com/sophiie-ai/whispur/compare/v0.23.2...v0.24.0) (2026-11-01)
 
 
