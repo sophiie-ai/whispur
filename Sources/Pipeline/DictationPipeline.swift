@@ -371,52 +371,47 @@ final class DictationPipeline: ObservableObject {
                 language: sttLanguageSelection,
                 vocabulary: customVocabulary
             )
-            guard let normalizedRawTranscript = normalizedTranscriptText(from: rawTranscript) else {
+            guard let normalizedRawTranscript = TranscriptDecision.normalizedRawTranscript(rawTranscript) else {
                 dismissForNoSpeech()
                 return
             }
 
-            var cleanedTranscript = normalizedRawTranscript
+            var cleanedText: String?
             var llmModel: String?
 
-            // Skip LLM cleanup for too-short transcripts — they're almost always noise
-            // and an LLM will hallucinate conversational replies instead of cleaning text.
-            let looksLikeSpeech = shouldRunCleanup(for: normalizedRawTranscript)
-
-            if looksLikeSpeech, let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
+            // Skip LLM cleanup for very short transcripts: an LLM tends to
+            // answer "thanks" instead of cleaning it. They are pasted raw.
+            if TranscriptDecision.shouldRunCleanup(for: normalizedRawTranscript),
+               let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
                 phase = .cleaningTranscript
 
                 do {
                     let response = try await llmProvider.complete(
                         request: LLMRequest(
                             systemPrompt: buildSystemPrompt(vocabulary: customVocabulary),
-                            userMessage: wrapForCleanup(normalizedRawTranscript)
+                            userMessage: wrapForCleanup(normalizedRawTranscript),
+                            maxTokens: LLMRequest.cleanupMaxTokens(
+                                forTranscriptCharacters: normalizedRawTranscript.count
+                            )
                         )
                     )
-
-                    if let normalizedCleanedTranscript = normalizedTranscriptText(from: response.text) {
-                        if looksLikeAssistantResponse(
-                            cleaned: normalizedCleanedTranscript,
-                            raw: normalizedRawTranscript
-                        ) {
-                            logger.warning("LLM cleanup looks like an assistant reply; falling back to raw transcript")
-                            cleanedTranscript = normalizedRawTranscript
-                        } else {
-                            cleanedTranscript = normalizedCleanedTranscript
-                        }
-                    } else {
-                        cleanedTranscript = ""
-                    }
-
+                    cleanedText = response.text
                     llmModel = response.model
                 } catch {
                     logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
                 }
             }
 
-            guard let finalTranscript = normalizedTranscriptText(from: cleanedTranscript) else {
+            let finalTranscript: String
+            switch TranscriptDecision.finalOutcome(raw: normalizedRawTranscript, cleaned: cleanedText) {
+            case .dismiss:
                 dismissForNoSpeech()
                 return
+            case let .paste(text, rawFallbackReason):
+                if let rawFallbackReason, cleanedText != nil {
+                    logger.warning("Pasting raw transcript: \(rawFallbackReason.rawValue, privacy: .public)")
+                }
+                finalTranscript = text
             }
 
             guard !Task.isCancelled else { throw CancellationError() }
@@ -482,116 +477,6 @@ final class DictationPipeline: ObservableObject {
     private func wrapForCleanup(_ transcript: String) -> String {
         let safe = transcript.replacingOccurrences(of: "</dictation-to-clean>", with: "<\u{200B}/dictation-to-clean>")
         return "<dictation-to-clean>\n\(safe)\n</dictation-to-clean>"
-    }
-
-    private func normalizedTranscriptText(from text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard trimmed.uppercased() != "EMPTY" else { return nil }
-        if isKnownSilenceHallucination(trimmed) { return nil }
-        return trimmed
-    }
-
-    private func shouldRunCleanup(for transcript: String) -> Bool {
-        guard transcript.count >= 8 else { return false }
-
-        let wordCount = transcript.split { $0.isWhitespace }.count
-        if wordCount >= 2 { return true }
-
-        return transcript.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x3040 ... 0x30FF, // Hiragana and Katakana
-                 0x3400 ... 0x4DBF, // CJK Unified Ideographs Extension A
-                 0x4E00 ... 0x9FFF, // CJK Unified Ideographs
-                 0xF900 ... 0xFAFF, // CJK Compatibility Ideographs
-                 0xFF66 ... 0xFF9F: // Halfwidth Katakana
-                return true
-            default:
-                return false
-            }
-        }
-    }
-
-    /// Whisper (and other STT providers trained on subtitled video) confidently
-    /// emit a small set of canned phrases when given silence or near-silence —
-    /// "Thanks for watching!", "[Music]", "Subtitles by the Amara.org community".
-    /// If the *entire* transcript matches one of these, treat it as silence.
-    /// Matching is whole-transcript only so real speech that happens to contain
-    /// "thank you" mid-sentence still passes through.
-    private static let knownSilenceHallucinations: Set<String> = [
-        "thank you for watching",
-        "thanks for watching",
-        "thank you for watching!",
-        "thanks for watching!",
-        "thank you",
-        "thank you so much",
-        "thank you so much for watching",
-        "thanks",
-        "you",
-        "bye",
-        "goodbye",
-        "please subscribe",
-        "like and subscribe",
-        "don't forget to subscribe",
-        "thanks for listening",
-        "thank you for listening",
-        "subtitles by the amara.org community",
-        "music",
-        "applause",
-        "silence",
-    ]
-
-    /// Sentence starters that strongly suggest the LLM answered the dictation
-    /// instead of cleaning it. Matched case-insensitively against the start of
-    /// the cleaned text, with the trailing space included to avoid clipping
-    /// real words ("I'll" matches "i'll ", not "i'll" inside "I'll-be-there").
-    private static let assistantReplyPrefixes: [String] = [
-        "i will ", "i'll ", "i would ", "i'd ", "i am ", "i'm ", "i can ",
-        "i can't ", "i cannot ", "i don't ", "i do not ", "i need ", "i notice ",
-        "as an ai", "as a language model", "as a large language",
-        "sure, ", "sure! ", "certainly", "of course",
-        "here's ", "here is ", "here are ",
-        "sorry, ", "apologies", "my apologies",
-        "the best way ", "you can ", "you could ", "you should ",
-        "to do ", "to answer ", "great question",
-        "it seems", "it looks like", "it sounds like",
-    ]
-
-    /// Returns true when the cleaned text looks like an assistant reply to the
-    /// transcript rather than a cleanup of it. We only fall back when the
-    /// cleaned output starts with an assistant-style opener AND the raw
-    /// transcript did not start the same way — otherwise legitimate dictation
-    /// like "I'll send it tomorrow" would be wrongly flagged.
-    private func looksLikeAssistantResponse(cleaned: String, raw: String) -> Bool {
-        let normalizedCleaned = cleaned
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let normalizedRaw = raw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-
-        let cleanedStarts = Self.assistantReplyPrefixes.first { normalizedCleaned.hasPrefix($0) }
-        guard let prefix = cleanedStarts else { return false }
-        if normalizedRaw.hasPrefix(prefix) { return false }
-
-        // Length sanity: an assistant reply usually expands well past the raw
-        // transcript. A small overage can come from punctuation/casing fixes,
-        // so require the cleaned text to be noticeably longer before treating
-        // an opener match as evidence of an answer.
-        let rawLength = max(normalizedRaw.count, 1)
-        let ratio = Double(normalizedCleaned.count) / Double(rawLength)
-        return ratio >= 1.4
-    }
-
-    private func isKnownSilenceHallucination(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
-        let stripped = String(lowered.unicodeScalars.filter { allowed.contains($0) })
-        let collapsed = stripped
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-        guard !collapsed.isEmpty else { return false }
-        return Self.knownSilenceHallucinations.contains(collapsed)
     }
 
     /// Decide whether a finished recording is worth sending to STT.
