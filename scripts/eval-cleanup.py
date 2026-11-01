@@ -7,6 +7,7 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
   python3 scripts/eval-cleanup.py --provider openai --prompt new
   python3 scripts/eval-cleanup.py --provider groq --prompt current --runs 1
   python3 scripts/eval-cleanup.py --self-test
+  python3 scripts/eval-cleanup.py --cases-file "$HOME/Library/Application Support/Whispur/MyEvalCases.jsonl"
 
 --prompt new      system prompt = Prompts.defaultCleanup in the working tree,
                   user message = CleanupMessage (vocabulary block, wrapped
@@ -55,15 +56,32 @@ PROVIDERS = {
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "model": "openai/gpt-oss-20b",
         "key_env": "GROQ_API_KEY",
-        "params": {"reasoning_effort": "low", "include_reasoning": False, "temperature": 0.0},
     },
     "openai": {
         "url": "https://api.openai.com/v1/chat/completions",
         "model": "gpt-6-luna",
         "key_env": "OPENAI_API_KEY",
-        "params": {"reasoning_effort": "none", "temperature": 0.0},
     },
 }
+
+REASONING_OFF_MODELS = ("gpt-6-luna", "gpt-6-sol", "gpt-6.1-terra")
+REASONING_PREFIXES = ("gpt-6", "gpt-5", "o1", "o3", "o4")
+
+
+def request_params(model: str, provider: str, max_tokens: int) -> dict:
+    """Mirrors OpenAIChatFormat.parameterStyle + body (temperature 0)."""
+    name = model.lower().split("/")[-1]
+    if name.startswith("gpt-oss"):
+        if provider == "groq":
+            return {"max_completion_tokens": max_tokens, "reasoning_effort": "low",
+                    "include_reasoning": False, "temperature": 0.0}
+        return {"max_tokens": max_tokens, "temperature": 0.0}
+    if provider == "openai":
+        if name.startswith(REASONING_OFF_MODELS):
+            return {"max_completion_tokens": max_tokens, "reasoning_effort": "none", "temperature": 0.0}
+        if name.startswith(REASONING_PREFIXES) and "chat" not in name:
+            return {"max_completion_tokens": max_tokens, "reasoning_effort": "low"}
+    return {"max_tokens": max_tokens, "temperature": 0.0}
 
 
 # ---------------------------------------------------------------------------
@@ -292,19 +310,42 @@ def strip_reasoning(text: str) -> str:
     return text.strip()
 
 
-def call(provider: str, system_prompt: str, user_message: str, max_tokens: int, throttle: GroqThrottle | None):
+class TokenCap:
+    """Stops new requests once the run has used `limit` tokens (prompt + completion)."""
+
+    def __init__(self, limit: int | None):
+        self.limit = limit
+        self.used = 0
+
+    def check(self):
+        if self.limit is not None and self.used >= self.limit:
+            raise TokenCapReached(self.used)
+
+    def add(self, result: dict):
+        self.used += (result.get("prompt_tokens") or 0) + (result.get("completion_tokens") or 0)
+
+
+class TokenCapReached(Exception):
+    pass
+
+
+class QuotaExhausted(Exception):
+    """The provider's daily quota ran out; the runs so far are still scored and saved."""
+
+
+def call(provider: str, model: str, system_prompt: str, user_message: str, max_tokens: int,
+         throttle: GroqThrottle | None):
     cfg = PROVIDERS[provider]
     key = os.environ.get(cfg["key_env"])
     if not key:
         raise SystemExit(f"{cfg['key_env']} is not set")
     body = {
-        "model": cfg["model"],
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        "max_completion_tokens": max_tokens,
-        **cfg["params"],
+        **request_params(model, provider, max_tokens),
     }
     data = json.dumps(body).encode()
     estimate = (len(system_prompt) + len(user_message)) // 3 + max_tokens
@@ -329,7 +370,7 @@ def call(provider: str, system_prompt: str, user_message: str, max_tokens: int, 
             if err.code == 429:
                 detail = err.read().decode(errors="replace")
                 if "per day" in detail:
-                    raise SystemExit(f"\n{provider}: daily token quota exhausted, stopping: {detail[:300]}")
+                    raise QuotaExhausted(f"{provider}: daily token quota exhausted: {detail[:300]}")
             if err.code == 429 or err.code >= 500:
                 wait = min(parse_duration(err.headers.get("retry-after")) or 2 ** attempt, 60)
                 if throttle:
@@ -407,6 +448,28 @@ def pct(values: list[float], q: float) -> float:
 # ---------------------------------------------------------------------------
 
 
+def load_cases(path: Path) -> list[dict]:
+    """Reads a cases.jsonl-shaped file; exits with the line number on a malformed case."""
+    if not path.is_file():
+        raise SystemExit(f"cases file not found: {path}")
+    cases = []
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            case = json.loads(line)
+        except json.JSONDecodeError as err:
+            raise SystemExit(f"{path}:{n}: invalid JSON: {err}")
+        missing = [k for k in ("id", "input", "expected") if k not in case]
+        if missing:
+            raise SystemExit(f"{path}:{n}: missing {', '.join(missing)}")
+        case.setdefault("critical", False)
+        cases.append(case)
+    if not cases:
+        raise SystemExit(f"no cases in {path}")
+    return cases
+
+
 def self_test() -> int:
     builder = RequestBuilder("new")
     golden_input = json.loads((ROOT / "Evals/cleanup/golden/input.json").read_text())
@@ -429,10 +492,15 @@ def self_test() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--provider", choices=sorted(PROVIDERS), default="openai")
+    ap.add_argument("--model", help="model id (default: the provider's app default)")
+    ap.add_argument("--token-cap", type=int, default=None,
+                    help="stop sending requests once the run has used this many tokens (prompt + completion)")
     ap.add_argument("--prompt", choices=["current", "new"], default="new")
     ap.add_argument("--runs", type=int, default=2, help="runs per case (default 2)")
+    ap.add_argument("--cases-file", metavar="PATH", default=str(CASES_PATH),
+                    help="JSONL cases file (default Evals/cleanup/cases.jsonl), e.g. the app's MyEvalCases.jsonl")
     ap.add_argument("--cases", help="comma-separated case ids")
-    ap.add_argument("--split", choices=["all", "tune", "heldout"], default="all")
+    ap.add_argument("--split", choices=["all", "tune", "heldout", "mine"], default="all")
     ap.add_argument("--show-heldout", action="store_true", help="print diffs for held-out failures too")
     ap.add_argument("--concurrency", type=int, default=None, help="parallel requests (Groq is always 1)")
     ap.add_argument("--report", help="JSON report path (default /tmp/whispur-eval/<prompt>-<provider>-<ts>.json)")
@@ -448,8 +516,10 @@ def main() -> int:
     if args.rescore:
         previous = json.loads(Path(args.rescore).read_text())
         args.prompt, args.provider, args.runs = previous["prompt"], previous["provider"], previous["runs_per_case"]
+        args.model = previous.get("model")
+    model = args.model or PROVIDERS[args.provider]["model"]
 
-    cases = [json.loads(line) for line in CASES_PATH.read_text().splitlines() if line.strip()]
+    cases = load_cases(Path(args.cases_file).expanduser())
     if args.cases:
         wanted = set(args.cases.split(","))
         unknown = wanted - {c["id"] for c in cases}
@@ -482,21 +552,43 @@ def main() -> int:
                 r["passed"] = "error" not in r and r.get("finish_reason") != "length" and score(case, r["text"])
                 results.append(r)
     else:
+        cap = TokenCap(args.token_cap)
+
+        stopped = []
+
         def work(job):
             case, run, system_prompt, user_message, max_tokens = job
-            result = call(args.provider, system_prompt, user_message, max_tokens, throttle)
+            if stopped:
+                return None
+            try:
+                cap.check()
+                result = call(args.provider, model, system_prompt, user_message, max_tokens, throttle)
+            except TokenCapReached:
+                return None
+            except QuotaExhausted as err:
+                stopped.append(str(err))
+                print(f"\n{err}\nstopping; scoring the runs that finished", file=sys.stderr)
+                return None
+            cap.add(result)
             result.update(id=case["id"], run=run)
             result["passed"] = "error" not in result and result.get("finish_reason") != "length" and score(case, result["text"])
             return result
 
-        print(f"{args.prompt} prompt on {args.provider} ({PROVIDERS[args.provider]['model']}): "
+        print(f"{args.prompt} prompt on {args.provider} ({model}): "
               f"{len(cases)} cases x {args.runs} runs", file=sys.stderr)
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             results = []
             for i, res in enumerate(pool.map(work, jobs), 1):
-                results.append(res)
+                if res is not None:
+                    results.append(res)
                 print(f"\r  {i}/{len(jobs)}", end="", file=sys.stderr, flush=True)
         print(file=sys.stderr)
+        skipped = len(jobs) - len(results)
+        if args.token_cap is not None or stopped:
+            print(f"tokens used: {cap.used} (cap {args.token_cap}); runs not sent: {skipped}", file=sys.stderr)
+            if skipped:
+                ran = {r["id"] for r in results}
+                cases = [c for c in cases if c["id"] in ran]
 
     case_rows = []
     for case in cases:
@@ -554,9 +646,10 @@ def main() -> int:
         "all": summarize(case_rows),
         "tune": summarize([r for r in case_rows if r["case"].get("split", "tune") == "tune"]),
         "heldout": summarize([r for r in case_rows if r["case"].get("split") == "heldout"]),
+        "mine": summarize([r for r in case_rows if r["case"].get("split") == "mine"]),
     }
 
-    print(f"\n{args.prompt} / {args.provider} ({PROVIDERS[args.provider]['model']}), {args.runs} runs per case")
+    print(f"\n{args.prompt} / {args.provider} ({model}), {args.runs} runs per case")
     print(f"{'split':8} {'cases':>5} {'pass':>9} {'crit fails':>10} {'p50 s':>6} {'p95 s':>6} {'in tok':>7}")
     for name, s in summary.items():
         if not s["cases"]:
@@ -567,12 +660,12 @@ def main() -> int:
         print(f"errors: {summary['all']['errors']}, truncated: {summary['all']['truncated']}")
 
     report_path = Path(args.report) if args.report else Path(
-        f"/tmp/whispur-eval/{args.prompt}-{args.provider}-{time.strftime('%Y%m%d-%H%M%S')}.json")
+        f"/tmp/whispur-eval/{args.prompt}-{args.provider}-{model.split('/')[-1]}-{time.strftime('%Y%m%d-%H%M%S')}.json")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps({
         "prompt": args.prompt,
         "provider": args.provider,
-        "model": PROVIDERS[args.provider]["model"],
+        "model": model,
         "runs_per_case": args.runs,
         "system_prompt_words": len(builder.system_prompt.split()),
         "summary": summary,
