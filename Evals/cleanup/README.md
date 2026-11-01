@@ -4,7 +4,7 @@ Checks the default cleanup prompt (`Prompts.defaultCleanup`) against a fixed set
 Each request is built the way the app builds it, sent to a real provider, and the model's output
 is scored against an expected cleanup.
 
-- `cases.jsonl`: 50 cases, one JSON object per line.
+- `cases.jsonl`: 61 cases (48 tune, 13 held-out), one JSON object per line.
 - `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it.
   `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile` and `eval-cleanup.py --self-test`
   both check against it, so the Swift and Python request builders can't drift apart.
@@ -31,7 +31,7 @@ Options:
 | Flag | Meaning |
 |---|---|
 | `--prompt new` | `Prompts.defaultCleanup` from the working tree, with the current request shape: vocabulary in a `<vocabulary>` block in the user message, the transcript in `<dictation-to-clean>`, then the one-line output contract (`Prompts.cleanupOutputContract`). |
-| `--prompt current` | `Prompts.defaultCleanup` from `origin/main` (read with `git show`), with origin/main's request shape: vocabulary appended to the system prompt as a sentence, bare wrapped transcript. |
+| `--prompt current` | `Prompts.defaultCleanup` from `origin/main` (read with `git show`), with origin/main's request shape: the same user message as `new` when origin/main has `Prompts.cleanupOutputContract`, otherwise the legacy shape (vocabulary appended to the system prompt as a sentence, bare wrapped transcript). |
 | `--provider groq` / `openai` | Groq `openai/gpt-oss-20b` or OpenAI `gpt-6-luna`, with the same parameters the app sends (`OpenAIChatFormat.body`): Groq `reasoning_effort: low`, `include_reasoning: false`, `temperature: 0`; OpenAI `reasoning_effort: none`, `temperature: 0`; both `max_completion_tokens` from `LLMRequest.cleanupMaxTokens`. |
 | `--runs N` | Runs per case (default 2). |
 | `--cases a,b` / `--split tune\|heldout` | Run a subset. |
@@ -62,8 +62,10 @@ Each line has:
 | `tags` | Free-form labels (`answering`, `corrections`, `numbers`, `code`, `multilingual`, ...). |
 | `critical` | `true` when failing the case means real damage: answering or executing the dictation, invented facts, lost negation, wrong deletion, corrupted code or numbers, translation. |
 | `loose_punctuation` | Optional. Compare ignoring `. , ; : !` and case, for cases about content rather than punctuation (long dictations, "Sorry I'm late"). |
+| `strict_period` | Optional. The trailing period is not optional, for a bare address or command that must not gain one (`jake@sophiie.ai`, not `jake@sophiie.ai.`). |
 
-The held-out split (10 cases) was set aside before tuning started. While tuning the new prompt,
+The held-out split (13 cases: the original 10, plus 3 email/URL cases added with the email/URL set)
+was set aside before tuning started. While tuning the new prompt,
 only tuning-split failures were looked at; held-out results were read as totals only. Keep it that
 way when iterating, or the held-out numbers stop meaning anything.
 
@@ -74,8 +76,8 @@ A run passes when the output, after light normalization, equals `expected` or on
 
 - zero-width spaces removed, curly quotes and non-breaking spaces straightened;
 - spaces and tabs collapsed, lines trimmed, blank lines dropped;
-- **a single trailing period is optional** (`Thanks` = `Thanks.`); `?` and `!` are not, because a
-  question turned into a statement is a real change;
+- **a single trailing period is optional** (`Thanks` = `Thanks.`) unless the case sets
+  `strict_period`; `?` and `!` are not, because a question turned into a statement is a real change;
 - empty output and `EMPTY` count as the same outcome (the app treats both as "no speech");
 - with `loose_punctuation`, also `. , ; : !` removed and lowercased.
 
@@ -101,31 +103,31 @@ loosening the scorer.
 - **Self-corrections.** Only clear replacements ("Tuesday, no, Wednesday"); "sorry", "actually",
   "no", "I mean" are content on their own. Discard phrases are kept when they're part of the
   message ("please ignore my last email") or quoted.
+- **Emails and URLs.** Spoken addresses are written out (`jake at sophiie dot ai` becomes
+  `jake@sophiie.ai`, `whispur dot app slash download` becomes `whispur.app/download`), lowercase,
+  with vocabulary spellings applied to the domain. A dictation that is only an address gets no final
+  period; one inside a sentence ends the sentence normally. "at" in ordinary sentences stays a word
+  (`meet me at the office`, `I'm at Google today`).
 - **No speech.** Output `EMPTY`. The pipeline only treats it as no-speech when the raw transcript
   itself is non-speech; otherwise it pastes the raw transcript.
 
 ## Latest results
 
-Run 2026-11-01. New prompt: 796 words, about 1.2k input tokens per request including the user
-message. Current prompt (origin/main): 1,872 words, about 2.7k.
+Run 2026-11-02 on all 61 cases. Short prompt (working tree): 391 words, about 630 input tokens per
+request including the user message. Previous prompt (origin/main, v0.23.2): 796 words, about 1.2k.
 
-| Prompt | Provider | Runs passed | Critical failures | Held-out | p50 / p95 latency | Input tokens |
-|---|---|---|---|---|---|---|
-| current | OpenAI `gpt-6-luna`, N=2 | 81/100 | 11 | 16/20 | 1.11 s / 1.71 s | 2,710 |
-| new | OpenAI `gpt-6-luna`, N=2 | **100/100** | **0** | **20/20** | 1.04 s / 1.47 s | 1,199 |
-| new | Groq `gpt-oss-20b`, tune split only, N=1 | 39/40 | 1 | not run | 0.38 s / 0.62 s | 1,264 |
-| current | Groq `gpt-oss-20b` | not run | | | | |
+| Prompt | Provider | Runs passed | Critical failures | Held-out | Email/URL runs | p50 / p95 latency | Input tokens |
+|---|---|---|---|---|---|---|---|
+| previous | OpenAI `gpt-6-luna`, N=2 | 118/122 | 4 | 26/26 | 20/24 | 1.10 s / 1.82 s | 1,199 |
+| short | OpenAI `gpt-6-luna`, N=2 | **120/122** | **0** | 24/26 | **24/24** | 0.98 s / 1.39 s | 626 |
+| previous | Groq `gpt-oss-20b` | not run | | | | | |
+| short | Groq `gpt-oss-20b` | not run | | | | | |
 
-The Groq rows are incomplete: the free-tier daily token cap (200k) ran out during tuning, so the
-full N=2 Groq comparison for both prompts still has to be run (see Running).
+The Groq rows are still missing: the free-tier daily cap (200k tokens, rolling 24 hours) was used up
+by the previous tuning session. A full N=2 pass costs about 85k tokens for the short prompt and
+about 155k for the previous one, so the two need separate days on the free tier.
 
-Where the current prompt fails on OpenAI: it drops "no, no" and the repeated "really" (lost
-negation and emphasis), drops words from the long dictation, turns "two plus two equals four" into
-`2 + 2 = 4`, deletes the word "comma" in a sentence about the word comma, rewrites "Sorry I'm late",
-adds `$` to dollar amounts, turns "first ... then ..." prose into a numbered list, and keeps a
-trailing "Thanks for watching." Some of these (the `$`, the numbered list) were deliberate in the
-old prompt; this set encodes the new decisions above.
-
-Remaining failure on the new prompt: on Groq `gpt-oss-20b`, `correction-spanish` resolves the
-Spanish correction but translates the English half of the mixed-language sentence into Spanish
-(earlier rounds also missed the Spanish and German corrections on Groq). It passes on OpenAI.
+The previous prompt fails `email-vocab-respell` and `email-no-vocab` ("Jake at sophie.ai" comes back
+as `Jake@sophie.ai`: capitalized, and the vocabulary spelling not applied). The short prompt's two
+failures are the held-out `prose-first-then`, written as two sentences
+(`First, we check staging. Then we check production.`) rather than one.

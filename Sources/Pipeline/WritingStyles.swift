@@ -56,34 +56,26 @@ enum WritingStyle: String, Codable, CaseIterable, Identifiable {
             return nil
         case .casual:
             return """
-                - Casual chat tone. Keep contractions, slang, and lowercase if the speaker sounds \
-                  relaxed. Short messages need no final period. Use light punctuation: commas and \
-                  question marks, rarely semicolons.
-                - Do not add greetings, sign-offs, or politeness the speaker didn't say.
+                - Casual chat tone: keep contractions, slang, and relaxed lowercase; short messages \
+                  need no final period. Add no greetings or sign-offs.
                 """
         case .formal:
             return """
-                - Polished, professional tone. Use full sentences with standard capitalization and \
-                  punctuation.
-                - Write casual contractions of speech in full ("gonna" becomes "going to", \
-                  "wanna" becomes "want to") and drop filler such as "like", "you know", or \
-                  "kind of" when it adds no meaning. Keep every other word.
-                - Do not add greetings, sign-offs, or content the speaker didn't say.
+                - Polished, professional tone: full sentences, casual contractions written out \
+                  ("gonna" becomes "going to"), and filler such as "you know" dropped. Add no \
+                  greetings or sign-offs.
                 """
         case .verbatim:
             return """
-                - Minimal cleanup. Keep every spoken word, including hesitation sounds (um, uh), \
-                  repetitions, false starts, and self-corrections with the replaced words.
-                - Only add punctuation and capitalization, apply explicit spoken formatting \
-                  commands, and remove speech-to-text labels.
+                - Minimal cleanup: keep every spoken word, including um, uh, repetitions, false \
+                  starts, and replaced words; only add punctuation and apply spoken formatting.
                 """
         case .codeAware:
             return """
-                - The text is going into a code editor, terminal, or developer tool.
-                - In prose, wrap identifiers, function names, file paths, and commands in \
-                  backticks (`fetchUser`, `src/app.ts`, `npm test`).
-                - When the whole dictation is a command or code, output it bare: no backticks, \
-                  no capitalized first letter unless the code needs one, no final period.
+                - The text goes into a code editor or terminal: in prose, wrap identifiers, file \
+                  paths, and commands in backticks (`fetchUser`, `src/app.ts`, `npm test`). \
+                  A dictation that is only a command, code, or an address stays bare: no \
+                  backticks, no added capital, no final period.
                 """
         }
     }
