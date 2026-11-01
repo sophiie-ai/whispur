@@ -36,7 +36,7 @@ struct WhispurApp: App {
 
 private struct MenuBarStatusIcon: View {
     let phase: PipelinePhase
-    @AppStorage("settings.selectedTab") private var selectedTabRaw = SettingsTab.setup.rawValue
+    @AppStorage(SettingsView.selectedTabKey) private var selectedTabRaw = ""
     @Environment(\.openWindow) private var openWindow
 
     @ViewBuilder

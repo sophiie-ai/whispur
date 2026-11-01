@@ -280,7 +280,7 @@ struct OnboardingWindow: View {
                     : appState.toggleShortcutInstruction,
                 isComplete: true,
                 actionTitle: "Open Settings",
-                action: { openSettings(tab: .general) }
+                action: { openSettings(tab: .dictation) }
             )
         }
     }
@@ -294,7 +294,7 @@ struct OnboardingWindow: View {
                     : "You can finish setup later, but Whispur won’t be seamless until both permissions are granted.",
                 isComplete: appState.hasRequiredPermissions,
                 actionTitle: appState.hasRequiredPermissions ? nil : "Open Setup Guide",
-                action: appState.hasRequiredPermissions ? nil : { openSettings(tab: .setup) }
+                action: appState.hasRequiredPermissions ? nil : { openSettings(tab: .getStarted) }
             )
 
             SetupChecklistRow(
@@ -355,7 +355,7 @@ struct OnboardingWindow: View {
                 .buttonStyle(.sophiiePrimary)
             } else {
                 Button("Open Settings") {
-                    openSettings(tab: .setup)
+                    openSettings(tab: .getStarted)
                 }
                 .buttonStyle(.sophiieSecondary)
 

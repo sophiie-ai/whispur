@@ -88,7 +88,7 @@ struct SetupSettingsView: View {
                     detail: appState.shortcutSummary,
                     isComplete: true,
                     actionTitle: "Shortcuts",
-                    action: { openTab(.general) }
+                    action: { openTab(.dictation) }
                 )
 
                 SetupChecklistRow(
@@ -116,8 +116,8 @@ struct SetupSettingsView: View {
                     .foregroundStyle(SophiieTheme.Palette.muted)
 
                 HStack(spacing: 10) {
-                    Button("Review Prompts") {
-                        openTab(.prompts)
+                    Button("Open Dictionary") {
+                        openTab(.dictionary)
                     }
                     .buttonStyle(.sophiiePrimary)
 

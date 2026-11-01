@@ -1,72 +1,19 @@
 import SwiftUI
 
-/// General settings: shortcuts, permissions, and behavior.
+/// Preferences: permissions, behavior, and appearance. Shortcuts live on
+/// the Dictation page.
 struct GeneralSettingsView: View {
     @ObservedObject var appState: AppState
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                shortcutsCard
                 permissionsCard
                 behaviorCard
                 appearanceCard
                 aboutCard
             }
             .padding(24)
-        }
-    }
-
-    private var shortcutsCard: some View {
-        PreferenceCard(
-            "Recording Shortcuts",
-            detail: "Use a hold shortcut for push-to-talk and an optional second shortcut for start/stop recording.",
-            icon: "keyboard"
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                DetailRow("Hold to talk", detail: "Press and hold to record. Releasing ends capture immediately.") {
-                    Picker("Hold to talk", selection: holdShortcutBinding) {
-                        ForEach(ShortcutBinding.holdPresets, id: \.self) { binding in
-                            Text(binding.menuTitle).tag(binding)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 180)
-                }
-
-                DetailRow("Toggle recording", detail: toggleRowDetail) {
-                    Picker("Toggle recording", selection: toggleShortcutBinding) {
-                        Text("Off").tag(Optional<ShortcutBinding>.none)
-                        ForEach(ShortcutBinding.togglePresets, id: \.self) { binding in
-                            Text(binding.menuTitle).tag(Optional(binding))
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 220)
-                }
-
-                if appState.toggleShortcut?.isDoublePress == true {
-                    Label(
-                        "Quick Fn taps also trigger macOS. Set \"Press 🌐 key to\" to Do Nothing in System Settings > Keyboard, and make sure Dictation doesn't use Fn twice.",
-                        systemImage: "info.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-                }
-
-                Divider()
-
-                HStack(spacing: 10) {
-                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut.menuTitle)")
-                    ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
-                }
-
-                Text(appState.recordingSummary)
-                    .font(.caption)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-            }
         }
     }
 
@@ -222,27 +169,6 @@ struct GeneralSettingsView: View {
                 }
             }
         }
-    }
-
-    private var holdShortcutBinding: Binding<ShortcutBinding> {
-        Binding(
-            get: { appState.holdShortcut },
-            set: { appState.setHoldShortcut($0) }
-        )
-    }
-
-    private var toggleRowDetail: String {
-        if appState.toggleShortcut?.isDoublePress == true {
-            return "Hands-free recording. \(appState.toggleShortcutInstruction)"
-        }
-        return "Start once, then stop with the same shortcut or the overlay button."
-    }
-
-    private var toggleShortcutBinding: Binding<ShortcutBinding?> {
-        Binding(
-            get: { appState.toggleShortcut },
-            set: { appState.setToggleShortcut($0) }
-        )
     }
 
     private var systemAudioReductionBinding: Binding<Double> {

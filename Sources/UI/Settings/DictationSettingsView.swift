@@ -1,0 +1,274 @@
+import AppKit
+import SwiftUI
+
+/// The Dictation page: the master switch, recent history, links to
+/// personalization, and the two recording shortcuts.
+struct DictationSettingsView: View {
+    /// Where "Share feedback" goes. The app has no feedback form, so it opens
+    /// a new GitHub issue.
+    static let feedbackURL = URL(string: "https://github.com/sophiie-ai/whispur/issues/new")!
+
+    /// How many recent dictations the History card lists.
+    static let recentCount = 5
+
+    @ObservedObject var appState: AppState
+    @ObservedObject var historyStore: PipelineHistoryStore
+    @ObservedObject var stats: DictationStats
+    let isReady: Bool
+    let openTab: (SettingsTab) -> Void
+
+    var body: some View {
+        SettingsPage {
+            PageHeader(
+                "Dictation",
+                pill: isReady ? "Ready" : "Needs setup",
+                pillTone: isReady ? .info : .warning
+            ) {
+                Button("Share feedback") {
+                    NSWorkspace.shared.open(Self.feedbackURL)
+                }
+                .buttonStyle(.sophiieSecondary)
+                .help("Opens a new issue on GitHub")
+            }
+
+            SettingsCard(hero: true) {
+                SettingsRow(
+                    icon: "waveform",
+                    title: "Dictation",
+                    subtitle: appState.dictationEnabled
+                        ? "Talk instead of type, in any app"
+                        : "Shortcuts are paused. Turn this on to dictate again."
+                ) {
+                    SettingsSwitch(label: "Dictation", isOn: dictationEnabledBinding)
+                }
+            }
+
+            historySection
+            personalizationSection
+            shortcutsSection
+        }
+    }
+
+    // MARK: - History
+
+    private var historySection: some View {
+        SettingsSection("History") {
+            SettingsCard {
+                SettingsLinkRow(
+                    icon: "clock.arrow.circlepath",
+                    title: "History",
+                    subtitle: "View your full dictation history",
+                    value: Self.dictationCountLabel(stats.totalDictations)
+                ) {
+                    openTab(.activity)
+                }
+
+                let recent = Array(historyStore.items.prefix(Self.recentCount))
+                CardDivider(leadingInset: 0)
+                if recent.isEmpty {
+                    Text("Your dictations will show up here.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SophiieTheme.Palette.muted)
+                        .padding(.vertical, 10)
+                } else {
+                    ForEach(Array(recent.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { CardDivider(leadingInset: 0) }
+                        HistoryRow(date: Self.shortDate(item.timestamp), text: Self.previewText(item))
+                    }
+                }
+            }
+        }
+    }
+
+    static func dictationCountLabel(_ count: Int) -> String {
+        let number = count.formatted(.number)
+        return count == 1 ? "1 dictation" : "\(number) dictations"
+    }
+
+    static func shortDate(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated))
+    }
+
+    /// One line of the cleaned text (the raw transcript if cleanup produced
+    /// nothing), with line breaks folded into spaces.
+    static func previewText(_ item: PipelineResult) -> String {
+        let cleaned = item.cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = cleaned.isEmpty ? item.rawTranscript : cleaned
+        return text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    // MARK: - Personalization
+
+    private var personalizationSection: some View {
+        SettingsSection("Personalization") {
+            SettingsCard {
+                SettingsLinkRow(
+                    icon: "book.closed",
+                    title: "Dictionary",
+                    subtitle: "Teach Whispur the names and terms you use",
+                    value: Self.termCountLabel(VocabularyParser.parse(appState.customVocabulary).count)
+                ) {
+                    openTab(.dictionary)
+                }
+            }
+        }
+    }
+
+    static func termCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 term" : "\(count.formatted(.number)) terms"
+    }
+
+    // MARK: - Shortcuts
+
+    private var shortcutsSection: some View {
+        SettingsSection("Shortcuts") {
+            SettingsCard {
+                SettingsRow(icon: "hand.raised", title: "Hold to talk", subtitle: "Hold to dictate. Release to finish.") {
+                    ShortcutMenu(
+                        title: "Hold to talk shortcut",
+                        current: appState.holdShortcut,
+                        presets: ShortcutBinding.holdPresets,
+                        unavailable: appState.toggleShortcut,
+                        onSelect: appState.setHoldShortcut
+                    )
+                }
+                CardDivider()
+                handsFreeRow
+                if appState.toggleShortcut == nil {
+                    HStack {
+                        Spacer()
+                        AddShortcutMenu(
+                            presets: ShortcutBinding.togglePresets,
+                            unavailable: appState.holdShortcut,
+                            onSelect: { appState.setToggleShortcut($0) }
+                        )
+                    }
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var handsFreeRow: some View {
+        if let toggle = appState.toggleShortcut {
+            VStack(alignment: .leading, spacing: 0) {
+                SettingsRow(icon: "infinity", title: "Hands-free", subtitle: Self.handsFreeSubtitle(toggle)) {
+                    HStack(spacing: 4) {
+                        ShortcutMenu(
+                            title: "Hands-free shortcut",
+                            current: toggle,
+                            presets: ShortcutBinding.togglePresets,
+                            unavailable: appState.holdShortcut,
+                            onSelect: { appState.setToggleShortcut($0) }
+                        )
+                        InlineIconButton(systemName: "xmark", label: "Remove hands-free shortcut") {
+                            appState.setToggleShortcut(nil)
+                        }
+                    }
+                }
+                if toggle.isDoublePress {
+                    Label(
+                        "Quick Fn taps also trigger macOS. Set \"Press \u{1F310} key to\" to Do Nothing in System Settings > Keyboard, and make sure Dictation doesn't use Fn twice.",
+                        systemImage: "info.circle"
+                    )
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, SettingsMetrics.textInset)
+                    .padding(.bottom, 12)
+                }
+            }
+        } else {
+            SettingsRow(
+                icon: "infinity",
+                title: "Hands-free",
+                subtitle: "Off. Add a shortcut to dictate without holding a key."
+            )
+        }
+    }
+
+    static func handsFreeSubtitle(_ binding: ShortcutBinding) -> String {
+        if binding.isDoublePress {
+            return "Press twice to start. Press once to finish."
+        }
+        return "Press to start. Press again to finish."
+    }
+
+    private var dictationEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { appState.dictationEnabled },
+            set: { appState.setDictationEnabled($0) }
+        )
+    }
+}
+
+// MARK: - Shortcut controls
+
+/// The current shortcut drawn as keycaps; clicking opens the preset list.
+/// One shortcut per action: picking a preset replaces the current one.
+struct ShortcutMenu: View {
+    let title: String
+    let current: ShortcutBinding
+    let presets: [ShortcutBinding]
+    /// The other action's shortcut, which this one can't reuse.
+    let unavailable: ShortcutBinding?
+    let onSelect: (ShortcutBinding) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(presets, id: \.self) { preset in
+                Button {
+                    onSelect(preset)
+                } label: {
+                    if preset == current {
+                        Label(preset.menuTitle, systemImage: "checkmark")
+                    } else {
+                        Text(preset.menuTitle)
+                    }
+                }
+                .disabled(preset == unavailable)
+            }
+        } label: {
+            KeycapCombo(keys: current.keycapLabels, join: current.isDoublePress ? .sequence : .chord)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Change shortcut")
+        .accessibilityLabel("\(title): \(current.menuTitle)")
+        .accessibilityHint("Shows other shortcuts")
+    }
+}
+
+/// "Add shortcut", shown only while an action has no shortcut.
+struct AddShortcutMenu: View {
+    let presets: [ShortcutBinding]
+    let unavailable: ShortcutBinding?
+    let onSelect: (ShortcutBinding) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(presets, id: \.self) { preset in
+                Button(preset.menuTitle) { onSelect(preset) }
+                    .disabled(preset == unavailable)
+            }
+        } label: {
+            Text("Add shortcut")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(SophiieTheme.Palette.interactive)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Add hands-free shortcut")
+    }
+}

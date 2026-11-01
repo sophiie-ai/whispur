@@ -34,6 +34,8 @@ final class AppState: ObservableObject {
     @AppStorage("systemAudioReductionPercent") var systemAudioReductionPercent: Int = 100
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
     @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
+    /// Settings master switch: while off, the dictation shortcuts do nothing.
+    @AppStorage("dictationEnabled") private(set) var dictationEnabled: Bool = true
 
     @Published var holdShortcut: ShortcutBinding
     @Published var toggleShortcut: ShortcutBinding?
@@ -59,7 +61,18 @@ final class AppState: ObservableObject {
     private var statsCancellable: AnyCancellable?
     private var lastCountedResultID: UUID?
 
-    init() {
+    /// - Parameters:
+    ///   - historyStore: Saved dictations. Defaults to the on-disk store;
+    ///     renders pass one backed by a temporary file.
+    ///   - stats: Dictation counters, same as above.
+    ///   - startsServices: Installs the shortcut listener and starts update
+    ///     checks. Renders pass false so a second instance never listens to
+    ///     the keyboard.
+    init(
+        historyStore: PipelineHistoryStore? = nil,
+        stats: DictationStats? = nil,
+        startsServices: Bool = true
+    ) {
         let loadedHoldShortcut = Self.loadShortcut(forKey: "holdShortcut", fallback: .fnKey)
         let sanitizedToggleShortcut = Self.loadToggleShortcut(holdShortcut: loadedHoldShortcut)
 
@@ -71,8 +84,8 @@ final class AppState: ObservableObject {
         let httpClient = ProviderHTTPClient(requestLog: providerRequestLog)
         let registry = ProviderRegistry(keychain: keychain, httpClient: httpClient)
         let recorder = AudioRecorder()
-        let historyStore = PipelineHistoryStore()
-        let stats = DictationStats()
+        let historyStore = historyStore ?? PipelineHistoryStore()
+        let stats = stats ?? DictationStats()
         let pipeline = DictationPipeline(
             recorder: recorder,
             registry: registry,
@@ -103,6 +116,8 @@ final class AppState: ObservableObject {
 
         hotkeyManager.holdBinding = loadedHoldShortcut
         hotkeyManager.toggleBinding = sanitizedToggleShortcut
+        hotkeyManager.isEnabled = dictationEnabled
+        stats.seedDictationCountIfMissing(historyStore.items.count)
 
         setupHotkeys()
         observePipeline()
@@ -122,6 +137,7 @@ final class AppState: ObservableObject {
         // Installing the CGEventTap, the legacy-preferences migration, and
         // the Sparkle update check all touch the filesystem / event system
         // and would otherwise add ~30–100 ms before the icon appears.
+        guard startsServices else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
             Self.migrateLegacyLanguagesPreferenceIfNeeded()
@@ -395,6 +411,16 @@ final class AppState: ObservableObject {
         toggleShortcut = binding
         persistShortcut(binding, forKey: "toggleShortcut")
         hotkeyManager.toggleBinding = binding
+    }
+
+    /// Turns the dictation shortcuts on or off. Turning them off mid-recording
+    /// cancels the recording, since its stop shortcut no longer works.
+    func setDictationEnabled(_ enabled: Bool) {
+        dictationEnabled = enabled
+        hotkeyManager.isEnabled = enabled
+        if !enabled, pipeline.canStopRecording {
+            cancelDictation()
+        }
     }
 
     func hideSetupGuide() {

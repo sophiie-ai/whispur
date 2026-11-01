@@ -1,45 +1,70 @@
 import AppKit
 import SwiftUI
 
-/// Main settings window: an app header and tab list on the left, a titled
-/// detail pane on the right. The window hides its title bar, so the brand
-/// canvas runs edge to edge under the native traffic lights.
+/// Main settings window: a midnight sidebar of pages on the left, the
+/// selected page on the right. The window hides its title bar, so the
+/// sidebar runs edge to edge under the native traffic lights.
 struct SettingsView: View {
+    /// UserDefaults key for the selected page. Writing an empty string asks
+    /// the window to open on its landing page.
+    static let selectedTabKey = "settings.selectedTab"
+
+    /// Height of the hidden title bar strip that keeps the traffic lights
+    /// and window dragging.
+    static let titleBarHeight: CGFloat = 32
+
+    /// Permission state for renders, which can't grant real permissions.
+    struct PermissionsOverride {
+        var microphone: Bool
+        var accessibility: Bool
+    }
+
     @ObservedObject var appState: AppState
+    @ObservedObject private var historyStore: PipelineHistoryStore
     @StateObject private var credentials: ProviderCredentials
     @StateObject private var tester: ProviderKeyTester
-    @AppStorage("settings.selectedTab") private var selectedTabRaw = SettingsTab.setup.rawValue
+    @AppStorage private var selectedTabRaw: String
 
     private let providersLayout: ProvidersLayout
+    private let permissionsOverride: PermissionsOverride?
 
     /// - Parameters:
     ///   - secretStore: Where provider keys live. Defaults to the Keychain;
     ///     tests and renders pass an in-memory store.
     ///   - keyTestResults: Seeds key check results (renders only).
-    ///   - providersLayout: Initial row expansion on the Providers tab.
+    ///   - providersLayout: Initial row expansion on the Providers page.
+    ///   - permissionsOverride: Fixed permission state (renders only).
+    ///   - defaults: Where the selected page is remembered (renders pass a
+    ///     scratch suite).
     @MainActor
     init(
         appState: AppState,
         secretStore: SecretStore? = nil,
         keyTestResults: [String: ProviderKeyTestState] = [:],
-        providersLayout: ProvidersLayout = ProvidersLayout()
+        providersLayout: ProvidersLayout = ProvidersLayout(),
+        permissionsOverride: PermissionsOverride? = nil,
+        defaults: UserDefaults = .standard
     ) {
+        _selectedTabRaw = AppStorage(wrappedValue: "", SettingsView.selectedTabKey, store: defaults)
         self.appState = appState
+        self.historyStore = appState.historyStore
         self.providersLayout = providersLayout
+        self.permissionsOverride = permissionsOverride
         _credentials = StateObject(wrappedValue: ProviderCredentials(store: secretStore ?? appState.keychain))
         _tester = StateObject(wrappedValue: ProviderKeyTester(requestLog: appState.providerRequestLog, results: keyTestResults))
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
-            Rectangle()
-                .fill(SophiieTheme.Palette.border)
-                .frame(width: 1)
-                .accessibilityHidden(true)
-            detail
+            SettingsSidebar(
+                selection: selectionBinding,
+                pendingSetupSteps: setupState.pendingSteps,
+                status: sidebarStatus
+            )
+            page
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(SophiieTheme.Palette.surfaceWarm)
         }
-        .background(SophiieTheme.Palette.surfaceWarm)
         .background(alignment: .top) {
             WindowDragRegion()
                 .frame(height: SettingsView.titleBarHeight)
@@ -54,71 +79,22 @@ struct SettingsView: View {
         }
     }
 
-    /// Height of the hidden title bar strip that keeps the traffic lights
-    /// and window dragging.
-    static let titleBarHeight: CGFloat = 32
+    // MARK: - State
 
-    // MARK: - Sidebar
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            appHeader
-                .padding(.horizontal, 16)
-                .padding(.top, SettingsView.titleBarHeight + 12)
-                .padding(.bottom, 18)
-
-            VStack(spacing: 2) {
-                ForEach(SettingsTab.allCases) { tab in
-                    tabButton(tab)
-                }
-            }
-            .padding(.horizontal, 10)
-
-            Spacer(minLength: 12)
-
-            Label(appState.shortcutSummary, systemImage: "keyboard")
-                .font(SophiieTheme.Typography.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-                .padding(18)
-        }
-        .frame(width: 248)
-        .frame(maxHeight: .infinity)
-        .background(SophiieTheme.Palette.surfaceStage)
+    private var microphoneGranted: Bool {
+        permissionsOverride?.microphone ?? appState.microphoneAccessGranted
     }
 
-    private var appHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 44, height: 44)
-                    .shadow(color: SophiieTheme.Shadow.tint.opacity(0.18), radius: 6, y: 3)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Whispur")
-                        .font(SophiieTheme.Typography.title)
-                        .tracking(SophiieTheme.Typography.titleTracking)
-                        .foregroundStyle(SophiieTheme.Palette.ink)
-                    Text(versionLabel)
-                        .font(SophiieTheme.Typography.caption)
-                        .foregroundStyle(SophiieTheme.Palette.muted)
-                }
-            }
-            .accessibilityElement(children: .combine)
-
-            statusLine
-        }
+    private var accessibilityGranted: Bool {
+        permissionsOverride?.accessibility ?? appState.hotkeyManager.isAccessibilityGranted
     }
 
     private var readiness: SettingsReadiness {
         let speech = appState.selectedSTT.setupDescriptor
         let cleanup = appState.selectedLLM.setupDescriptor
         return SettingsReadiness.derive(
-            microphoneGranted: appState.microphoneAccessGranted,
-            accessibilityGranted: appState.hotkeyManager.isAccessibilityGranted,
+            microphoneGranted: microphoneGranted,
+            accessibilityGranted: accessibilityGranted,
             speechProviderName: speech.name,
             speechStatus: credentials.status(for: speech.keys),
             cleanupProviderName: cleanup.name,
@@ -126,136 +102,97 @@ struct SettingsView: View {
         )
     }
 
-    @ViewBuilder
-    private var statusLine: some View {
-        let readiness = readiness
-        let isReady = readiness.tone == .ready
-        let content = HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle()
-                .fill(isReady ? SophiieTheme.Palette.success : SophiieTheme.Palette.warning)
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(readiness.headline)
-                    .font(SophiieTheme.Typography.captionStrong)
-                    .foregroundStyle(SophiieTheme.Palette.ink)
-                Text(readiness.detail)
-                    .font(SophiieTheme.Typography.caption)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-            if !isReady {
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SophiieTheme.Palette.surface, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
-                .strokeBorder(SophiieTheme.Palette.border, lineWidth: 1)
+    private var setupState: SettingsSetupState {
+        SettingsSetupState(
+            microphoneGranted: microphoneGranted,
+            accessibilityGranted: accessibilityGranted,
+            speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor.keys).isReady,
+            hasDictated: !historyStore.items.isEmpty
         )
-        .contentShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
-
-        if isReady {
-            content
-                .accessibilityElement(children: .combine)
-        } else {
-            Button {
-                selectedTab = .setup
-            } label: {
-                content
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(readiness.headline). \(readiness.detail)")
-            .accessibilityHint("Opens Setup")
-        }
     }
 
-    private func tabButton(_ tab: SettingsTab) -> some View {
-        let isSelected = selectedTab == tab
-        return Button {
-            selectedTab = tab
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: tab.icon)
-                    .frame(width: 18)
-                    .foregroundStyle(isSelected ? SophiieTheme.Palette.ink : SophiieTheme.Palette.muted)
-                Text(tab.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(SophiieTheme.Palette.ink)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SophiieTheme.Radius.control, style: .continuous)
-                    .fill(isSelected ? SophiieTheme.Palette.surfaceSelected : Color.clear)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.control, style: .continuous))
-            .sophiieAnimation(value: selectedTab)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tab.rawValue)
-        .accessibilityHint(tab.summary)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private var versionLabel: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return version.map { "Version \($0)" } ?? "Version unknown"
-    }
-
-    // MARK: - Detail
-
-    private var detail: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(selectedTab.rawValue)
-                    .font(SophiieTheme.Typography.pageTitle)
-                    .tracking(SophiieTheme.Typography.titleTracking)
-                    .foregroundStyle(SophiieTheme.Palette.ink)
-                    .accessibilityAddTraits(.isHeader)
-                Text(selectedTab.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, SettingsView.titleBarHeight + 8)
-            .padding(.bottom, 2)
-
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch selectedTab {
-        case .setup:
-            SetupSettingsView(appState: appState, openTab: { selectedTab = $0 })
-        case .general:
-            GeneralSettingsView(appState: appState)
-        case .providers:
-            ProvidersSettingsView(appState: appState, credentials: credentials, tester: tester, layout: providersLayout)
-        case .prompts:
-            PromptsSettingsView(appState: appState)
-        case .activity:
-            RunLogView(appState: appState)
-        case .requests:
-            RequestsSettingsView(appState: appState)
-        }
+    private var sidebarStatus: SidebarStatus {
+        let cleanup = appState.selectedLLM.setupDescriptor
+        return SidebarStatus.derive(
+            dictationEnabled: appState.dictationEnabled,
+            readiness: readiness,
+            speechProviderName: appState.selectedSTT.setupDescriptor.name,
+            cleanupProviderName: cleanup.name,
+            cleanupReady: credentials.status(for: cleanup.keys).isReady
+        )
     }
 
     private var selectedTab: SettingsTab {
-        get { SettingsTab(rawValue: selectedTabRaw) ?? .setup }
-        nonmutating set { selectedTabRaw = newValue.rawValue }
+        SettingsTab(storedValue: selectedTabRaw) ?? setupState.landingTab
+    }
+
+    private var selectionBinding: Binding<SettingsTab> {
+        Binding(get: { selectedTab }, set: { selectedTabRaw = $0.rawValue })
+    }
+
+    private func open(_ tab: SettingsTab) {
+        selectedTabRaw = tab.rawValue
+    }
+
+    // MARK: - Pages
+
+    @ViewBuilder
+    private var page: some View {
+        switch selectedTab {
+        case .dictation:
+            DictationSettingsView(
+                appState: appState,
+                historyStore: historyStore,
+                stats: appState.stats,
+                isReady: setupState.isComplete,
+                openTab: open
+            )
+        case .dictionary, .styles:
+            LegacyPage(tab: .dictionary) {
+                PromptsSettingsView(appState: appState)
+            }
+        case .getStarted:
+            LegacyPage(tab: .getStarted) {
+                SetupSettingsView(appState: appState, openTab: open)
+            }
+        case .providers:
+            LegacyPage(tab: .providers) {
+                ProvidersSettingsView(appState: appState, credentials: credentials, tester: tester, layout: providersLayout)
+            }
+        case .preferences:
+            LegacyPage(tab: .preferences) {
+                GeneralSettingsView(appState: appState)
+            }
+        case .activity:
+            LegacyPage(tab: .activity) {
+                RunLogView(appState: appState)
+            }
+        case .requests:
+            LegacyPage(tab: .requests) {
+                RequestsSettingsView(appState: appState)
+            }
+        }
+    }
+}
+
+/// A page that still uses the pre-redesign layout under the new header.
+private struct LegacyPage<Content: View>: View {
+    let tab: SettingsTab
+    let content: Content
+
+    init(tab: SettingsTab, @ViewBuilder content: () -> Content) {
+        self.tab = tab
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(tab.title, subtitle: tab.summary)
+                .padding(.horizontal, 24)
+                .padding(.top, SettingsView.titleBarHeight + 6)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
     }
 }
 

@@ -35,6 +35,25 @@ final class HotkeyManager {
     }
     nonisolated(unsafe) var cancelWatchEnabled = false
 
+    /// The Settings master switch. While false, no shortcut starts or stops
+    /// dictation (Esc-to-cancel still works). Turning it off drops any
+    /// in-flight hold or toggle state so nothing fires when it comes back.
+    nonisolated(unsafe) var isEnabled = true {
+        didSet {
+            guard oldValue != isEnabled, !isEnabled else { return }
+            holdArmTimer?.cancel()
+            holdArmTimer = nil
+            stateLock.withLock { state in
+                state.holdActive = false
+                state.holdArming = false
+                state.holdSuppressed = false
+                state.toggleActive = false
+                state.doublePress.reset()
+                state.doublePressDown = false
+            }
+        }
+    }
+
     /// Delay before a bare-modifier hold binding (e.g. Fn alone) activates.
     /// Short taps within this window are ignored so macOS can handle its own
     /// Fn behaviors (emoji picker, dictation) without racing our overlay.
@@ -380,6 +399,7 @@ final class HotkeyManager {
 
     /// Check all bindings against current key state and fire events.
     private nonisolated func evaluateBindings(interruptDoublePress: Bool = false) {
+        guard isEnabled else { return }
         let useThreshold = holdBinding.keyCode == nil && holdArmThreshold > 0
         let toggleBinding = self.toggleBinding
         let now = ProcessInfo.processInfo.systemUptime
@@ -521,7 +541,7 @@ final class HotkeyManager {
             self.holdArmTimer = nil
 
             let shouldFire = self.stateLock.withLock { state -> Bool in
-                guard state.holdArming else { return false }
+                guard self.isEnabled, state.holdArming else { return false }
                 state.holdArming = false
                 // Re-check that the binding is still held when the timer fires.
                 guard Self.bindingIsActive(self.holdBinding, state: state) else {

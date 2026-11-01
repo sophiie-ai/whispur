@@ -99,7 +99,7 @@ final class ProviderSetupTests: XCTestCase {
             cleanupProviderName: "Y", cleanupStatus: .needsKey
         )
         var strings = [readiness.headline, readiness.detail]
-        strings += SettingsTab.allCases.flatMap { [$0.rawValue, $0.summary] }
+        strings += SettingsTab.allCases.flatMap { [$0.title, $0.summary] }
         strings += STTProviderID.allCases.map(\.setupDescriptor.note)
         strings += LLMProviderID.allCases.map(\.setupDescriptor.note)
         strings += KeychainKey.allCases.map(\.placeholder)
