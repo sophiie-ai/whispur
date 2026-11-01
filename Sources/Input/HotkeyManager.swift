@@ -60,6 +60,12 @@ final class HotkeyManager {
     /// Short taps within this window are ignored so macOS can handle its own
     /// Fn behaviors (emoji picker, dictation) without racing our overlay.
     /// Chorded bindings with an explicit keyCode activate immediately.
+    ///
+    /// The window also has to cover reaching for the second key of an Fn
+    /// chord (Fn+arrow, Fn+Delete): a chord key pressed inside it cancels
+    /// the arm. 0.18 s caught those chords and was raised to 0.33 s for
+    /// that reason. It is the only wait before the overlay shows; nothing
+    /// else on the start path waits on the recorder.
     nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.33
 
     /// Maximum gap between the release of the first clean tap and the second
@@ -570,6 +576,7 @@ final class HotkeyManager {
 
         switch holdAction {
         case .arm:
+            StartLatencyTrace.begin("hold key down")
             scheduleHoldArmTimer()
         case .cancelArm:
             holdArmTimer?.cancel()
@@ -580,9 +587,14 @@ final class HotkeyManager {
 
         for event in transitions {
             switch event {
-            case .holdActivated: logger.info("Hold activated")
+            case .holdActivated:
+                // Chorded holds activate on press, with no arm threshold.
+                StartLatencyTrace.begin("hold shortcut down")
+                logger.info("Hold activated")
             case .holdDeactivated: logger.info("Hold deactivated")
-            case .toggleActivated: logger.info("Toggle activated")
+            case .toggleActivated:
+                StartLatencyTrace.begin("toggle shortcut down")
+                logger.info("Toggle activated")
             default: break
             }
             onEvent?(event)
@@ -613,6 +625,7 @@ final class HotkeyManager {
             }
 
             if shouldFire {
+                StartLatencyTrace.mark("hold armed")
                 logger.info("Hold activated (after threshold)")
                 self.onEvent?(.holdActivated)
             }

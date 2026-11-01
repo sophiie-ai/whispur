@@ -86,6 +86,12 @@ final class DictationPipeline: ObservableObject {
     var onPasteCompleted: ((String) -> Void)?
 
     private var audioLevelCancellable: AnyCancellable?
+    /// Bumped by every start, stop and cancel, so a recorder start that
+    /// finishes after the user already let go can tell it is stale.
+    private var recordingGeneration = 0
+    /// Last microphone permission read; lets a start show the overlay
+    /// before the permission is read again. Seeded at init.
+    private var lastKnownMicrophoneStatus: AVAuthorizationStatus?
     private var microphoneRequestTask: Task<Void, Never>?
     private var processingTask: Task<Void, Never>?
     private var resetTask: Task<Void, Never>?
@@ -100,6 +106,13 @@ final class DictationPipeline: ObservableObject {
         self.registry = registry
         self.historyStore = historyStore
         self.httpClient = httpClient
+
+        Task { [weak self] in
+            let status = await Self.readMicrophoneStatus()
+            if self?.lastKnownMicrophoneStatus == nil {
+                self?.lastKnownMicrophoneStatus = status
+            }
+        }
     }
 
     var canStartRecording: Bool {
@@ -179,13 +192,24 @@ final class DictationPipeline: ObservableObject {
         noteRecordingApp()
 
         cancelResetTask()
-        if case .done = phase { phase = .idle }
-        if case .error = phase { phase = .idle }
         activeTriggerMode = triggerMode
+        if lastKnownMicrophoneStatus == .authorized {
+            // Show the overlay now, in this turn; the recorder warms up in
+            // the background and flips it to `.recording` on first audio.
+            // The status is confirmed below, before the recorder starts.
+            phase = .starting
+            StartLatencyTrace.mark("overlay requested (.starting)")
+        } else {
+            if case .done = phase { phase = .idle }
+            if case .error = phase { phase = .idle }
+        }
 
         microphoneRequestTask?.cancel()
         microphoneRequestTask = Task { [weak self] in
-            await self?.requestMicrophoneAccessAndBeginRecording()
+            let status = await Self.readMicrophoneStatus()
+            guard let self, !Task.isCancelled else { return }
+            self.lastKnownMicrophoneStatus = status
+            await self.requestMicrophoneAccessAndBeginRecording(status: status)
         }
     }
 
@@ -207,6 +231,8 @@ final class DictationPipeline: ObservableObject {
     func stopAndProcess() {
         guard canStopRecording else { return }
 
+        let wasStarting = phase == .starting
+        recordingGeneration &+= 1
         cancelResetTask()
         microphoneRequestTask?.cancel()
         microphoneRequestTask = nil
@@ -226,7 +252,14 @@ final class DictationPipeline: ObservableObject {
             stream?.cancel()
             systemAudioMuter.restore()
             resetAudioSamples()
-            presentError("No audio was captured.")
+            if wasStarting {
+                // Released before the recorder was even asked to start:
+                // nothing was said, so just put the overlay away.
+                activeTriggerMode = .hold
+                phase = .idle
+            } else {
+                presentError("No audio was captured.")
+            }
             return
         }
 
@@ -242,6 +275,7 @@ final class DictationPipeline: ObservableObject {
     }
 
     func cancel() {
+        recordingGeneration &+= 1
         microphoneRequestTask?.cancel()
         microphoneRequestTask = nil
 
@@ -280,16 +314,23 @@ final class DictationPipeline: ObservableObject {
         scheduleResetToIdle()
     }
 
-    private func requestMicrophoneAccessAndBeginRecording() async {
+    /// Reading the microphone permission costs ~10-20 ms, so it happens off
+    /// the main thread and never holds back the overlay.
+    private nonisolated static func readMicrophoneStatus() async -> AVAuthorizationStatus {
+        await Task.detached(priority: .userInitiated) {
+            AVCaptureDevice.authorizationStatus(for: .audio)
+        }.value
+    }
+
+    private func requestMicrophoneAccessAndBeginRecording(status: AVAuthorizationStatus) async {
         defer {
             microphoneRequestTask = nil
         }
 
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-
         switch status {
         case .authorized:
-            beginRecording()
+            guard !Task.isCancelled else { return }
+            await beginRecording()
         case .notDetermined:
             phase = .requestingMicrophonePermission
             // The system permission dialog can linger indefinitely if the user
@@ -308,7 +349,7 @@ final class DictationPipeline: ObservableObject {
 
             switch granted {
             case .some(true):
-                beginRecording()
+                await beginRecording()
             case .some(false):
                 presentError("Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone.")
             case .none:
@@ -321,12 +362,14 @@ final class DictationPipeline: ObservableObject {
         }
     }
 
-    private func beginRecording() {
+    private func beginRecording() async {
         guard !recorder.isRecording else { return }
 
         // Move out of `.idle` before touching the recorder so stop events are
         // never dropped even if the user stops immediately.
         phase = .starting
+        recordingGeneration &+= 1
+        let generation = recordingGeneration
 
         recorder.onRecordingReady = { [weak self] in
             Task { @MainActor in
@@ -335,20 +378,27 @@ final class DictationPipeline: ObservableObject {
 
                 self.phase = .recording
                 self.playSound(.tink)
+                StartLatencyTrace.finish("listening (first audio, start sound)")
             }
         }
 
         startStreamingIfEnabled()
 
         do {
-            try recorder.startRecording()
+            try await recorder.startRecording()
         } catch {
+            guard generation == recordingGeneration else { return }
             recorder.onAudioBuffer = nil
             streamingSession?.cancel()
             streamingSession = nil
             presentError(error.localizedDescription)
             return
         }
+        StartLatencyTrace.mark("audio engine started")
+
+        // A stop or cancel while the engine warmed up already stopped it
+        // (the recorder serializes them after the start) and moved on.
+        guard generation == recordingGeneration, canStopRecording else { return }
 
         if muteSystemAudioWhileRecording {
             systemAudioMuter.mute(reductionPercent: systemAudioReductionPercent)
@@ -635,6 +685,15 @@ final class DictationPipeline: ObservableObject {
         resetTask?.cancel()
         resetTask = nil
     }
+
+    #if DEBUG
+    /// Puts the pipeline in a phase with a fixed waveform, without touching
+    /// the recorder. Only for overlay renders in tests.
+    func setPhaseForRendering(_ phase: PipelinePhase, samples: [Float]? = nil) {
+        self.phase = phase
+        if let samples { audioSamples = samples }
+    }
+    #endif
 
     private func resetAudioSamples() {
         audioSamples = Array(repeating: 0, count: Self.waveformSampleCount)
