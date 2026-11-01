@@ -636,6 +636,15 @@ final class DictationPipeline: ObservableObject {
         resetTask = nil
     }
 
+    #if DEBUG
+    /// Puts the pipeline in a phase with a fixed waveform, without touching
+    /// the recorder. Only for overlay renders in tests.
+    func setPhaseForRendering(_ phase: PipelinePhase, samples: [Float]? = nil) {
+        self.phase = phase
+        if let samples { audioSamples = samples }
+    }
+    #endif
+
     private func resetAudioSamples() {
         audioSamples = Array(repeating: 0, count: Self.waveformSampleCount)
         silentSampleCount = 0

@@ -264,8 +264,12 @@ private struct CompactRecordingOverlay: View {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(OnDark.background.opacity(0.95))
             )
+            // Inset the hairline so its antialiased outer edge stays on the
+            // fill. Flush with the edge, it reads as a light bar at each end
+            // of the pill on dark desktops.
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .inset(by: 0.5)
                     .strokeBorder(OnDark.hairline, lineWidth: 1)
             )
             .shadow(color: SophiieTheme.Shadow.tint.opacity(0.32), radius: 10, y: 4)

@@ -12,8 +12,16 @@ final class OverlayPanelManager {
     private var styleProvider: (() -> OverlayStyle)?
     private var currentStyle: OverlayStyle = .standard
 
-    private static let standardSize = CGSize(width: 430, height: 96)
-    private static let compactSize = CGSize(width: 88, height: 38)
+    /// The overlay itself, including its own padding.
+    private static let standardContentSize = CGSize(width: 430, height: 96)
+    private static let compactContentSize = CGSize(width: 88, height: 38)
+
+    /// Transparent room around the overlay so its SwiftUI shadow fades out
+    /// inside the panel. Without it the window edge cuts the shadow off and
+    /// a faint box shows around the pill. Each margin covers its style's
+    /// shadow: blur radius plus y offset (RecordingOverlay).
+    private static let standardShadowMargin: CGFloat = 30
+    private static let compactShadowMargin: CGFloat = 18
 
     func bind(
         to pipeline: DictationPipeline,
@@ -77,12 +85,17 @@ final class OverlayPanelManager {
         panel?.orderFrontRegardless()
     }
 
+    #if DEBUG
+    /// The overlay panel, for render tests.
+    var panelForTesting: NSPanel? { panel }
+    #endif
+
     private func hide() {
         panel?.orderOut(nil)
     }
 
     private func rootView(pipeline: DictationPipeline, style: OverlayStyle) -> some View {
-        let size = Self.size(for: style)
+        let size = Self.contentSize(for: style)
         return RecordingOverlay(
             pipeline: pipeline,
             style: style,
@@ -90,6 +103,7 @@ final class OverlayPanelManager {
             onCancel: { [weak self] in self?.cancelHandler?() }
         )
         .frame(width: size.width, height: style == .compact ? size.height : nil)
+        .padding(Self.shadowMargin(for: style))
     }
 
     private func createPanel(pipeline: DictationPipeline, style: OverlayStyle) {
@@ -129,21 +143,39 @@ final class OverlayPanelManager {
         guard let panel, let screen = NSScreen.main else { return }
         let visibleFrame = screen.visibleFrame
         let panelSize = panel.frame.size
+        // Place the overlay itself where it always was; the shadow margin
+        // hangs outside that spot.
+        let margin = Self.shadowMargin(for: style)
+        let contentHeight = Self.contentSize(for: style).height
         let x = visibleFrame.midX - (panelSize.width / 2)
         let y: CGFloat
         switch style {
         case .standard:
-            y = visibleFrame.maxY - panelSize.height - 18
+            y = visibleFrame.maxY - contentHeight - 18 - margin
         case .compact:
-            y = visibleFrame.minY + 24
+            y = visibleFrame.minY + 24 - margin
         }
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private static func size(for style: OverlayStyle) -> CGSize {
+    private static func contentSize(for style: OverlayStyle) -> CGSize {
         switch style {
-        case .standard: return standardSize
-        case .compact: return compactSize
+        case .standard: return standardContentSize
+        case .compact: return compactContentSize
         }
+    }
+
+    private static func shadowMargin(for style: OverlayStyle) -> CGFloat {
+        switch style {
+        case .standard: return standardShadowMargin
+        case .compact: return compactShadowMargin
+        }
+    }
+
+    /// The panel: the overlay plus its shadow margin on every side.
+    private static func size(for style: OverlayStyle) -> CGSize {
+        let content = contentSize(for: style)
+        let margin = shadowMargin(for: style)
+        return CGSize(width: content.width + 2 * margin, height: content.height + 2 * margin)
     }
 }
