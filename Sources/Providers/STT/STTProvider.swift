@@ -9,6 +9,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
     case mistral
     case metaMuse
     case apple
+    case parakeet
 
     var id: String { rawValue }
 
@@ -21,11 +22,17 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .mistral: "Mistral Voxtral"
         case .metaMuse: "Meta Muse"
         case .apple: "Apple (on-device)"
+        case .parakeet: "Parakeet (on this Mac)"
         }
     }
 
     var requiresAPIKey: Bool {
-        self != .apple
+        !runsOnDevice
+    }
+
+    /// Transcribes on this Mac: no key, nothing uploaded.
+    var runsOnDevice: Bool {
+        self == .apple || self == .parakeet
     }
 
     var keychainKeys: [KeychainKey] {
@@ -36,7 +43,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .elevenlabs: [.elevenlabsAPIKey]
         case .mistral: [.mistralAPIKey]
         case .metaMuse: [.metaAPIKey]
-        case .apple: []
+        case .apple, .parakeet: []
         }
     }
 
@@ -59,7 +66,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
                 STTModelOption(id: "voxtral-mini-transcribe-3", label: "Voxtral Mini Transcribe 3"),
                 STTModelOption(id: "voxtral-small-transcribe-3", label: "Voxtral Small Transcribe 3"),
             ]
-        case .deepgram, .elevenlabs, .metaMuse, .apple:
+        case .deepgram, .elevenlabs, .metaMuse, .apple, .parakeet:
             []
         }
     }
@@ -80,7 +87,7 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "openaiSTTModel"
         case .groqWhisper: "groqWhisperSTTModel"
         case .mistral: "mistralSTTModel"
-        case .deepgram, .elevenlabs, .metaMuse, .apple: nil
+        case .deepgram, .elevenlabs, .metaMuse, .apple, .parakeet: nil
         }
     }
 }
@@ -142,6 +149,8 @@ enum STTError: LocalizedError {
     case apiError(provider: STTProviderID, message: String, statusCode: Int?)
     case timeout(provider: STTProviderID)
     case missingAPIKey(provider: STTProviderID)
+    /// An on-device provider whose model isn't on this Mac (yet).
+    case modelNotReady(provider: STTProviderID, detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -155,6 +164,8 @@ enum STTError: LocalizedError {
             "\(provider.displayName) transcription timed out."
         case let .missingAPIKey(provider):
             "\(provider.displayName) API key is not configured."
+        case let .modelNotReady(_, detail):
+            detail
         }
     }
 }

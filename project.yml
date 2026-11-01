@@ -10,6 +10,13 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.6.0"
+  # On-device Parakeet speech-to-text (Core ML, Neural Engine). ASR only:
+  # the empty trait list drops its TTS, diarization and the prebuilt Rust
+  # text-normalization library.
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    exactVersion: "0.18.0"
+    traits: []
 
 settings:
   base:
@@ -27,6 +34,7 @@ targets:
         buildPhase: resources
     dependencies:
       - package: Sparkle
+      - package: FluidAudio
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.sophiie.whispur

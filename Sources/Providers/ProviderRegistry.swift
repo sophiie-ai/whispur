@@ -53,6 +53,8 @@ final class ProviderRegistry {
             return MetaMuseSTT(apiKey: key, httpClient: httpClient)
         case .apple:
             return AppleSTT()
+        case .parakeet:
+            return ParakeetSTT()
         }
     }
 

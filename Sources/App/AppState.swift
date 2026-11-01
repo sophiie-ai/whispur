@@ -7,7 +7,12 @@ import SwiftUI
 /// Central application state used by the menu bar UI and settings window.
 @MainActor
 final class AppState: ObservableObject {
-    @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple
+    @AppStorage("selectedSTT") var selectedSTT: STTProviderID = .apple {
+        didSet {
+            guard selectedSTT != oldValue else { return }
+            prepareLocalModel(for: selectedSTT)
+        }
+    }
     /// The languages the user speaks: comma-separated BCP-47 codes like
     /// `en-US,es-MX`. Empty string = auto-detect.
     @AppStorage(AppState.spokenLanguagesKey) var sttLanguageSelectionStorage: String = ""
@@ -85,6 +90,10 @@ final class AppState: ObservableObject {
     private var statsCancellable: AnyCancellable?
     private var lastCountedResultID: UUID?
     private var failedAudioPurgeTask: Task<Void, Never>?
+    /// The on-device Parakeet model: download, warm-up, memory.
+    let parakeetModel: ParakeetModelManager
+    private var parakeetCancellable: AnyCancellable?
+    private let startsServices: Bool
 
     /// - Parameters:
     ///   - historyStore: Saved dictations. Defaults to the on-disk store;
@@ -161,6 +170,8 @@ final class AppState: ObservableObject {
         self.learningSuggestions = learningSuggestions
         self.learningToastPanel = learningToastPanel
         self.evalCases = evalCases ?? MyEvalCaseStore()
+        self.parakeetModel = .shared
+        self.startsServices = startsServices
 
         Self.applyBindings(
             to: hotkeyManager,
@@ -176,6 +187,7 @@ final class AppState: ObservableObject {
         observePipeline()
         setupLearning()
         setupUseRaw()
+        observeParakeetModel()
 
         overlayManager.bind(
             to: pipeline,
@@ -199,6 +211,37 @@ final class AppState: ObservableObject {
             self.startFailedAudioPurge()
             self.startPermissionMonitoring()
             self.sparkleUpdater.checkForUpdatesInBackground()
+            // Low priority: the menu bar and shortcuts come first.
+            if self.selectedSTT == .parakeet { self.parakeetModel.warm() }
+        }
+    }
+
+    /// Republishes model changes (download finished, deleted) so readiness
+    /// in the menu bar and onboarding follows them, and warms a model that
+    /// just finished downloading for the selected provider.
+    private func observeParakeetModel() {
+        parakeetCancellable = parakeetModel.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        parakeetModel.onInstalled = { [weak self] in
+            guard let self, self.selectedSTT == .parakeet else { return }
+            self.parakeetModel.warm()
+        }
+    }
+
+    /// Picking Parakeet starts its download, or loads it when it's already
+    /// here. Picking anything else frees its memory.
+    private func prepareLocalModel(for provider: STTProviderID) {
+        // Renders and tests never download or load a model.
+        guard startsServices else { return }
+        if provider == .parakeet {
+            if parakeetModel.isInstalled {
+                parakeetModel.warm()
+            } else {
+                parakeetModel.download()
+            }
+        } else {
+            parakeetModel.unload()
         }
     }
 
@@ -315,7 +358,8 @@ final class AppState: ObservableObject {
     }
 
     var isSelectedSTTConfigured: Bool {
-        !selectedSTT.requiresAPIKey || keychain.hasKeysFor(stt: selectedSTT)
+        if selectedSTT == .parakeet { return parakeetModel.isInstalled }
+        return !selectedSTT.requiresAPIKey || keychain.hasKeysFor(stt: selectedSTT)
     }
 
     var isSelectedLLMConfigured: Bool {
@@ -509,11 +553,24 @@ final class AppState: ObservableObject {
         }
 
         guard isSelectedSTTConfigured else {
-            pipeline.presentError("\(selectedSTT.displayName) is not configured. Add its API key or switch to Apple STT.")
+            pipeline.presentError(unconfiguredSTTMessage())
             return
         }
 
         pipeline.startRecording(triggerMode: triggerMode)
+    }
+
+    private func unconfiguredSTTMessage() -> String {
+        guard selectedSTT == .parakeet else {
+            return "\(selectedSTT.displayName) is not configured. Add its API key or switch to Apple STT."
+        }
+        if case let .downloading(fraction, isPreparing) = parakeetModel.downloadState {
+            return isPreparing
+                ? "Parakeet is almost ready. Try again in a moment."
+                : "Parakeet is still downloading (\(Int(fraction * 100))%). Try again when it finishes."
+        }
+        parakeetModel.download()
+        return "Parakeet needs its model. The download has started; follow it in Settings > Providers."
     }
 
     /// Check whether the user edited the previous paste and, if so, offer

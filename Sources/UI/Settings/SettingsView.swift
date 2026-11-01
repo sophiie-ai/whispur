@@ -23,6 +23,7 @@ struct SettingsView: View {
     @ObservedObject private var historyStore: PipelineHistoryStore
     @StateObject private var credentials: ProviderCredentials
     @StateObject private var tester: ProviderKeyTester
+    @ObservedObject private var parakeetModel = ParakeetModelManager.shared
     @AppStorage private var selectedTabRaw: String
 
     private let providersLayout: ProvidersLayout
@@ -97,7 +98,7 @@ struct SettingsView: View {
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
             speechProviderName: speech.name,
-            speechStatus: credentials.status(for: speech.keys),
+            speechStatus: credentials.status(for: speech, localModel: parakeetModel),
             cleanupProviderName: cleanup.name,
             cleanupStatus: credentials.status(for: cleanup.keys)
         )
@@ -107,7 +108,7 @@ struct SettingsView: View {
         SettingsSetupState(
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
-            speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor.keys).isReady,
+            speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor, localModel: parakeetModel).isReady,
             hasDictated: historyStore.items.contains { !$0.isFailed },
             hasShortcut: appState.hasAnyShortcut
         )
