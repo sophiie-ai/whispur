@@ -6,7 +6,7 @@ struct GetStartedSettingsView: View {
     let setup: SettingsSetupState
     let openTab: (SettingsTab) -> Void
 
-    /// Steps shown in the checklist (the shortcut step is always done).
+    /// Steps shown in the checklist; each one is counted in `pendingSteps`.
     private static let stepCount = 5
 
     private var completedCount: Int {
@@ -82,7 +82,7 @@ struct GetStartedSettingsView: View {
                 step(
                     "Review your shortcuts",
                     detail: appState.shortcutSummary,
-                    isComplete: true,
+                    isComplete: setup.hasShortcut,
                     action: ("Shortcuts", { openTab(.dictation) })
                 )
                 CardDivider()
