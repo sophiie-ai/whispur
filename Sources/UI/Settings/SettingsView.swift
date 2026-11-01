@@ -64,6 +64,7 @@ struct SettingsView: View {
             page
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(SophiieTheme.Palette.surfaceWarm)
+                .overlay(alignment: .bottom) { RetryToast(retrier: appState.retrier) }
         }
         .background(alignment: .top) {
             WindowDragRegion()
@@ -107,7 +108,7 @@ struct SettingsView: View {
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
             speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor.keys).isReady,
-            hasDictated: !historyStore.items.isEmpty,
+            hasDictated: historyStore.items.contains { !$0.isFailed },
             hasShortcut: appState.hasAnyShortcut
         )
     }
@@ -161,9 +162,11 @@ struct SettingsView: View {
         case .preferences:
             PreferencesSettingsView(appState: appState, setup: setupState)
         case .activity:
-            ActivitySettingsView(historyStore: historyStore)
+            ActivitySettingsView(historyStore: historyStore, retrier: appState.retrier) { [weak appState] id in
+                appState?.retryFailedDictation(id)
+            }
         case .requests:
-            RequestsSettingsView(appState: appState)
+            RequestsSettingsView(appState: appState, retrier: appState.retrier)
         }
     }
 }

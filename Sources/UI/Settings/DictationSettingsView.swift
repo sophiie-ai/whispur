@@ -94,6 +94,7 @@ struct DictationSettingsView: View {
     /// One line of the cleaned text (the raw transcript if cleanup produced
     /// nothing), with line breaks folded into spaces.
     static func previewText(_ item: PipelineResult) -> String {
+        if item.isFailed { return "Failed: \(item.failure?.error ?? "")" }
         let cleaned = item.cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = cleaned.isEmpty ? item.rawTranscript : cleaned
         return text

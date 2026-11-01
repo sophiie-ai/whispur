@@ -474,20 +474,24 @@ final class DictationPipeline: ObservableObject {
             return
         }
 
-        do {
-            // The recording is always normalized, even while a stream is
-            // finishing: it is the fallback if streaming fails.
-            phase = stream == nil ? .normalizingAudio : .transcribing
-            let normalization = Task.detached(priority: .userInitiated) {
-                try AudioNormalization.normalize(recordedURL)
-            }
-            defer {
-                Task.detached {
-                    if let wavURL = try? await normalization.value {
-                        try? FileManager.default.removeItem(at: wavURL)
-                    }
+        // The recording is always normalized, even while a stream is
+        // finishing: it is the fallback if streaming fails, and the copy kept
+        // for a retry if the dictation fails. Removed at the end unless a
+        // failure moved it into the failed-audio folder.
+        phase = stream == nil ? .normalizingAudio : .transcribing
+        let normalization = Task.detached(priority: .userInitiated) {
+            try AudioNormalization.normalize(recordedURL)
+        }
+        defer {
+            Task.detached {
+                if let wavURL = try? await normalization.value {
+                    try? FileManager.default.removeItem(at: wavURL)
                 }
             }
+        }
+        let dictationID = UUID()
+
+        do {
 
             // Warm the LLM connection in parallel with STT. By the time the
             // transcript lands, the TLS handshake to the cleanup endpoint is
@@ -498,7 +502,8 @@ final class DictationPipeline: ObservableObject {
                 client.warmConnection(to: origin)
             }
 
-            let rawTranscript = try await StreamingFallback.transcript(
+            let rawTranscript = try await ProviderRequestContext.$dictationID.withValue(dictationID) {
+                try await StreamingFallback.transcript(
                 stream: stream,
                 timeout: Self.streamFinishTimeout,
                 report: { [weak self] outcome in
@@ -516,43 +521,17 @@ final class DictationPipeline: ObservableObject {
                 batch: { [self] in
                     try await batchTranscript(wavURL: try await normalization.value, initial: nil)
                 }
-            )
+                )
+            }
             guard let normalizedRawTranscript = TranscriptDecision.normalizedRawTranscript(rawTranscript) else {
                 dismissForNoSpeech()
                 return
             }
 
-            var cleanedText: String?
-            var llmModel: String?
-            let styleChoice = cleanupChoice()
-            var usedStyle: WritingStyle?
-
-            // Skip LLM cleanup for very short transcripts: an LLM tends to
-            // answer "thanks" instead of cleaning it. They are pasted raw.
-            if TranscriptDecision.shouldRunCleanup(for: normalizedRawTranscript),
-               let llmProvider = registry.makeLLMProvider(for: selectedLLM) {
-                phase = .cleaningTranscript
-
-                do {
-                    let response = try await llmProvider.complete(
-                        request: LLMRequest(
-                            systemPrompt: styleChoice?.systemPrompt ?? systemPrompt,
-                            userMessage: CleanupMessage.userMessage(
-                                transcript: normalizedRawTranscript,
-                                vocabulary: customVocabulary
-                            ),
-                            maxTokens: LLMRequest.cleanupMaxTokens(
-                                forTranscriptCharacters: normalizedRawTranscript.count
-                            )
-                        )
-                    )
-                    cleanedText = response.text
-                    llmModel = response.model
-                    usedStyle = styleChoice?.style
-                } catch {
-                    logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
-                }
-            }
+            let cleanup = await clean(normalizedRawTranscript, styleChoice: cleanupChoice(), updatesPhase: true)
+            let cleanedText = cleanup.text
+            let llmModel = cleanup.llmModel
+            let usedStyle = cleanup.style
 
             let finalTranscript: String
             switch TranscriptDecision.finalOutcome(raw: normalizedRawTranscript, cleaned: cleanedText) {
@@ -600,12 +579,104 @@ final class DictationPipeline: ObservableObject {
             // URLSession throws URLError.cancelled when its Task is cancelled
             // mid-request; treat it as a clean cancel rather than surfacing
             // a misleading "cancelled" error banner.
-            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+            if !DictationFailureClassifier.isFailure(error, taskCancelled: Task.isCancelled) {
                 logger.info("Pipeline processing cancelled")
                 phase = .idle
             } else {
+                // Keep the recording so the user can retry from Activity.
+                historyStore.recordFailure(
+                    id: dictationID,
+                    error: error.localizedDescription,
+                    wavURL: try? await normalization.value,
+                    sttProvider: selectedSTT,
+                    llmProvider: selectedLLM,
+                    appBundleID: recordingAppBundleID,
+                    style: cleanupChoice()?.style
+                )
                 presentError(error.localizedDescription)
             }
+        }
+    }
+
+    /// LLM cleanup of a raw transcript. A failure or skipped cleanup comes
+    /// back as nil text, which `TranscriptDecision.finalOutcome` turns into a
+    /// raw-transcript paste: never a failed dictation.
+    private func clean(
+        _ raw: String,
+        styleChoice: CleanupStyleChoice?,
+        updatesPhase: Bool
+    ) async -> (text: String?, llmModel: String?, style: WritingStyle?) {
+        // Skip LLM cleanup for very short transcripts: an LLM tends to
+        // answer "thanks" instead of cleaning it. They are pasted raw.
+        guard TranscriptDecision.shouldRunCleanup(for: raw),
+              let llmProvider = registry.makeLLMProvider(for: selectedLLM)
+        else { return (nil, nil, nil) }
+        if updatesPhase { phase = .cleaningTranscript }
+
+        do {
+            let response = try await llmProvider.complete(
+                request: LLMRequest(
+                    systemPrompt: styleChoice?.systemPrompt ?? systemPrompt,
+                    userMessage: CleanupMessage.userMessage(
+                        transcript: raw,
+                        vocabulary: customVocabulary
+                    ),
+                    maxTokens: LLMRequest.cleanupMaxTokens(
+                        forTranscriptCharacters: raw.count
+                    )
+                )
+            )
+            return (response.text, response.model, styleChoice?.style)
+        } catch {
+            logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
+            return (nil, nil, nil)
+        }
+    }
+
+    /// A retried dictation's text.
+    struct RetryResult: Equatable {
+        let rawTranscript: String
+        let text: String
+        let llmModel: String?
+        let style: WritingStyle?
+    }
+
+    enum RetryError: LocalizedError, Equatable {
+        case noRecording
+        case noSpeech
+
+        var errorDescription: String? {
+            switch self {
+            case .noRecording: "The recording for this dictation is no longer available."
+            case .noSpeech: "No speech was found in the recording."
+            }
+        }
+    }
+
+    /// Re-runs transcription and cleanup on a failed dictation's kept
+    /// recording, with the current providers and languages and the style of
+    /// the app it was dictated in. Never touches the overlay or pastes.
+    func retryTranscription(audioURL: URL, appBundleID: String?, dictationID: UUID) async throws -> RetryResult {
+        let raw = try await ProviderRequestContext.$dictationID.withValue(dictationID) {
+            try await batchTranscript(wavURL: audioURL, initial: nil, updatesPhase: false)
+        }
+        guard let normalizedRaw = TranscriptDecision.normalizedRawTranscript(raw) else {
+            throw RetryError.noSpeech
+        }
+        let styleChoice = cleanupStyle?(appBundleID)
+        let cleanup = await ProviderRequestContext.$dictationID.withValue(dictationID) {
+            await clean(normalizedRaw, styleChoice: styleChoice, updatesPhase: false)
+        }
+        switch TranscriptDecision.finalOutcome(raw: normalizedRaw, cleaned: cleanup.text) {
+        case .dismiss:
+            throw RetryError.noSpeech
+        case let .paste(text, rawFallbackReason):
+            return RetryResult(
+                rawTranscript: normalizedRaw,
+                text: text,
+                llmModel: rawFallbackReason == nil ? cleanup.llmModel : nil,
+                style: rawFallbackReason == nil ? cleanup.style : nil
+            )
         }
     }
 
@@ -613,8 +684,8 @@ final class DictationPipeline: ObservableObject {
     /// with the script guard behind it for users who speak several
     /// languages. `initial` is a streamed transcript the guard already
     /// rejected.
-    private func batchTranscript(wavURL: URL, initial: String?) async throws -> String {
-        phase = .transcribing
+    private func batchTranscript(wavURL: URL, initial: String?, updatesPhase: Bool = true) async throws -> String {
+        if updatesPhase { phase = .transcribing }
         guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
             throw STTError.missingAPIKey(provider: selectedSTT)
         }
@@ -768,19 +839,23 @@ enum PipelinePhase: Equatable {
 
 struct PipelineResult: Identifiable, Codable {
     let id: UUID
-    let rawTranscript: String
-    let cleanedText: String
+    var rawTranscript: String
+    var cleanedText: String
     let sttProvider: STTProviderID
     let llmProvider: LLMProviderID
-    let llmModel: String?
+    var llmModel: String?
     let timestamp: Date
     /// The app that was frontmost when recording started. Nil for results
     /// saved before styles existed.
     let appBundleID: String?
     /// The cleanup style used, or nil when cleanup didn't run.
-    let style: WritingStyle?
+    var style: WritingStyle?
+    /// Set when the dictation failed. Nil for every successful dictation and
+    /// for results saved before failures were kept.
+    var failure: DictationFailure?
 
     init(
+        id: UUID = UUID(),
         rawTranscript: String,
         cleanedText: String,
         sttProvider: STTProviderID,
@@ -788,9 +863,10 @@ struct PipelineResult: Identifiable, Codable {
         llmModel: String?,
         timestamp: Date,
         appBundleID: String? = nil,
-        style: WritingStyle? = nil
+        style: WritingStyle? = nil,
+        failure: DictationFailure? = nil
     ) {
-        self.id = UUID()
+        self.id = id
         self.rawTranscript = rawTranscript
         self.cleanedText = cleanedText
         self.sttProvider = sttProvider
@@ -799,5 +875,23 @@ struct PipelineResult: Identifiable, Codable {
         self.timestamp = timestamp
         self.appBundleID = appBundleID
         self.style = style
+        self.failure = failure
     }
+
+    /// Failed and not yet retried successfully.
+    var isFailed: Bool {
+        guard let failure else { return false }
+        return failure.retriedAt == nil
+    }
+}
+
+/// Why a dictation produced no text, and where its recording is kept.
+struct DictationFailure: Codable, Equatable {
+    /// The error shown to the user (the latest one, after a failed retry).
+    var error: String
+    /// File name in `FailedAudioStore`, or nil when no recording was kept
+    /// (normalization failed) or it has been deleted or expired.
+    var audioFileName: String?
+    /// When a retry succeeded. The entry then carries the retried text.
+    var retriedAt: Date?
 }

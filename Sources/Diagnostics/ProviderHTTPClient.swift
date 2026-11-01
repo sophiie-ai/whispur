@@ -216,7 +216,8 @@ final class ProviderHTTPClient {
             durationMS: durationMS,
             requestSummary: requestSummary,
             responseBodyPreview: responseBodyPreview,
-            errorMessage: errorMessage
+            errorMessage: errorMessage,
+            dictationID: ProviderRequestContext.dictationID
         )
         await requestLog.record(entry)
     }

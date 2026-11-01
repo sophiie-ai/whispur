@@ -30,6 +30,14 @@ enum ProviderRequestStatusFilter: String, CaseIterable, Identifiable {
 
 struct RequestsSettingsView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var retrier: FailedDictationRetrier
+    @ObservedObject private var history: PipelineHistoryStore
+
+    init(appState: AppState, retrier: FailedDictationRetrier) {
+        self.appState = appState
+        self.retrier = retrier
+        _history = ObservedObject(wrappedValue: appState.historyStore)
+    }
 
     @State private var providerFilter = "all"
     @State private var statusFilter: ProviderRequestStatusFilter = .all
@@ -75,7 +83,9 @@ struct RequestsSettingsView: View {
             )
             .frame(minWidth: 260, idealWidth: 360)
 
-            RequestsInspectorPane(entry: selectedEntry)
+            RequestsInspectorPane(entry: selectedEntry, failedDictation: failedDictation(for: selectedEntry), isRetrying: failedDictation(for: selectedEntry).map { retrier.isRunning($0.id) } ?? false) { id in
+                appState.retryFailedDictation(id)
+            }
                 .frame(minWidth: 300)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -104,6 +114,12 @@ struct RequestsSettingsView: View {
             return filteredEntries.first(where: { $0.id == selectedEntryID })
         }
         return filteredEntries.first
+    }
+
+    /// The failed dictation a request belonged to, while it can be retried.
+    private func failedDictation(for entry: ProviderRequestLogEntry?) -> PipelineResult? {
+        guard let id = entry?.dictationID, let item = history.item(id), history.canRetry(item) else { return nil }
+        return item
     }
 
     private var errorCount: Int {
@@ -213,6 +229,11 @@ private struct RequestsListPane: View {
 
 private struct RequestsInspectorPane: View {
     let entry: ProviderRequestLogEntry?
+    /// Set when the request belonged to a dictation that failed and still
+    /// has its recording.
+    var failedDictation: PipelineResult?
+    var isRetrying = false
+    var onRetry: (UUID) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -224,6 +245,23 @@ private struct RequestsInspectorPane: View {
                         PreferenceBadge(title: statusLabel(for: entry), tone: statusTone(for: entry))
                         PreferenceBadge(title: "\(entry.durationMS) ms", tone: .neutral)
                         Spacer(minLength: 0)
+                    }
+
+                    if let failedDictation {
+                        HStack(spacing: 10) {
+                            Text("This request belonged to a dictation that failed.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(SophiieTheme.Palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            if isRetrying {
+                                ProgressView().controlSize(.small).accessibilityLabel("Retrying")
+                            } else {
+                                Button("Retry dictation") { onRetry(failedDictation.id) }
+                                    .buttonStyle(.sophiiePrimary)
+                                    .help("Transcribe the kept recording again and copy the text")
+                            }
+                        }
                     }
 
                     ProviderRequestDetailBlock(title: "When", value: entry.timestamp.formatted(date: .abbreviated, time: .standard), tone: .neutral)
