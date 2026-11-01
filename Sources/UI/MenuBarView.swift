@@ -358,7 +358,7 @@ struct MenuBarView: View {
             .keyboardShortcut(",", modifiers: .command)
 
             Button("Check for Updates…") {
-                appState.sparkleUpdater.checkForUpdates()
+                checkForUpdates()
             }
             .disabled(!appState.sparkleUpdater.canCheckForUpdates)
 
@@ -382,6 +382,14 @@ struct MenuBarView: View {
     private func openAbout() {
         WindowUtilities.dismissMenuBarPopover()
         WindowUtilities.focusOrOpenWindow(id: .about, using: openWindow)
+    }
+
+    private func checkForUpdates() {
+        // Close the menu bar window first: Sparkle activates the app and shows
+        // its own window, and an app-owned popover does not auto-close on that
+        // activation, so it would otherwise stay on top of the update dialog.
+        WindowUtilities.dismissMenuBarPopover()
+        appState.sparkleUpdater.checkForUpdates()
     }
 
     private var primaryActionTitle: String {
