@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.23.0](https://github.com/sophiie-ai/whispur/compare/v0.22.1...v0.23.0) (2026-11-01)
+
+
+### Features
+
+* **settings:** add per-app writing styles ([#80](https://github.com/sophiie-ai/whispur/issues/80)) ([d88c033](https://github.com/sophiie-ai/whispur/commit/d88c033d2b2560143dabf9cbb542d60d4e8025f1))
+* **settings:** add the Dictionary page with term sources ([#79](https://github.com/sophiie-ai/whispur/issues/79)) ([4195ccf](https://github.com/sophiie-ai/whispur/commit/4195ccf8579e09e149ec67ef9b8b8d4857fd351a))
+* **settings:** add the settings kit, midnight sidebar and Dictation page ([#77](https://github.com/sophiie-ai/whispur/issues/77)) ([280551f](https://github.com/sophiie-ai/whispur/commit/280551f76677dd8f175205f3d2920c7c8e8adf9c))
+* **settings:** restyle the remaining settings pages on the kit ([#78](https://github.com/sophiie-ai/whispur/issues/78)) ([aaaa83a](https://github.com/sophiie-ai/whispur/commit/aaaa83aebbd81d7d6e65d342f77d221b65e7309f))
+
 ## [0.22.1](https://github.com/sophiie-ai/whispur/compare/v0.22.0...v0.22.1) (2026-11-01)
 
 
