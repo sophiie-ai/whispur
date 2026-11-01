@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.0](https://github.com/sophiie-ai/whispur/compare/v0.20.1...v0.21.0) (2026-11-01)
+
+
+### Features
+
+* **pipeline:** rewrite the default cleanup prompt and add a cleanup eval set ([#66](https://github.com/sophiie-ai/whispur/issues/66)) ([a2c88c6](https://github.com/sophiie-ai/whispur/commit/a2c88c68426bc11c6423a6d70db2b5925bfa4286))
+
+
+### Bug Fixes
+
+* **pipeline:** move cleanup to current models and stop losing dictations ([#65](https://github.com/sophiie-ai/whispur/issues/65)) ([738cf86](https://github.com/sophiie-ai/whispur/commit/738cf86aa58e2e7a566477f1fc4362f1a5c73598))
+* **ui:** close the menu bar window when checking for updates ([#63](https://github.com/sophiie-ai/whispur/issues/63)) ([bdb764c](https://github.com/sophiie-ai/whispur/commit/bdb764ce8910ff8ac7ceaa7e1cf3df56195251b9))
+
 ## [0.20.1](https://github.com/sophiie-ai/whispur/compare/v0.20.0...v0.20.1) (2026-10-31)
 
 
