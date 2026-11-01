@@ -84,6 +84,8 @@ final class DictationPipeline: ObservableObject {
     /// returns. Used by the learning module to snapshot the focused field
     /// before the user starts editing.
     var onPasteCompleted: ((String) -> Void)?
+    /// Fires once a pasted dictation is saved to history ("Use raw").
+    var onDictationPasted: ((PipelineResult) -> Void)?
 
     private var audioLevelCancellable: AnyCancellable?
     /// Bumped by every start, stop and cancel, so a recorder start that
@@ -568,6 +570,7 @@ final class DictationPipeline: ObservableObject {
 
             lastResult = result
             historyStore.add(result)
+            onDictationPasted?(result)
 
             phase = .done(finalTranscript)
             scheduleResetToIdle(after: .milliseconds(1200))
@@ -856,6 +859,8 @@ struct PipelineResult: Identifiable, Codable {
     /// Set when the dictation failed. Nil for every successful dictation and
     /// for results saved before failures were kept.
     var failure: DictationFailure?
+    /// When the user swapped the cleaned paste for the raw transcript.
+    var usedRawAt: Date?
 
     init(
         id: UUID = UUID(),

@@ -37,6 +37,20 @@ final class HotkeyManager {
     }
     nonisolated(unsafe) var cancelWatchEnabled = false
 
+    /// What happens on the keyboard while the "Use raw" toast is up.
+    enum UseRawKey: Sendable {
+        /// ⌥⌘Z: swap the paste for the raw transcript.
+        case useRaw
+        /// Any other key: the user kept typing, so the offer ends.
+        case otherKey
+    }
+
+    /// ⌥⌘Z (Z is virtual key 6). Only ours while the toast is up.
+    nonisolated static let useRawKeyCode: UInt16 = 6
+    /// Armed while the "Use raw" toast is up. ⌥⌘Z is then consumed.
+    nonisolated(unsafe) var useRawWatchEnabled = false
+    nonisolated(unsafe) var onUseRawKey: ((UseRawKey) -> Void)?
+
     /// The Settings master switch. While false, no shortcut starts or stops
     /// dictation (Esc-to-cancel still works). Turning it off drops any
     /// in-flight hold or toggle state so nothing fires when it comes back.
@@ -409,13 +423,26 @@ final class HotkeyManager {
     }
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
-        handleKeyDown(keyCode: event.keyCode)
+        handleKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+    }
+
+    /// Whether a key-down is the "Use raw" shortcut: exactly ⌥⌘Z.
+    nonisolated static func isUseRawShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        keyCode == useRawKeyCode
+            && modifiers.intersection([.command, .option, .shift, .control]) == [.command, .option]
     }
 
     @discardableResult
-    nonisolated func handleKeyDown(keyCode: UInt16) -> Bool {
+    nonisolated func handleKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) -> Bool {
         stateLock.withLock { state in
             _ = state.pressedKeyCodes.insert(keyCode)
+        }
+        if useRawWatchEnabled {
+            if Self.isUseRawShortcut(keyCode: keyCode, modifiers: modifiers) {
+                onUseRawKey?(.useRaw)
+                return true
+            }
+            onUseRawKey?(.otherKey)
         }
         // Escape while recording → cancel (consume the event so the focused app doesn't see it).
         if keyCode == 53 {

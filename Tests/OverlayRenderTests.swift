@@ -27,6 +27,20 @@ final class OverlayRenderTests: XCTestCase {
         try checkPanel(style: .standard, phase: .recording, name: "standard-recording")
     }
 
+    func testUseRawToastShadowFadesOutInsideThePanel() throws {
+        let controller = UseRawController()
+        let toast = UseRawToastPanelManager()
+        toast.bind(to: controller, styleProvider: { .standard })
+        controller.setOfferForRendering(UseRawOffer.Offer(
+            dictationID: UUID(), rawTranscript: "um ship it", pastedText: "Ship it.",
+            processID: 1, bundleID: nil, expiresAt: .distantFuture
+        ))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        let panel = try XCTUnwrap(toast.panelForTesting)
+        try checkRendered(panel: panel, name: "use-raw-toast")
+        panel.orderOut(nil)
+    }
+
     private func checkPanel(style: OverlayStyle, phase: PipelinePhase, name: String) throws {
         let pipeline = DictationPipeline(
             recorder: AudioRecorder(),
@@ -43,6 +57,10 @@ final class OverlayRenderTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
         let panel = try XCTUnwrap(overlay.panelForTesting)
+        try checkRendered(panel: panel, name: name)
+    }
+
+    private func checkRendered(panel: NSPanel, name: String) throws {
         let content = try XCTUnwrap(panel.contentView)
         content.layoutSubtreeIfNeeded()
         let size = panel.frame.size

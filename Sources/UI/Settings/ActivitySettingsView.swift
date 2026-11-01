@@ -66,7 +66,8 @@ private struct ActivityEntry: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.cleanedText)
+                        // After "Use raw" the app holds the raw transcript.
+                        Text(item.usedRawAt == nil ? item.cleanedText : item.rawTranscript)
                             .font(.system(size: 13))
                             .foregroundStyle(SophiieTheme.Palette.ink)
                             .lineLimit(isExpanded ? nil : 2)
@@ -102,6 +103,9 @@ private struct ActivityEntry: View {
                         }
                         if item.failure?.retriedAt != nil {
                             PreferenceBadge(title: "Retried", tone: .good)
+                        }
+                        if item.usedRawAt != nil {
+                            PreferenceBadge(title: "Used raw", tone: .neutral)
                         }
                     }
                 }

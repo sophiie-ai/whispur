@@ -110,6 +110,11 @@ final class PipelineHistoryStore: ObservableObject {
         }
     }
 
+    /// The user swapped the cleaned paste for the raw transcript.
+    func markUsedRaw(_ id: UUID, at date: Date = Date()) {
+        update(id) { $0.usedRawAt = date }
+    }
+
     /// A retry failed: keep the recording, show the new error.
     func markRetryFailed(_ id: UUID, error: String) {
         update(id) { $0.failure?.error = error }
