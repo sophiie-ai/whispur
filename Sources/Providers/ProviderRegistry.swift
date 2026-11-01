@@ -48,6 +48,9 @@ final class ProviderRegistry {
                 httpClient: httpClient,
                 model: Self.sttModel(for: id) ?? MistralSTT.defaultModel
             )
+        case .metaMuse:
+            guard let key = keychain.get(.metaAPIKey) else { return nil }
+            return MetaMuseSTT(apiKey: key, httpClient: httpClient)
         case .apple:
             return AppleSTT()
         }

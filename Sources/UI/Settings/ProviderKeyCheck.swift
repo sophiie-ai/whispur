@@ -13,6 +13,7 @@ struct ProviderKeyCheck: Equatable {
         case deepgramProjects
         case elevenLabsUser
         case mistralModels
+        case metaModels
     }
 
     static let openAIDefaultBaseURL = "https://api.openai.com/v1"
@@ -31,6 +32,7 @@ struct ProviderKeyCheck: Equatable {
         case .deepgram: endpoint = .deepgramProjects
         case .elevenlabs: endpoint = .elevenLabsUser
         case .mistral: endpoint = .mistralModels
+        case .metaMuse: endpoint = .metaModels
         case .apple: return nil
         }
         guard let key = provider.keychainKeys.first else { return nil }
@@ -71,6 +73,8 @@ struct ProviderKeyCheck: Equatable {
             urlString = "https://api.elevenlabs.io/v1/user"
         case .mistralModels:
             urlString = "https://api.mistral.ai/v1/models"
+        case .metaModels:
+            urlString = "https://api.meta.ai/v1/models"
         }
         guard let url = URL(string: urlString) else { return nil }
 
@@ -79,7 +83,7 @@ struct ProviderKeyCheck: Equatable {
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         switch endpoint {
-        case .openAIModels, .groqModels, .mistralModels:
+        case .openAIModels, .groqModels, .mistralModels, .metaModels:
             request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
         case .anthropicModels:
             request.setValue(secret, forHTTPHeaderField: "x-api-key")

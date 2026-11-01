@@ -23,7 +23,7 @@ extension STTProviderID {
     /// Providers that offer "Stream audio while you talk".
     var supportsStreaming: Bool {
         switch self {
-        case .elevenlabs: true
+        case .elevenlabs, .metaMuse: true
         default: false
         }
     }
