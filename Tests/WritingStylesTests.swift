@@ -36,6 +36,14 @@ final class WritingStylesTests: XCTestCase {
         }
     }
 
+    func testStyleSectionsStayShort() throws {
+        for style in [WritingStyle.casual, .formal, .verbatim, .codeAware] {
+            let section = try XCTUnwrap(style.promptSection)
+            XCTAssertLessThanOrEqual(section.split(separator: "\n").count, 2, "\(style)")
+            XCTAssertLessThanOrEqual(section.split { $0.isWhitespace }.count, 50, "\(style)")
+        }
+    }
+
     func testStyleStringsHaveNoEmDashes() {
         for style in WritingStyle.allCases {
             for string in [style.title, style.sample, style.promptSection ?? ""] {

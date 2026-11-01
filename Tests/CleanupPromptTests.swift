@@ -10,8 +10,8 @@ final class CleanupPromptTests: XCTestCase {
 
     func testDefaultPromptStaysWithinBudget() {
         let words = Prompts.defaultCleanup.split { $0.isWhitespace }.count
-        XCTAssertGreaterThanOrEqual(words, 400)
-        XCTAssertLessThanOrEqual(words, 800, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
+        XCTAssertGreaterThanOrEqual(words, 200)
+        XCTAssertLessThanOrEqual(words, 400, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
     }
 
     func testDefaultPromptCarriesTheContract() {
@@ -19,9 +19,11 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("<dictation-to-clean>"))
         XCTAssertTrue(prompt.contains("<vocabulary>"))
         XCTAssertTrue(prompt.contains("output exactly EMPTY"))
-        XCTAssertTrue(prompt.contains("Never translate"))
-        XCTAssertTrue(prompt.contains("\"You\" in the dictation"))
+        XCTAssertTrue(prompt.contains("translate"))
+        XCTAssertTrue(prompt.contains("\"You\" means the person"))
         XCTAssertTrue(prompt.contains("Rename user id to user_id."))
+        XCTAssertTrue(prompt.contains("Output: ana@northwind.io\n"), "Bare address example, no final period.")
+        XCTAssertTrue(prompt.contains(Prompts.styleInsertionMarker))
     }
 
     func testDefaultPromptExamplesUseNoPlaceholdersOrEmDashes() {

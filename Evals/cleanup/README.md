@@ -113,26 +113,21 @@ loosening the scorer.
 
 ## Latest results
 
-Run 2026-11-01. New prompt: 796 words, about 1.2k input tokens per request including the user
-message. Current prompt (origin/main): 1,872 words, about 2.7k.
+Run 2026-11-02 on all 61 cases. Short prompt (working tree): 391 words, about 630 input tokens per
+request including the user message. Previous prompt (origin/main, v0.23.2): 796 words, about 1.2k.
 
-| Prompt | Provider | Runs passed | Critical failures | Held-out | p50 / p95 latency | Input tokens |
-|---|---|---|---|---|---|---|
-| current | OpenAI `gpt-6-luna`, N=2 | 81/100 | 11 | 16/20 | 1.11 s / 1.71 s | 2,710 |
-| new | OpenAI `gpt-6-luna`, N=2 | **100/100** | **0** | **20/20** | 1.04 s / 1.47 s | 1,199 |
-| new | Groq `gpt-oss-20b`, tune split only, N=1 | 39/40 | 1 | not run | 0.38 s / 0.62 s | 1,264 |
-| current | Groq `gpt-oss-20b` | not run | | | | |
+| Prompt | Provider | Runs passed | Critical failures | Held-out | Email/URL runs | p50 / p95 latency | Input tokens |
+|---|---|---|---|---|---|---|---|
+| previous | OpenAI `gpt-6-luna`, N=2 | 118/122 | 4 | 26/26 | 20/24 | 1.10 s / 1.82 s | 1,199 |
+| short | OpenAI `gpt-6-luna`, N=2 | **120/122** | **0** | 24/26 | **24/24** | 0.98 s / 1.39 s | 626 |
+| previous | Groq `gpt-oss-20b` | not run | | | | | |
+| short | Groq `gpt-oss-20b` | not run | | | | | |
 
-The Groq rows are incomplete: the free-tier daily token cap (200k) ran out during tuning, so the
-full N=2 Groq comparison for both prompts still has to be run (see Running).
+The Groq rows are still missing: the free-tier daily cap (200k tokens, rolling 24 hours) was used up
+by the previous tuning session. A full N=2 pass costs about 85k tokens for the short prompt and
+about 155k for the previous one, so the two need separate days on the free tier.
 
-Where the current prompt fails on OpenAI: it drops "no, no" and the repeated "really" (lost
-negation and emphasis), drops words from the long dictation, turns "two plus two equals four" into
-`2 + 2 = 4`, deletes the word "comma" in a sentence about the word comma, rewrites "Sorry I'm late",
-adds `$` to dollar amounts, turns "first ... then ..." prose into a numbered list, and keeps a
-trailing "Thanks for watching." Some of these (the `$`, the numbered list) were deliberate in the
-old prompt; this set encodes the new decisions above.
-
-Remaining failure on the new prompt: on Groq `gpt-oss-20b`, `correction-spanish` resolves the
-Spanish correction but translates the English half of the mixed-language sentence into Spanish
-(earlier rounds also missed the Spanish and German corrections on Groq). It passes on OpenAI.
+The previous prompt fails `email-vocab-respell` and `email-no-vocab` ("Jake at sophie.ai" comes back
+as `Jake@sophie.ai`: capitalized, and the vocabulary spelling not applied). The short prompt's two
+failures are the held-out `prose-first-then`, written as two sentences
+(`First, we check staging. Then we check production.`) rather than one.
