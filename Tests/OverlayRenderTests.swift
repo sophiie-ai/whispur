@@ -27,6 +27,28 @@ final class OverlayRenderTests: XCTestCase {
         try checkPanel(style: .standard, phase: .recording, name: "standard-recording")
     }
 
+    /// Streaming on: live words under the standard overlay and beside the
+    /// compact waveform, short and long enough to be cut.
+    func testLiveWordsWhileStreaming() throws {
+        let short = "Can we push the design review"
+        let long = "Can we push the design review to Thursday afternoon so everyone gets a chance to see the new onboarding flow before we decide on the empty states"
+        try checkPanel(style: .standard, phase: .recording, name: "standard-live-empty", live: "")
+        try checkPanel(style: .standard, phase: .recording, name: "standard-live-short", live: short)
+        try checkPanel(style: .standard, phase: .recording, name: "standard-live-long", live: long)
+        try checkPanel(style: .standard, phase: .transcribing, name: "standard-live-transcribing", live: long)
+        try checkPanel(style: .compact, phase: .recording, name: "compact-live-short", live: "Can we push")
+        try checkPanel(style: .compact, phase: .recording, name: "compact-live-long", live: long)
+    }
+
+    func testLiveTranscriptTailKeepsTheNewestWholeWords() {
+        XCTAssertEqual(LiveTranscriptTail.tail("  ship   it\nnow ", budget: 30).text, "ship it now")
+        XCTAssertEqual(LiveTranscriptTail.tail("ship it now", budget: 30).truncated, false)
+        let cut = LiveTranscriptTail.tail("one two three four five", budget: 12)
+        XCTAssertEqual(cut.text, "four five")
+        XCTAssertTrue(cut.truncated)
+        XCTAssertEqual(LiveTranscriptTail.tail("supercalifragilistic", budget: 5).text, "istic")
+    }
+
     func testUseRawToastShadowFadesOutInsideThePanel() throws {
         let controller = UseRawController()
         let toast = UseRawToastPanelManager()
@@ -41,7 +63,7 @@ final class OverlayRenderTests: XCTestCase {
         panel.orderOut(nil)
     }
 
-    private func checkPanel(style: OverlayStyle, phase: PipelinePhase, name: String) throws {
+    private func checkPanel(style: OverlayStyle, phase: PipelinePhase, name: String, live: String? = nil) throws {
         let pipeline = DictationPipeline(
             recorder: AudioRecorder(),
             registry: ProviderRegistry(httpClient: ProviderHTTPClient(requestLog: ProviderRequestLog(
@@ -51,9 +73,13 @@ final class OverlayRenderTests: XCTestCase {
                 fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("overlay-history-\(UUID().uuidString).json")
             )
         )
+        if live != nil {
+            pipeline.streamingEnabled = true
+            pipeline.selectedSTT = .elevenlabs
+        }
         let overlay = OverlayPanelManager()
         overlay.bind(to: pipeline, styleProvider: { style }, onStop: {}, onCancel: {})
-        pipeline.setPhaseForRendering(phase, samples: Self.waveform)
+        pipeline.setPhaseForRendering(phase, samples: Self.waveform, liveTranscript: live)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
         let panel = try XCTUnwrap(overlay.panelForTesting)

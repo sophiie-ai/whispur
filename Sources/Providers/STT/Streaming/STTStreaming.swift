@@ -151,6 +151,9 @@ final class STTStreamingSession: @unchecked Sendable {
     /// Where the stream goes, without credentials or query, for the
     /// Requests tab.
     let endpointDescription: String
+    /// The words heard so far (committed segments plus the current interim
+    /// text), each time they change. Called on the socket's receive task;
+    /// set it before `start`.
     var onPartial: ((String) -> Void)?
 
     private let format: STTStreamingWireFormat
@@ -327,13 +330,16 @@ final class STTStreamingSession: @unchecked Sendable {
             }
             waiting.forEach { $0.resume() }
         case let .partial(text):
-            onPartial?(text)
+            let live = lock.withLock { Self.liveText(committed: committed, partial: text) }
+            if !live.isEmpty { onPartial?(live) }
         case let .committed(text):
-            lock.withLock {
+            let live: String = lock.withLock {
                 commitEvents += 1
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { committed.append(trimmed) }
+                return Self.liveText(committed: committed, partial: "")
             }
+            if !live.isEmpty, !isTerminal { onPartial?(live) }
             completeIfCommittedAfterFinish()
         case let .completed(text):
             let final = text ?? lock.withLock { committed.joined(separator: " ") }
@@ -343,6 +349,12 @@ final class STTStreamingSession: @unchecked Sendable {
         case .ignored:
             break
         }
+    }
+
+    /// Committed segments plus the interim text that follows them.
+    static func liveText(committed: [String], partial: String) -> String {
+        let interim = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (committed + [interim]).filter { !$0.isEmpty }.joined(separator: " ")
     }
 
     /// Commit-based providers answer the final commit with one more
