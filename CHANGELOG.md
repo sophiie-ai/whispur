@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/sophiie-ai/whispur/compare/v0.22.0...v0.22.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **release:** build releases on the macOS 26 runner ([#75](https://github.com/sophiie-ai/whispur/issues/75)) ([f61c1c9](https://github.com/sophiie-ai/whispur/commit/f61c1c9e23f2a027c0d7a98b0556a0f617bb207d))
+
 ## [0.22.0](https://github.com/sophiie-ai/whispur/compare/v0.21.0...v0.22.0) (2026-11-01)
 
 
