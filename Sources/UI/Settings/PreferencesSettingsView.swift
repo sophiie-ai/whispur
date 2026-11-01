@@ -208,12 +208,13 @@ struct DefaultPromptDisclosure: View {
 private struct AudioInputDeviceRow: View {
     @ObservedObject var appState: AppState
     @State private var devices: [AudioDevice] = []
+    @Environment(\.listInputDevices) private var listInputDevices
 
     private static let systemDefaultTag = ""
 
     var body: some View {
         SettingsRow(icon: "waveform.circle", title: "Input device", subtitle: subtitle) {
-            RowPicker("Input device", selection: $appState.preferredAudioInputUID) {
+            RowPicker("Input device", selection: $appState.preferredAudioInputUID, maxWidth: 200) {
                 Text("System default").tag(Self.systemDefaultTag)
                 if !devices.isEmpty {
                     Divider()
@@ -222,9 +223,8 @@ private struct AudioInputDeviceRow: View {
                     }
                 }
             }
-            .frame(maxWidth: 220)
         }
-        .onAppear { devices = AudioDevice.availableInputDevices() }
+        .onAppear { devices = listInputDevices() }
     }
 
     private var subtitle: String {
@@ -233,5 +233,18 @@ private struct AudioInputDeviceRow: View {
             return "The saved device is not connected, so recording uses the system default."
         }
         return "\"System default\" follows the macOS Sound setting."
+    }
+}
+
+private struct ListInputDevicesKey: EnvironmentKey {
+    static let defaultValue: @Sendable () -> [AudioDevice] = { AudioDevice.availableInputDevices() }
+}
+
+extension EnvironmentValues {
+    /// Lists the input devices the Preferences page offers. Renders swap in a
+    /// fixed list so the output does not depend on the machine's hardware.
+    var listInputDevices: @Sendable () -> [AudioDevice] {
+        get { self[ListInputDevicesKey.self] }
+        set { self[ListInputDevicesKey.self] = newValue }
     }
 }
