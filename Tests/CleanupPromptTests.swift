@@ -11,7 +11,7 @@ final class CleanupPromptTests: XCTestCase {
     func testDefaultPromptStaysWithinBudget() {
         let words = Prompts.defaultCleanup.split { $0.isWhitespace }.count
         XCTAssertGreaterThanOrEqual(words, 200)
-        XCTAssertLessThanOrEqual(words, 400, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
+        XCTAssertLessThanOrEqual(words, 430, "Keep the default prompt short; re-run scripts/eval-cleanup.py after changes.")
     }
 
     func testDefaultPromptCarriesTheContract() {

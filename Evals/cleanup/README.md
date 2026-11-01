@@ -4,7 +4,7 @@ Checks the default cleanup prompt (`Prompts.defaultCleanup`) against a fixed set
 Each request is built the way the app builds it, sent to a real provider, and the model's output
 is scored against an expected cleanup.
 
-- `cases.jsonl`: 61 cases (48 tune, 13 held-out), one JSON object per line.
+- `cases.jsonl`: 90 cases (73 tune, 17 held-out), one JSON object per line.
 - `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it.
   `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile` and `eval-cleanup.py --self-test`
   both check against it, so the Swift and Python request builders can't drift apart.
@@ -64,8 +64,8 @@ Each line has:
 | `loose_punctuation` | Optional. Compare ignoring `. , ; : !` and case, for cases about content rather than punctuation (long dictations, "Sorry I'm late"). |
 | `strict_period` | Optional. The trailing period is not optional, for a bare address or command that must not gain one (`jake@sophiie.ai`, not `jake@sophiie.ai.`). |
 
-The held-out split (13 cases: the original 10, plus 3 email/URL cases added with the email/URL set)
-was set aside before tuning started. While tuning the new prompt,
+The held-out split (17 cases: the original 10, 3 email/URL cases added with the email/URL set, and
+4 self-correction cases added with the correction set) was set aside before tuning started. While tuning the new prompt,
 only tuning-split failures were looked at; held-out results were read as totals only. Keep it that
 way when iterating, or the held-out numbers stop meaning anything.
 
@@ -100,9 +100,18 @@ loosening the scorer.
   doesn't know whether "dollars" means USD, AUD or CAD, so a `$` would be a guess.
 - **Lists.** Only from explicitly dictated items ("bullet", "next item", "new line"). `first ...
   then ...` prose and sentences that mention a bullet stay prose.
-- **Self-corrections.** Only clear replacements ("Tuesday, no, Wednesday"); "sorry", "actually",
-  "no", "I mean" are content on their own. Discard phrases are kept when they're part of the
-  message ("please ignore my last email") or quoted.
+- **Self-corrections.** A cue ("no", "sorry", "I mean", "actually", "wait", "make that", Spanish
+  "perdón", "digo", "o sea", "mejor dicho") directly followed by a replacement for the words just
+  before it keeps only the replacement (`schedule it for Tuesday oh sorry for Thursday` becomes
+  `Schedule it for Thursday.`), also inside a dictated list. Anywhere else the cue is content:
+  `sorry I'm late`, `I mean it`, `no, we shouldn't`, `actually that's a good idea` keep every word.
+  Retractions ("start over", "forget the room number") drop what they retract; discard phrases are
+  kept when they're part of the message ("please ignore my last email") or quoted.
+- **Voice commands are code, not prompt.** "scratch that" / "delete that", "new line" and "new
+  paragraph" are applied by `VoiceCommands` (unit-tested in `VoiceCommandsTests`) on the raw
+  transcript before cleanup, so this eval never sees them. What the eval does pin is the cleanup
+  keeping the line breaks they insert (`linebreak-kept`, `linebreak-paragraph-kept`; blank lines
+  are dropped by the scorer, and the app restores them after cleanup).
 - **Emails and URLs.** Spoken addresses are written out (`jake at sophiie dot ai` becomes
   `jake@sophiie.ai`, `whispur dot app slash download` becomes `whispur.app/download`), lowercase,
   with vocabulary spellings applied to the domain. A dictation that is only an address gets no final
@@ -113,21 +122,18 @@ loosening the scorer.
 
 ## Latest results
 
-Run 2026-11-02 on all 61 cases. Short prompt (working tree): 391 words, about 630 input tokens per
-request including the user message. Previous prompt (origin/main, v0.23.2): 796 words, about 1.2k.
+Run 2026-11-02 on all 90 cases (the 29 self-correction cases are tagged `new-corrections`).
+Corrections prompt (working tree): 428 words, about 690 input tokens per request including the
+user message. Previous prompt (origin/main, v0.24.0): 391 words, about 625.
 
-| Prompt | Provider | Runs passed | Critical failures | Held-out | Email/URL runs | p50 / p95 latency | Input tokens |
-|---|---|---|---|---|---|---|---|
-| previous | OpenAI `gpt-6-luna`, N=2 | 118/122 | 4 | 26/26 | 20/24 | 1.10 s / 1.82 s | 1,199 |
-| short | OpenAI `gpt-6-luna`, N=2 | **120/122** | **0** | 24/26 | **24/24** | 0.98 s / 1.39 s | 626 |
-| previous | Groq `gpt-oss-20b` | not run | | | | | |
-| short | Groq `gpt-oss-20b` | not run | | | | | |
+| Prompt | Provider | Runs passed | Critical failures | Held-out (N=2 / N=4) | `new-corrections` runs | p50 / p95 latency |
+|---|---|---|---|---|---|---|
+| v0.24.0 | OpenAI `gpt-6-luna`, N=2 | 176/180 | 0 | 32/34 / 64/68 | 56/58 | 0.99 s / 1.40 s |
+| corrections | OpenAI `gpt-6-luna`, N=2 | **178/180** | 0 | 32/34 / 64/68 | **58/58** | 0.98 s / 1.31 s |
+| v0.24.0 | Groq `gpt-oss-20b` | pending | | | | |
+| corrections | Groq `gpt-oss-20b` | pending | | | | |
 
-The Groq rows are still missing: the free-tier daily cap (200k tokens, rolling 24 hours) was used up
-by the previous tuning session. A full N=2 pass costs about 85k tokens for the short prompt and
-about 155k for the previous one, so the two need separate days on the free tier.
-
-The previous prompt fails `email-vocab-respell` and `email-no-vocab` ("Jake at sophie.ai" comes back
-as `Jake@sophie.ai`: capitalized, and the vocabulary spelling not applied). The short prompt's two
-failures are the held-out `prose-first-then`, written as two sentences
-(`First, we check staging. Then we check production.`) rather than one.
+Groq results are pending: the free-tier quota was kept for a separate run, so neither prompt was
+scored on Groq. Both prompts fail the held-out `prose-first-then` (written as two sentences). The
+v0.24.0 prompt also flattens the line break in `linebreak-kept` (`Hello, Maya. The build passed.`),
+the reason for the new "Keep existing line breaks" rule.

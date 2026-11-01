@@ -528,13 +528,14 @@ final class DictationPipeline: ObservableObject {
                 return
             }
 
-            let cleanup = await clean(normalizedRawTranscript, styleChoice: cleanupChoice(), updatesPhase: true)
+            let spoken = VoiceCommands.apply(to: normalizedRawTranscript)
+            let cleanup = await clean(spoken, styleChoice: cleanupChoice(), updatesPhase: true)
             let cleanedText = cleanup.text
             let llmModel = cleanup.llmModel
             let usedStyle = cleanup.style
 
             let finalTranscript: String
-            switch TranscriptDecision.finalOutcome(raw: normalizedRawTranscript, cleaned: cleanedText) {
+            switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanedText) {
             case .dismiss:
                 dismissForNoSpeech()
                 return
@@ -626,7 +627,8 @@ final class DictationPipeline: ObservableObject {
                     )
                 )
             )
-            return (response.text, response.model, styleChoice?.style)
+            let text = VoiceCommands.restoreLineBreaks(in: response.text, from: raw)
+            return (text, response.model, styleChoice?.style)
         } catch {
             logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
             return (nil, nil, nil)
@@ -664,10 +666,11 @@ final class DictationPipeline: ObservableObject {
             throw RetryError.noSpeech
         }
         let styleChoice = cleanupStyle?(appBundleID)
+        let spoken = VoiceCommands.apply(to: normalizedRaw)
         let cleanup = await ProviderRequestContext.$dictationID.withValue(dictationID) {
-            await clean(normalizedRaw, styleChoice: styleChoice, updatesPhase: false)
+            await clean(spoken, styleChoice: styleChoice, updatesPhase: false)
         }
-        switch TranscriptDecision.finalOutcome(raw: normalizedRaw, cleaned: cleanup.text) {
+        switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanup.text) {
         case .dismiss:
             throw RetryError.noSpeech
         case let .paste(text, rawFallbackReason):
