@@ -14,6 +14,7 @@ struct DictationSettingsView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var historyStore: PipelineHistoryStore
     @ObservedObject var stats: DictationStats
+    @ObservedObject var vocabulary: VocabularyStore
     let isReady: Bool
     let openTab: (SettingsTab) -> Void
 
@@ -110,7 +111,7 @@ struct DictationSettingsView: View {
                     icon: "book.closed",
                     title: "Dictionary",
                     subtitle: "Teach Whispur the names and terms you use",
-                    value: Self.termCountLabel(VocabularyParser.parse(appState.customVocabulary).count)
+                    value: Self.termCountLabel(vocabulary.terms.count)
                 ) {
                     openTab(.dictionary)
                 }
