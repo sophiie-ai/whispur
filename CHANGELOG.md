@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.1](https://github.com/sophiie-ai/whispur/compare/v0.23.0...v0.23.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **input:** stop hold-to-talk on Fn release after a missed key event ([#83](https://github.com/sophiie-ai/whispur/issues/83)) ([ce26c82](https://github.com/sophiie-ai/whispur/commit/ce26c824fbbd98f8e92726a8cde4516a7ba0d6ba))
+* **settings:** keep the input device picker inside its row ([#84](https://github.com/sophiie-ai/whispur/issues/84)) ([c948c68](https://github.com/sophiie-ai/whispur/commit/c948c686a30bfacc42118de7065746aba0c88578))
+
 ## [0.23.0](https://github.com/sophiie-ai/whispur/compare/v0.22.1...v0.23.0) (2026-11-01)
 
 
