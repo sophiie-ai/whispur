@@ -35,6 +35,18 @@ final class HotkeyManager {
             }
         }
     }
+    /// The "Tap or hold" shortcut: one key that talks while held and locks
+    /// a hands-free recording when tapped. When set, AppState clears
+    /// `holdBinding` and `toggleBinding`, so this is the only shortcut.
+    nonisolated(unsafe) var tapOrHoldBinding: ShortcutBinding? = nil {
+        didSet {
+            guard oldValue != tapOrHoldBinding else { return }
+            cancelTapOrHoldTimer()
+            stateLock.withLock { state in
+                state.tapOrHold.reset()
+            }
+        }
+    }
     nonisolated(unsafe) var cancelWatchEnabled = false
 
     /// What happens on the keyboard while the "Use raw" toast is up.
@@ -66,9 +78,25 @@ final class HotkeyManager {
                 state.toggleActive = false
                 state.doublePress.reset()
                 state.doublePressDown = false
+                state.tapOrHold.reset()
             }
+            cancelTapOrHoldTimer()
         }
     }
+
+    /// Tap or hold: how long a bare-modifier press waits before the
+    /// recording starts. A chord key inside it (Fn+Delete, Fn+arrow)
+    /// cancels silently, with no overlay or sound. Kept well under the 0.33 s
+    /// hold arm so a tap's first word isn't lost; a chord key that arrives
+    /// later still cancels, up to `tapOrHoldThreshold`, it just flashes the
+    /// overlay first.
+    nonisolated(unsafe) var tapOrHoldVetoWindow: TimeInterval = 0.15
+
+    /// Tap or hold: a release sooner than this after the press is a tap
+    /// (lock hands-free); later is a hold (push-to-talk, stop on release).
+    /// Deliberate taps land around 80-150 ms; 0.3 s leaves margin for a slow
+    /// tap without making a short hold lock by accident. Matches Hex.
+    nonisolated(unsafe) var tapOrHoldThreshold: TimeInterval = 0.3
 
     /// Delay before a bare-modifier hold binding (e.g. Fn alone) activates.
     /// Short taps within this window are ignored so macOS can handle its own
@@ -112,12 +140,16 @@ final class HotkeyManager {
         var doublePress = DoublePressDetector(window: 0.4, maxTapDuration: 0.33)
         var doublePressDown = false
         var toggleSessionActive = false
+        // Tap or hold. `tapOrHoldDown` tracks the binding's edge.
+        var tapOrHold = TapOrHoldDetector(vetoWindow: 0.15, holdThreshold: 0.3)
+        var tapOrHoldDown = false
     }
     private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
 
     private nonisolated(unsafe) var eventTap: CFMachPort?
     private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
     private nonisolated(unsafe) var holdArmTimer: DispatchWorkItem?
+    private nonisolated(unsafe) var tapOrHoldTimer: DispatchWorkItem?
     private var localFlagsMonitor: Any?
     private var localKeyDownMonitor: Any?
     private var localKeyUpMonitor: Any?
@@ -174,7 +206,10 @@ final class HotkeyManager {
             state.doublePress.reset()
             state.doublePressDown = false
             state.toggleSessionActive = false
+            state.tapOrHold.reset()
+            state.tapOrHoldDown = false
         }
+        cancelTapOrHoldTimer()
         isMonitoring = false
     }
 
@@ -184,6 +219,17 @@ final class HotkeyManager {
         stateLock.withLock { state in
             state.toggleSessionActive = active
         }
+    }
+
+    /// Tell the manager whether any recording session is running, so the
+    /// tap-or-hold key stops a recording however it started, and forgets a
+    /// lock when the session ends elsewhere (Esc, Stop, an error).
+    nonisolated func setShortcutSessionActive(_ active: Bool) {
+        let cancelTimer = stateLock.withLock { state -> Bool in
+            state.tapOrHold.setSessionActive(active)
+            return !state.tapOrHold.isArming
+        }
+        if cancelTimer { cancelTapOrHoldTimer() }
     }
 
     func requestAccessibility() {
@@ -395,7 +441,12 @@ final class HotkeyManager {
         let otherModifier = toggleBinding.map { binding in
             binding.isDoublePress && !Self.keyCodes(for: binding.modifiers).contains(keyCode)
         } ?? false
-        evaluateBindings(interruptDoublePress: otherModifier)
+        // A different modifier going down while the tap-or-hold key is held
+        // makes it a chord (Fn+Command), never a tap or a hold.
+        let tapOrHoldChord = isPressed && tapOrHoldBinding.map { binding in
+            !Self.keyCodes(for: binding.modifiers).contains(keyCode)
+        } == true
+        evaluateBindings(interruptDoublePress: otherModifier, tapOrHoldChord: tapOrHoldChord)
         return false
     }
 
@@ -419,7 +470,7 @@ final class HotkeyManager {
         if changed {
             logger.info("Key state resync corrected stale state")
         }
-        evaluateBindings()
+        evaluateBindings(releasesUnobserved: true)
     }
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
@@ -469,8 +520,10 @@ final class HotkeyManager {
                 logger.info("Hold arm cancelled — chord key pressed (keyCode=\(keyCode))")
             }
         }
+        // Tap or hold: any key other than the binding's own is a chord.
+        let tapOrHoldChord = tapOrHoldBinding.map { $0.keyCode != keyCode } ?? false
         // Any regular key (Fn+Delete, typing between taps) resets double-press tracking.
-        evaluateBindings(interruptDoublePress: true)
+        evaluateBindings(interruptDoublePress: true, tapOrHoldChord: tapOrHoldChord)
         return false
     }
 
@@ -488,8 +541,17 @@ final class HotkeyManager {
     // MARK: - Binding Evaluation
 
     /// Check all bindings against current key state and fire events.
-    private nonisolated func evaluateBindings(interruptDoublePress: Bool = false) {
+    /// - Parameters:
+    ///   - tapOrHoldChord: another key or modifier went down this event.
+    ///   - releasesUnobserved: the state comes from a resync, so a key found
+    ///     up was released at an unknown time.
+    private nonisolated func evaluateBindings(
+        interruptDoublePress: Bool = false,
+        tapOrHoldChord: Bool = false,
+        releasesUnobserved: Bool = false
+    ) {
         guard isEnabled else { return }
+        evaluateTapOrHold(chord: tapOrHoldChord, releasesUnobserved: releasesUnobserved)
         let holdBinding = self.holdBinding
         let useThreshold = holdBinding.map { $0.keyCode == nil } == true && holdArmThreshold > 0
         let toggleBinding = self.toggleBinding
@@ -627,6 +689,98 @@ final class HotkeyManager {
             onEvent?(event)
         }
     }
+
+    // MARK: - Tap or hold
+
+    private nonisolated func evaluateTapOrHold(chord: Bool, releasesUnobserved: Bool) {
+        guard let binding = tapOrHoldBinding else { return }
+        let veto = binding.keyCode == nil ? max(tapOrHoldVetoWindow, 0) : 0
+        let threshold = tapOrHoldThreshold
+        let now = ProcessInfo.processInfo.systemUptime
+
+        let (actions, pressed, generation, arming) = stateLock.withLock {
+            state -> ([TapOrHoldDetector.Action], Bool, Int, Bool) in
+            state.tapOrHold.vetoWindow = veto
+            state.tapOrHold.holdThreshold = threshold
+            var actions: [TapOrHoldDetector.Action] = []
+            var pressed = false
+            let isDown = Self.bindingIsActive(binding, state: state)
+            if isDown && !state.tapOrHoldDown {
+                state.tapOrHoldDown = true
+                pressed = true
+                actions.append(state.tapOrHold.press(at: now))
+                // A bare modifier pressed on top of another modifier is a chord.
+                if binding.keyCode == nil && Self.currentModifiers(state: state) != binding.modifiers {
+                    actions.append(state.tapOrHold.chord(at: now))
+                }
+            } else if isDown && chord {
+                actions.append(state.tapOrHold.chord(at: now))
+            } else if !isDown && state.tapOrHoldDown {
+                state.tapOrHoldDown = false
+                actions.append(releasesUnobserved ? state.tapOrHold.releaseUnobserved() : state.tapOrHold.release(at: now))
+            }
+            return (actions, pressed, state.tapOrHold.generation, state.tapOrHold.isArming)
+        }
+
+        if !arming {
+            cancelTapOrHoldTimer()
+        } else if pressed {
+            StartLatencyTrace.begin("tap-or-hold key down")
+            scheduleTapOrHoldTimer(generation: generation, after: veto)
+        }
+        emitTapOrHold(actions)
+    }
+
+    private nonisolated func scheduleTapOrHoldTimer(generation: Int, after delay: TimeInterval) {
+        tapOrHoldTimer?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.tapOrHoldTimer = nil
+            guard self.isEnabled, let binding = self.tapOrHoldBinding else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            let action = self.stateLock.withLock { state -> TapOrHoldDetector.Action in
+                // A release already handled by an edge leaves nothing to do.
+                guard Self.bindingIsActive(binding, state: state) else { return .none }
+                return state.tapOrHold.vetoElapsed(generation: generation, at: now)
+            }
+            if action == .startHolding { StartLatencyTrace.mark("tap-or-hold armed") }
+            self.emitTapOrHold([action])
+        }
+        tapOrHoldTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private nonisolated func cancelTapOrHoldTimer() {
+        tapOrHoldTimer?.cancel()
+        tapOrHoldTimer = nil
+    }
+
+    /// Map detector actions onto the events ShortcutSessionController
+    /// already understands: a hold starts as `holdActivated`; locking (or
+    /// starting locked) is a toggle press plus release, which switches the
+    /// session to hands-free and arms its stop; a locked stop is a toggle
+    /// press.
+    private nonisolated func emitTapOrHold(_ actions: [TapOrHoldDetector.Action]) {
+        for action in actions {
+            let events: [Event]
+            switch action {
+            case .none: events = []
+            case .startHolding: events = [.holdActivated]
+            case .startLocked, .lock: events = [.toggleActivated, .toggleDeactivated]
+            case .stopHold: events = [.holdDeactivated]
+            case .stopLocked: events = [.toggleActivated]
+            case .cancel: events = [.cancelRequested]
+            }
+            if action != .none {
+                logger.info("Tap or hold: \(String(describing: action))")
+            }
+            for event in events {
+                onEvent?(event)
+            }
+        }
+    }
+
+    // MARK: - Hold arm
 
     /// Schedule a deferred activation for bare-modifier holds so brief taps
     /// don't trigger recording (and don't conflict with macOS Fn behaviors).

@@ -207,6 +207,28 @@ struct ShortcutBinding: Codable, Equatable, Hashable {
     }
 }
 
+/// How the dictation shortcuts are laid out.
+enum DictationShortcutStyle: String, CaseIterable, Identifiable {
+    /// Two shortcuts: one held to talk, one pressed for hands-free.
+    case separate
+    /// One key: hold it to talk, tap it to lock hands-free, tap to stop.
+    case tapOrHold
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .separate: return "Separate shortcuts"
+        case .tapOrHold: return "Tap or hold"
+        }
+    }
+
+    /// The style for a fresh install. Existing users always keep
+    /// `.separate` (see `AppState.loadShortcutStyle`), so changing this
+    /// only affects people who have never set Whispur up.
+    static let newInstallDefault: DictationShortcutStyle = .separate
+}
+
 /// How dictation was triggered.
 enum RecordingTriggerMode: String, CaseIterable, Identifiable {
     case hold   // Hold key to record, release to stop

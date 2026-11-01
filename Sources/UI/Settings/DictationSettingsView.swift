@@ -147,34 +147,102 @@ struct DictationSettingsView: View {
     private var shortcutsSection: some View {
         SettingsSection("Shortcuts") {
             SettingsCard {
-                holdRow
-                if appState.holdShortcut == nil {
-                    addShortcutButton(
-                        title: "Add hold to talk shortcut",
-                        presets: ShortcutBinding.holdPresets,
-                        unavailable: appState.toggleShortcut,
-                        onSelect: { appState.setHoldShortcut($0) }
-                    )
-                }
+                styleRow
                 CardDivider()
-                handsFreeRow
-                if appState.toggleShortcut == nil {
-                    addShortcutButton(
-                        title: "Add hands-free shortcut",
-                        presets: ShortcutBinding.togglePresets,
-                        unavailable: appState.holdShortcut,
-                        onSelect: { appState.setToggleShortcut($0) }
-                    )
-                }
-                if !appState.hasAnyShortcut {
-                    CardDivider(leadingInset: 0)
-                    Label(Self.noShortcutHint, systemImage: "exclamationmark.triangle")
-                        .font(SophiieTheme.Typography.caption)
-                        .foregroundStyle(SophiieTheme.Palette.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.vertical, 12)
+                if appState.shortcutStyle == .tapOrHold {
+                    tapOrHoldRow
+                } else {
+                    separateRows
                 }
             }
+        }
+    }
+
+    private var styleRow: some View {
+        SettingsRow(
+            icon: "keyboard",
+            title: "Shortcut style",
+            subtitle: Self.styleSubtitle(appState.shortcutStyle)
+        ) {
+            RowPicker("Shortcut style", selection: shortcutStyleBinding) {
+                ForEach(DictationShortcutStyle.allCases) { style in
+                    Text(style.displayName).tag(style)
+                }
+            }
+        }
+    }
+
+    static func styleSubtitle(_ style: DictationShortcutStyle) -> String {
+        switch style {
+        case .separate: return "One key to hold and talk, another for hands-free"
+        case .tapOrHold: return "One key for both: tap to lock, hold to talk"
+        }
+    }
+
+    /// Quick taps of a bare Fn also reach macOS (Emoji & Symbols, input
+    /// source, Dictation) unless the Globe key is set to Do Nothing.
+    static let fnTapHint = "Quick Fn taps also trigger macOS. Set \"Press \u{1F310} key to\" to Do Nothing in System Settings > Keyboard, and make sure Dictation doesn't use Fn twice."
+
+    static func needsFnTapHint(_ binding: ShortcutBinding) -> Bool {
+        binding.keyCode == nil && binding.modifiers == .function
+    }
+
+    private var tapOrHoldRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(icon: "hand.tap", title: "Tap or hold", subtitle: Self.tapOrHoldSubtitle) {
+                ShortcutMenu(
+                    title: "Tap or hold shortcut",
+                    current: appState.tapOrHoldShortcut,
+                    presets: ShortcutBinding.holdPresets,
+                    unavailable: nil,
+                    onSelect: { appState.setTapOrHoldShortcut($0) }
+                )
+            }
+            if Self.needsFnTapHint(appState.tapOrHoldShortcut) {
+                fnTapHintLabel
+            }
+        }
+    }
+
+    static let tapOrHoldSubtitle = "Hold to talk, release to finish. Tap to lock hands-free, tap again to finish."
+
+    private var fnTapHintLabel: some View {
+        Label(Self.fnTapHint, systemImage: "info.circle")
+            .font(SophiieTheme.Typography.caption)
+            .foregroundStyle(SophiieTheme.Palette.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, SettingsMetrics.textInset)
+            .padding(.bottom, 12)
+    }
+
+    @ViewBuilder
+    private var separateRows: some View {
+        holdRow
+        if appState.holdShortcut == nil {
+            addShortcutButton(
+                title: "Add hold to talk shortcut",
+                presets: ShortcutBinding.holdPresets,
+                unavailable: appState.toggleShortcut,
+                onSelect: { appState.setHoldShortcut($0) }
+            )
+        }
+        CardDivider()
+        handsFreeRow
+        if appState.toggleShortcut == nil {
+            addShortcutButton(
+                title: "Add hands-free shortcut",
+                presets: ShortcutBinding.togglePresets,
+                unavailable: appState.holdShortcut,
+                onSelect: { appState.setToggleShortcut($0) }
+            )
+        }
+        if !appState.hasAnyShortcut {
+            CardDivider(leadingInset: 0)
+            Label(Self.noShortcutHint, systemImage: "exclamationmark.triangle")
+                .font(SophiieTheme.Typography.caption)
+                .foregroundStyle(SophiieTheme.Palette.warning)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 12)
         }
     }
 
@@ -239,15 +307,7 @@ struct DictationSettingsView: View {
                     }
                 }
                 if toggle.isDoublePress {
-                    Label(
-                        "Quick Fn taps also trigger macOS. Set \"Press \u{1F310} key to\" to Do Nothing in System Settings > Keyboard, and make sure Dictation doesn't use Fn twice.",
-                        systemImage: "info.circle"
-                    )
-                    .font(SophiieTheme.Typography.caption)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, SettingsMetrics.textInset)
-                    .padding(.bottom, 12)
+                    fnTapHintLabel
                 }
             }
         } else {
@@ -264,6 +324,13 @@ struct DictationSettingsView: View {
             return "Press twice to start. Press once to finish."
         }
         return "Press to start. Press again to finish."
+    }
+
+    private var shortcutStyleBinding: Binding<DictationShortcutStyle> {
+        Binding(
+            get: { appState.shortcutStyle },
+            set: { appState.setShortcutStyle($0) }
+        )
     }
 
     private var dictationEnabledBinding: Binding<Bool> {

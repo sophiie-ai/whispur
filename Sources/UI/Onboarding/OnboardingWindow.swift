@@ -261,13 +261,17 @@ struct OnboardingWindow: View {
     private var shortcutsStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
-                ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
+                if appState.shortcutStyle == .tapOrHold {
+                    ShortcutSummaryBadge(title: "Tap or hold: \(appState.tapOrHoldShortcut.menuTitle)")
+                } else {
+                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
+                    ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
+                }
             }
 
             SetupChecklistRow(
                 title: "Push to talk",
-                detail: appState.holdShortcut.map {
+                detail: appState.effectiveHoldShortcut.map {
                     "Hold \($0.menuTitle) while speaking. Releasing the shortcut begins transcription immediately."
                 } ?? "Hold to talk is off. You can add a shortcut later in Settings.",
                 isComplete: true,
@@ -277,7 +281,7 @@ struct OnboardingWindow: View {
 
             SetupChecklistRow(
                 title: "Latched recording",
-                detail: appState.toggleShortcut == nil
+                detail: appState.toggleShortcut == nil && appState.shortcutStyle == .separate
                     ? "Toggle mode is currently off. You can add one later in Settings."
                     : appState.toggleShortcutInstruction,
                 isComplete: true,

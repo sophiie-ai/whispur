@@ -42,6 +42,10 @@ final class AppState: ObservableObject {
     /// nil when the user removed the hold-to-talk shortcut.
     @Published var holdShortcut: ShortcutBinding?
     @Published var toggleShortcut: ShortcutBinding?
+    /// Separate hold and hands-free shortcuts, or one tap-or-hold key.
+    @Published private(set) var shortcutStyle: DictationShortcutStyle
+    /// The key used when `shortcutStyle` is `.tapOrHold`.
+    @Published private(set) var tapOrHoldShortcut: ShortcutBinding
     @Published private(set) var microphoneAccessGranted = AudioRecorder.hasMicrophoneAccess
 
     let pipeline: DictationPipeline
@@ -104,6 +108,10 @@ final class AppState: ObservableObject {
 
         _holdShortcut = Published(initialValue: loadedHoldShortcut)
         _toggleShortcut = Published(initialValue: sanitizedToggleShortcut)
+        let loadedStyle = Self.loadShortcutStyle()
+        let loadedTapOrHold = Self.loadTapOrHoldShortcut()
+        _shortcutStyle = Published(initialValue: loadedStyle)
+        _tapOrHoldShortcut = Published(initialValue: loadedTapOrHold)
 
         let keychain = KeychainManager.shared
         let providerRequestLog = providerRequestLog ?? ProviderRequestLog()
@@ -149,8 +157,13 @@ final class AppState: ObservableObject {
         self.learningToastPanel = learningToastPanel
         self.evalCases = evalCases ?? MyEvalCaseStore()
 
-        hotkeyManager.holdBinding = loadedHoldShortcut
-        hotkeyManager.toggleBinding = sanitizedToggleShortcut
+        Self.applyBindings(
+            to: hotkeyManager,
+            style: loadedStyle,
+            hold: loadedHoldShortcut,
+            toggle: sanitizedToggleShortcut,
+            tapOrHold: loadedTapOrHold
+        )
         hotkeyManager.isEnabled = dictationEnabled
         stats.seedDictationCountIfMissing(historyStore.items.count)
 
@@ -373,11 +386,29 @@ final class AppState: ObservableObject {
     /// At least one dictation shortcut is set. With none, dictation still
     /// starts from the menu bar.
     var hasAnyShortcut: Bool {
-        holdShortcut != nil || toggleShortcut != nil
+        shortcutStyle == .tapOrHold || holdShortcut != nil || toggleShortcut != nil
     }
 
     var shortcutSummary: String {
-        Self.shortcutSummary(hold: holdShortcut, toggle: toggleShortcut)
+        if shortcutStyle == .tapOrHold {
+            return Self.tapOrHoldSummary(tapOrHoldShortcut)
+        }
+        return Self.shortcutSummary(hold: holdShortcut, toggle: toggleShortcut)
+    }
+
+    static func tapOrHoldSummary(_ binding: ShortcutBinding) -> String {
+        "Hold \(binding.menuTitle) to talk, tap to latch"
+    }
+
+    /// The key that talks while held, whichever style is in use.
+    var effectiveHoldShortcut: ShortcutBinding? {
+        shortcutStyle == .tapOrHold ? tapOrHoldShortcut : holdShortcut
+    }
+
+    /// The shortcut shown on the menu bar's shortcut chip.
+    var primaryShortcutTitle: String {
+        if shortcutStyle == .tapOrHold { return tapOrHoldShortcut.menuTitle }
+        return holdShortcut?.menuTitle ?? toggleShortcut?.menuTitle ?? "No shortcut"
     }
 
     static func shortcutSummary(hold: ShortcutBinding?, toggle: ShortcutBinding?) -> String {
@@ -396,6 +427,9 @@ final class AppState: ObservableObject {
     /// "Press Fn twice to start, press Fn once to stop." for the double-press
     /// binding; "Press X to start, press X again to stop." otherwise.
     var toggleShortcutInstruction: String {
+        if shortcutStyle == .tapOrHold {
+            return "Tap \(tapOrHoldShortcut.menuTitle) to start, tap it again to stop."
+        }
         guard let toggleShortcut else {
             return "Toggle mode is currently off. You can add one later in Settings."
         }
@@ -404,6 +438,9 @@ final class AppState: ObservableObject {
 
     /// Menu bar hint while a toggle recording is running.
     var toggleActiveHint: String {
+        if shortcutStyle == .tapOrHold {
+            return "Toggle mode is active. Tap \(tapOrHoldShortcut.menuTitle) or press Stop."
+        }
         guard let toggleShortcut else {
             return "Toggle mode is active. Press Stop when you're done."
         }
@@ -423,8 +460,14 @@ final class AppState: ObservableObject {
             return "Preparing your microphone."
         case .recording:
             if pipeline.activeTriggerMode == .hold {
+                if shortcutStyle == .tapOrHold {
+                    return "Release \(tapOrHoldShortcut.menuTitle) to transcribe."
+                }
                 guard let holdShortcut else { return "Release the shortcut to transcribe." }
                 return "Release \(holdShortcut.menuTitle) to transcribe."
+            }
+            if shortcutStyle == .tapOrHold {
+                return "Tap \(tapOrHoldShortcut.menuTitle) or use Stop."
             }
             if let toggleShortcut {
                 return "\(toggleShortcut.toggleStopPhrase.capitalizedFirst) or use Stop."
@@ -543,6 +586,55 @@ final class AppState: ObservableObject {
         hotkeyManager.toggleBinding = binding
     }
 
+    /// Switch between separate shortcuts and one tap-or-hold key. The
+    /// separate shortcuts are kept as they were, so switching back restores
+    /// them. A recording in flight is cancelled: its stop key may change.
+    func setShortcutStyle(_ style: DictationShortcutStyle) {
+        guard style != shortcutStyle else { return }
+        shortcutStyle = style
+        UserDefaults.standard.set(style.rawValue, forKey: Self.shortcutStyleKey)
+        if pipeline.canStopRecording {
+            cancelDictation()
+        }
+        applyHotkeyBindings()
+    }
+
+    func setTapOrHoldShortcut(_ binding: ShortcutBinding) {
+        tapOrHoldShortcut = binding
+        UserDefaults.standard.set(binding.storageValue, forKey: Self.tapOrHoldShortcutKey)
+        applyHotkeyBindings()
+    }
+
+    private func applyHotkeyBindings() {
+        Self.applyBindings(
+            to: hotkeyManager,
+            style: shortcutStyle,
+            hold: holdShortcut,
+            toggle: toggleShortcut,
+            tapOrHold: tapOrHoldShortcut
+        )
+    }
+
+    /// Tap or hold replaces both separate shortcuts, so only one set is live.
+    static func applyBindings(
+        to manager: HotkeyManager,
+        style: DictationShortcutStyle,
+        hold: ShortcutBinding?,
+        toggle: ShortcutBinding?,
+        tapOrHold: ShortcutBinding
+    ) {
+        switch style {
+        case .separate:
+            manager.tapOrHoldBinding = nil
+            manager.holdBinding = hold
+            manager.toggleBinding = toggle
+        case .tapOrHold:
+            manager.holdBinding = nil
+            manager.toggleBinding = nil
+            manager.tapOrHoldBinding = tapOrHold
+        }
+    }
+
     /// Turns the dictation shortcuts on or off. Turning them off mid-recording
     /// cancels the recording, since its stop shortcut no longer works.
     func setDictationEnabled(_ enabled: Bool) {
@@ -608,6 +700,7 @@ final class AppState: ObservableObject {
     /// however it was started, and never starts one after it ended.
     private func syncHotkeySessionState() {
         hotkeyManager.setToggleSessionActive(shortcutSessionController.activeMode == .toggle)
+        hotkeyManager.setShortcutSessionActive(shortcutSessionController.activeMode != nil)
     }
 
     func cancelDictation() {
@@ -752,6 +845,37 @@ final class AppState: ObservableObject {
         }
 
         return ShortcutBinding(storageValue: storedValue) ?? fallback
+    }
+
+    static let shortcutStyleKey = "shortcutStyle"
+    static let tapOrHoldShortcutKey = "tapOrHoldShortcut"
+
+    /// A stored style wins. Without one, anyone who has used Whispur before
+    /// (a stored shortcut, or onboarding done) keeps separate shortcuts, the
+    /// only style that existed; only a fresh install gets the new default.
+    static func loadShortcutStyle(
+        defaults: UserDefaults = .standard,
+        newInstallDefault: DictationShortcutStyle = DictationShortcutStyle.newInstallDefault
+    ) -> DictationShortcutStyle {
+        if let stored = defaults.string(forKey: shortcutStyleKey),
+           let style = DictationShortcutStyle(rawValue: stored) {
+            return style
+        }
+        let isExistingUser = defaults.object(forKey: "holdShortcut") != nil
+            || defaults.object(forKey: "toggleShortcut") != nil
+            || defaults.bool(forKey: "whispur.onboarding.completed")
+        return isExistingUser ? .separate : newInstallDefault
+    }
+
+    /// Fn unless the user picked another key. Double-press bindings can't
+    /// be held, so they fall back to Fn too.
+    static func loadTapOrHoldShortcut(defaults: UserDefaults = .standard) -> ShortcutBinding {
+        guard let stored = defaults.string(forKey: tapOrHoldShortcutKey),
+              let binding = ShortcutBinding(storageValue: stored),
+              !binding.isDoublePress else {
+            return .fnKey
+        }
+        return binding
     }
 
     private func persistShortcut(_ binding: ShortcutBinding?, forKey key: String) {
