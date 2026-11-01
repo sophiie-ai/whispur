@@ -288,6 +288,15 @@ final class HotkeyManager {
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
+            // While the tap was off (secure input such as a password dialog,
+            // or a slow callback) key-up events may have been dropped. Resync
+            // from the real hardware state so a released hold key stops the
+            // recording now instead of on its next press.
+            logger.info("Event tap re-enabled after \(type == .tapDisabledByTimeout ? "timeout" : "user input") — resyncing key state")
+            resyncKeyState(
+                flags: CGEventSource.flagsState(.combinedSessionState).rawValue,
+                keyIsDown: { CGEventSource.keyState(.combinedSessionState, key: CGKeyCode($0)) }
+            )
             return Unmanaged.passUnretained(event)
 
         case .flagsChanged, .keyDown, .keyUp:
@@ -320,14 +329,20 @@ final class HotkeyManager {
     /// Handle modifier key changes. Returns true if the event should be consumed.
     @discardableResult
     private nonisolated func handleFlagsChanged(_ event: NSEvent) -> Bool {
-        logger.info("flagsChanged: keyCode=\(event.keyCode) mods=\(event.modifierFlags.rawValue)")
-        return handleModifierChange(keyCode: event.keyCode)
+        // Prefer the CGEvent's raw flags: they carry the device-dependent
+        // left/right bits. NSEvent's raw value keeps them too, as a fallback.
+        let flags = event.cgEvent?.flags.rawValue ?? UInt64(event.modifierFlags.rawValue)
+        logger.info("flagsChanged: keyCode=\(event.keyCode) flags=\(flags)")
+        return handleModifierChange(keyCode: event.keyCode, flags: flags)
     }
 
-    /// A modifier key went down or up. Internal so tests can drive the
-    /// binding logic without synthesizing NSEvents.
+    /// A modifier key went down or up. `flags` is the event's raw modifier
+    /// state (CGEventFlags / NSEvent.ModifierFlags raw value). The pressed
+    /// set is recomputed from it on every event rather than toggled, so a
+    /// dropped key-up heals on the next flagsChanged instead of inverting
+    /// that key's state for good. Internal so tests can drive it directly.
     @discardableResult
-    nonisolated func handleModifierChange(keyCode: UInt16) -> Bool {
+    nonisolated func handleModifierChange(keyCode: UInt16, flags: UInt64) -> Bool {
         let isKnown = trackedModifierKeyCodes.contains(keyCode)
 
         DispatchQueue.main.async {
@@ -335,19 +350,25 @@ final class HotkeyManager {
             self.lastEventDescription = "flags keyCode=\(keyCode)"
         }
 
-        guard isKnown else { return false }
-
-        // Toggle presence: if already pressed → now released, if not pressed → now pressed
-        let wasReleased = stateLock.withLock { state -> Bool in
-            if state.pressedModifierKeyCodes.contains(keyCode) {
-                state.pressedModifierKeyCodes.remove(keyCode)
-                return true
-            } else {
-                state.pressedModifierKeyCodes.insert(keyCode)
-                return false
-            }
+        let (changed, isPressed) = stateLock.withLock { state -> (Bool, Bool) in
+            let next = Self.pressedModifierKeyCodes(
+                fromRawFlags: flags,
+                previous: state.pressedModifierKeyCodes,
+                changedKeyCode: keyCode
+            )
+            let changed = next != state.pressedModifierKeyCodes
+            state.pressedModifierKeyCodes = next
+            return (changed, next.contains(keyCode))
         }
-        logger.info("Modifier \(wasReleased ? "released" : "pressed"): keyCode=\(keyCode)")
+
+        // An untracked key (e.g. Caps Lock) still resyncs the set above, but
+        // only drives the bindings when that resync actually changed something.
+        guard isKnown || changed else { return false }
+        if isKnown {
+            logger.info("Modifier \(isPressed ? "pressed" : "released"): keyCode=\(keyCode)")
+        } else {
+            logger.info("Modifier state resynced from flags on keyCode=\(keyCode)")
+        }
 
         // Any modifier other than the double-press binding's own resets
         // double-press tracking (Fn+Cmd is a chord, not a tap).
@@ -356,6 +377,29 @@ final class HotkeyManager {
         } ?? false
         evaluateBindings(interruptDoublePress: otherModifier)
         return false
+    }
+
+    /// Rebuild key state from the real hardware state after a window in
+    /// which events may have been dropped (event tap disabled by timeout or
+    /// secure input), then re-evaluate the bindings so a hold whose key is no
+    /// longer down is released. `keyIsDown` prunes stale non-modifier keys.
+    nonisolated func resyncKeyState(flags: UInt64, keyIsDown: (UInt16) -> Bool) {
+        let changed = stateLock.withLock { state -> Bool in
+            let modifiers = Self.pressedModifierKeyCodes(
+                fromRawFlags: flags,
+                previous: state.pressedModifierKeyCodes,
+                changedKeyCode: nil
+            )
+            let keys = state.pressedKeyCodes.filter(keyIsDown)
+            let changed = modifiers != state.pressedModifierKeyCodes || keys != state.pressedKeyCodes
+            state.pressedModifierKeyCodes = modifiers
+            state.pressedKeyCodes = keys
+            return changed
+        }
+        if changed {
+            logger.info("Key state resync corrected stale state")
+        }
+        evaluateBindings()
     }
 
     private nonisolated func handleKeyDown(_ event: NSEvent) -> Bool {
@@ -595,6 +639,59 @@ final class HotkeyManager {
         }
 
         return false
+    }
+
+    /// One modifier family: its device-independent flag plus, per physical
+    /// key, the device-dependent bit (IOKit/IOLLEvent.h NX_DEVICE*KEYMASK).
+    private struct ModifierFamily {
+        let flag: UInt64
+        let keys: [(mask: UInt64, keyCode: UInt16)]
+    }
+
+    private nonisolated static let modifierFamilies: [ModifierFamily] = [
+        // NX_SECONDARYFNMASK; Fn has no left/right device bits.
+        ModifierFamily(flag: 0x0080_0000, keys: [(0, 63)]),
+        // NX_COMMANDMASK — NX_DEVICELCMDKEYMASK / NX_DEVICERCMDKEYMASK
+        ModifierFamily(flag: 0x0010_0000, keys: [(0x08, 55), (0x10, 54)]),
+        // NX_SHIFTMASK — NX_DEVICELSHIFTKEYMASK / NX_DEVICERSHIFTKEYMASK
+        ModifierFamily(flag: 0x0002_0000, keys: [(0x02, 56), (0x04, 60)]),
+        // NX_ALTERNATEMASK — NX_DEVICELALTKEYMASK / NX_DEVICERALTKEYMASK
+        ModifierFamily(flag: 0x0008_0000, keys: [(0x20, 58), (0x40, 61)]),
+        // NX_CONTROLMASK — NX_DEVICELCTLKEYMASK / NX_DEVICERCTLKEYMASK
+        ModifierFamily(flag: 0x0004_0000, keys: [(0x01, 59), (0x2000, 62)]),
+    ]
+
+    /// The set of held modifier key codes implied by raw event flags. Pure.
+    ///
+    /// The device-independent flag says whether a family is held at all and
+    /// is authoritative; the device bits say which side. Synthetic events
+    /// (remappers, automation) can set the family flag without device bits —
+    /// then the previously known side is kept, else the changed key, else
+    /// the left key, so the family still reads as held.
+    nonisolated static func pressedModifierKeyCodes(
+        fromRawFlags flags: UInt64,
+        previous: Set<UInt16>,
+        changedKeyCode: UInt16?
+    ) -> Set<UInt16> {
+        var pressed: Set<UInt16> = []
+        for family in modifierFamilies where flags & family.flag != 0 {
+            let codes = family.keys.map(\.keyCode)
+            if family.keys.count == 1 {
+                pressed.insert(codes[0])
+                continue
+            }
+            let bySide = family.keys.filter { flags & $0.mask != 0 }.map(\.keyCode)
+            if !bySide.isEmpty {
+                pressed.formUnion(bySide)
+            } else if !previous.isDisjoint(with: codes) {
+                pressed.formUnion(previous.intersection(codes))
+            } else if let changedKeyCode, codes.contains(changedKeyCode) {
+                pressed.insert(changedKeyCode)
+            } else {
+                pressed.insert(codes[0])
+            }
+        }
+        return pressed
     }
 
     /// Physical key codes that produce the given modifiers.
