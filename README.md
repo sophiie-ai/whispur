@@ -22,7 +22,7 @@ Hold a shortcut to talk, or use an optional toggle shortcut for hands-free captu
 
 - Lives in the macOS menu bar instead of taking over your desktop
 - Hold-to-talk or toggle-to-latch recording
-- Multi-provider speech-to-text with local Apple dictation support
+- Multi-provider speech-to-text with on-device Apple and NVIDIA Parakeet options
 - Optional transcript cleanup with provider-selectable LLMs
 - Paste-back into the active app with clipboard preservation
 - Custom vocabulary and a single editable cleanup prompt for technical dictation
@@ -84,6 +84,7 @@ make run
 | Provider | Status | Notes |
 | --- | --- | --- |
 | Apple Speech Recognition | Available | On-device and local. Uses SpeechAnalyzer on macOS 26 and later |
+| Parakeet (on this Mac) | Available | NVIDIA Parakeet (Parakeet Ultra, 25 European languages) on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio). No key; a one-time ~630 MB model download to `~/Library/Application Support/Whispur/Models`. Model weights: CC BY 4.0 |
 | OpenAI | Available | GPT Transcribe (default) or Whisper, via API key |
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |
@@ -102,7 +103,7 @@ make run
 
 ## Privacy
 
-Audio stays local by default when you use the built-in Apple speech provider. If you switch to a cloud STT or LLM provider, the audio or transcript needed for that provider is sent only to the services you configure.
+Audio stays local by default when you use the built-in Apple speech provider, and with Parakeet, which runs on this Mac once its model is downloaded. If you switch to a cloud STT or LLM provider, the audio or transcript needed for that provider is sent only to the services you configure.
 
 Whispur stores API keys in the macOS Keychain.
 
