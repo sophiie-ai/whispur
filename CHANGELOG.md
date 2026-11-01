@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.24.0](https://github.com/sophiie-ai/whispur/compare/v0.23.2...v0.24.0) (2026-11-01)
+
+
+### Features
+
+* **activity:** keep failed dictations' audio for a day and let users retry them ([#91](https://github.com/sophiie-ai/whispur/issues/91)) ([1c1a638](https://github.com/sophiie-ai/whispur/commit/1c1a6385a76697454a5880ab1cf421db0673af76))
+* **pipeline:** shorten the default cleanup prompt and add email and URL eval cases ([#88](https://github.com/sophiie-ai/whispur/issues/88)) ([6f911df](https://github.com/sophiie-ai/whispur/commit/6f911dff934b77647761772b5c30bdefae10fcc6))
+* **stt:** let users pick the languages they speak, with a script guard ([#90](https://github.com/sophiie-ai/whispur/issues/90)) ([6cb394b](https://github.com/sophiie-ai/whispur/commit/6cb394b8a834a75aa45fa95f27e3f05c44d187a8))
+
 ## [0.23.2](https://github.com/sophiie-ai/whispur/compare/v0.23.1...v0.23.2) (2026-11-01)
 
 
