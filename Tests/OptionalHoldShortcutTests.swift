@@ -88,7 +88,7 @@ final class OptionalHoldShortcutTests: XCTestCase {
     // MARK: - HotkeyManager
 
     @MainActor
-    private func makeManager(hold: ShortcutBinding?, toggle: ShortcutBinding?) -> (HotkeyManager, () -> [HotkeyManager.Event]) {
+    private func makeManager(hold: ShortcutBinding?, toggle: ShortcutBinding?) -> (FakeKeyboard, () -> [HotkeyManager.Event]) {
         let manager = HotkeyManager()
         // No arm delay, so a bare-modifier hold fires on press.
         manager.holdArmThreshold = 0
@@ -96,54 +96,54 @@ final class OptionalHoldShortcutTests: XCTestCase {
         manager.toggleBinding = toggle
         var events: [HotkeyManager.Event] = []
         manager.onEvent = { events.append($0) }
-        return (manager, { events })
+        return (FakeKeyboard(manager: manager), { events })
     }
 
     @MainActor
     func testFnHoldFiresWhenBound() {
         // Positive control for the nil case below.
-        let (manager, events) = makeManager(hold: .fnKey, toggle: nil)
-        manager.handleModifierChange(keyCode: fnKeyCode)
-        manager.handleModifierChange(keyCode: fnKeyCode)
+        let (keyboard, events) = makeManager(hold: .fnKey, toggle: nil)
+        keyboard.press(.fn)
+        keyboard.release(.fn)
         XCTAssertEqual(events().map(String.init(describing:)), ["holdActivated", "holdDeactivated"])
     }
 
     @MainActor
     func testNilHoldBindingIgnoresHoldKeys() {
-        let (manager, events) = makeManager(hold: nil, toggle: nil)
-        manager.handleModifierChange(keyCode: fnKeyCode)
-        manager.handleKeyDown(keyCode: 49) // Fn+Space chord path
-        manager.handleKeyUp(keyCode: 49)
-        manager.handleModifierChange(keyCode: fnKeyCode)
+        let (keyboard, events) = makeManager(hold: nil, toggle: nil)
+        keyboard.press(.fn)
+        keyboard.manager.handleKeyDown(keyCode: 49) // Fn+Space chord path
+        keyboard.manager.handleKeyUp(keyCode: 49)
+        keyboard.release(.fn)
         XCTAssertTrue(events().isEmpty)
     }
 
     @MainActor
     func testNilHoldBindingWithThresholdNeverArms() {
-        let (manager, events) = makeManager(hold: nil, toggle: nil)
-        manager.holdArmThreshold = 0.01
-        manager.handleModifierChange(keyCode: fnKeyCode)
+        let (keyboard, events) = makeManager(hold: nil, toggle: nil)
+        keyboard.manager.holdArmThreshold = 0.01
+        keyboard.press(.fn)
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        manager.handleModifierChange(keyCode: fnKeyCode)
+        keyboard.release(.fn)
         XCTAssertTrue(events().isEmpty)
     }
 
     @MainActor
     func testToggleStillWorksWithoutHoldBinding() {
-        let (manager, events) = makeManager(hold: nil, toggle: .commandFn)
-        manager.handleModifierChange(keyCode: commandKeyCode)
-        manager.handleModifierChange(keyCode: fnKeyCode)
-        manager.handleModifierChange(keyCode: fnKeyCode)
-        manager.handleModifierChange(keyCode: commandKeyCode)
+        let (keyboard, events) = makeManager(hold: nil, toggle: .commandFn)
+        keyboard.press(.leftCommand)
+        keyboard.press(.fn)
+        keyboard.release(.fn)
+        keyboard.release(.leftCommand)
         XCTAssertEqual(events().map(String.init(describing:)), ["toggleActivated", "toggleDeactivated"])
     }
 
     @MainActor
     func testRemovingHoldMidRecordingReleasesIt() {
-        let (manager, events) = makeManager(hold: .fnKey, toggle: nil)
-        manager.handleModifierChange(keyCode: fnKeyCode)
-        manager.holdBinding = nil
-        manager.handleModifierChange(keyCode: fnKeyCode)
+        let (keyboard, events) = makeManager(hold: .fnKey, toggle: nil)
+        keyboard.press(.fn)
+        keyboard.manager.holdBinding = nil
+        keyboard.release(.fn)
         XCTAssertEqual(events().map(String.init(describing:)), ["holdActivated", "holdDeactivated"])
     }
 }
