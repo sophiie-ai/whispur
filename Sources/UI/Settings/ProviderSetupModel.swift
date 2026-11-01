@@ -327,7 +327,7 @@ extension LLMProviderID {
         switch self {
         case .openai: "Chat completions through the OpenAI API, or any compatible gateway."
         case .anthropic: "Claude cleans up punctuation, filler, and phrasing."
-        case .groq: "Low-latency hosted Llama. Shares its key with Groq Whisper."
+        case .groq: "Low-latency hosted gpt-oss. Shares its key with Groq Whisper."
         case .bedrock: "Claude on AWS Bedrock with a Bedrock API key and region."
         }
     }

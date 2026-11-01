@@ -29,20 +29,21 @@ struct BedrockLLM: LLMProvider {
         URL(string: "https://bedrock-runtime.\(region).amazonaws.com")
     }
 
+    /// `InvokeModel` body: the Messages API body plus `anthropic_version`;
+    /// the model ID travels in the URL.
+    static func body(modelID: String, request: LLMRequest) -> [String: Any] {
+        var payload = AnthropicMessagesFormat.body(model: modelID, request: request)
+        payload["anthropic_version"] = "bedrock-2023-05-31"
+        return payload
+    }
+
     func complete(request: LLMRequest) async throws -> LLMResponse {
         let encodedModel = modelID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? modelID
         guard let url = URL(string: "https://bedrock-runtime.\(region).amazonaws.com/model/\(encodedModel)/invoke") else {
             throw LLMError.apiError(provider: .bedrock, message: "Invalid endpoint URL.", statusCode: nil)
         }
 
-        let payload: [String: Any] = [
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": request.maxTokens,
-            "system": request.systemPrompt,
-            "messages": [
-                ["role": "user", "content": request.userMessage],
-            ],
-        ]
+        let payload = Self.body(modelID: modelID, request: request)
 
         var httpRequest = URLRequest(url: url)
         httpRequest.httpMethod = "POST"
@@ -62,6 +63,7 @@ struct BedrockLLM: LLMProvider {
                 model: \(modelID)
                 region: \(region)
                 max_tokens: \(request.maxTokens)
+                \(AnthropicMessagesFormat.settingsSummary(model: modelID))
                 system_prompt_chars: \(request.systemPrompt.count)
                 user_message_chars: \(request.userMessage.count)
                 """
@@ -80,21 +82,7 @@ struct BedrockLLM: LLMProvider {
                 )
             }
 
-            let json = try JSONSerialization.jsonObject(with: response.data) as? [String: Any]
-            let content = json?["content"] as? [[String: Any]]
-            let text = content?.first?["text"] as? String ?? ""
-            let usage = json?["usage"] as? [String: Any]
-
-            guard !text.isEmpty else {
-                throw LLMError.emptyResponse(provider: .bedrock)
-            }
-
-            return LLMResponse(
-                text: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                model: modelID,
-                promptTokens: usage?["input_tokens"] as? Int,
-                completionTokens: usage?["output_tokens"] as? Int
-            )
+            return try AnthropicMessagesFormat.parse(response.data, provider: .bedrock, model: modelID)
         } catch let error as LLMError {
             throw error
         } catch let error as URLError where error.code == .timedOut {
