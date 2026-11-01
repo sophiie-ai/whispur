@@ -7,6 +7,7 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
   python3 scripts/eval-cleanup.py --provider openai --prompt new
   python3 scripts/eval-cleanup.py --provider groq --prompt current --runs 1
   python3 scripts/eval-cleanup.py --self-test
+  python3 scripts/eval-cleanup.py --cases-file "$HOME/Library/Application Support/Whispur/MyEvalCases.jsonl"
 
 --prompt new      system prompt = Prompts.defaultCleanup in the working tree,
                   user message = CleanupMessage (vocabulary block, wrapped
@@ -447,6 +448,28 @@ def pct(values: list[float], q: float) -> float:
 # ---------------------------------------------------------------------------
 
 
+def load_cases(path: Path) -> list[dict]:
+    """Reads a cases.jsonl-shaped file; exits with the line number on a malformed case."""
+    if not path.is_file():
+        raise SystemExit(f"cases file not found: {path}")
+    cases = []
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            case = json.loads(line)
+        except json.JSONDecodeError as err:
+            raise SystemExit(f"{path}:{n}: invalid JSON: {err}")
+        missing = [k for k in ("id", "input", "expected") if k not in case]
+        if missing:
+            raise SystemExit(f"{path}:{n}: missing {', '.join(missing)}")
+        case.setdefault("critical", False)
+        cases.append(case)
+    if not cases:
+        raise SystemExit(f"no cases in {path}")
+    return cases
+
+
 def self_test() -> int:
     builder = RequestBuilder("new")
     golden_input = json.loads((ROOT / "Evals/cleanup/golden/input.json").read_text())
@@ -474,8 +497,10 @@ def main() -> int:
                     help="stop sending requests once the run has used this many tokens (prompt + completion)")
     ap.add_argument("--prompt", choices=["current", "new"], default="new")
     ap.add_argument("--runs", type=int, default=2, help="runs per case (default 2)")
+    ap.add_argument("--cases-file", metavar="PATH", default=str(CASES_PATH),
+                    help="JSONL cases file (default Evals/cleanup/cases.jsonl), e.g. the app's MyEvalCases.jsonl")
     ap.add_argument("--cases", help="comma-separated case ids")
-    ap.add_argument("--split", choices=["all", "tune", "heldout"], default="all")
+    ap.add_argument("--split", choices=["all", "tune", "heldout", "mine"], default="all")
     ap.add_argument("--show-heldout", action="store_true", help="print diffs for held-out failures too")
     ap.add_argument("--concurrency", type=int, default=None, help="parallel requests (Groq is always 1)")
     ap.add_argument("--report", help="JSON report path (default /tmp/whispur-eval/<prompt>-<provider>-<ts>.json)")
@@ -494,7 +519,7 @@ def main() -> int:
         args.model = previous.get("model")
     model = args.model or PROVIDERS[args.provider]["model"]
 
-    cases = [json.loads(line) for line in CASES_PATH.read_text().splitlines() if line.strip()]
+    cases = load_cases(Path(args.cases_file).expanduser())
     if args.cases:
         wanted = set(args.cases.split(","))
         unknown = wanted - {c["id"] for c in cases}
@@ -621,6 +646,7 @@ def main() -> int:
         "all": summarize(case_rows),
         "tune": summarize([r for r in case_rows if r["case"].get("split", "tune") == "tune"]),
         "heldout": summarize([r for r in case_rows if r["case"].get("split") == "heldout"]),
+        "mine": summarize([r for r in case_rows if r["case"].get("split") == "mine"]),
     }
 
     print(f"\n{args.prompt} / {args.provider} ({model}), {args.runs} runs per case")

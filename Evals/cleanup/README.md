@@ -26,6 +26,7 @@ python3 scripts/eval-cleanup.py --provider openai --prompt new    # working-tree
 python3 scripts/eval-cleanup.py --provider groq --prompt current  # origin/main prompt, openai/gpt-oss-20b
 python3 scripts/eval-cleanup.py --provider openai --cases sorry-late,code-npm --runs 3
 python3 scripts/eval-cleanup.py --provider openai --split tune    # tuning cases only
+python3 scripts/eval-cleanup.py --provider openai --cases-file ~/Library/Application\ Support/Whispur/MyEvalCases.jsonl
 ```
 
 Options:
@@ -38,7 +39,8 @@ Options:
 | `--model ID` | Any other model on that provider (`openai/gpt-oss-120b`, `gpt-6.1-terra`, ...). Parameters follow `OpenAIChatFormat.parameterStyle`, so a model gets the request shape the app would send it. |
 | `--token-cap N` | Stop sending requests once the run has used N tokens (prompt + completion); the runs that finished are scored and saved. Use it to keep a Groq free-tier run inside a daily budget. |
 | `--runs N` | Runs per case (default 2). |
-| `--cases a,b` / `--split tune\|heldout` | Run a subset. |
+| `--cases-file PATH` | Read cases from another JSONL file in the `cases.jsonl` schema (default `Evals/cleanup/cases.jsonl`), such as the private `MyEvalCases.jsonl` that Activity's `Mark as wrong` writes. Its cases use `"split": "mine"` and get their own summary row. |
+| `--cases a,b` / `--split tune\|heldout\|mine` | Run a subset. |
 | `--show-heldout` | Print diffs for held-out failures too (hidden by default; see below). |
 | `--rescore REPORT` | Re-score the outputs saved in an earlier report against the current `cases.jsonl` (after adding an alternate, say). No API calls. |
 | `--report PATH` | JSON report location. Default `/tmp/whispur-eval/<prompt>-<provider>-<timestamp>.json`. Reports contain model output, so keep them out of the repo. |
