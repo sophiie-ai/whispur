@@ -33,7 +33,7 @@ struct ProviderKeyCheck: Equatable {
         case .elevenlabs: endpoint = .elevenLabsUser
         case .mistral: endpoint = .mistralModels
         case .metaMuse: endpoint = .metaModels
-        case .apple: return nil
+        case .apple, .parakeet: return nil
         }
         guard let key = provider.keychainKeys.first else { return nil }
         return ProviderKeyCheck(providerID: provider.rawValue, providerName: provider.displayName, kind: .stt, key: key, endpoint: endpoint)

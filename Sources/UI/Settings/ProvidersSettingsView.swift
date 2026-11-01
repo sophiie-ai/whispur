@@ -14,6 +14,7 @@ struct ProvidersSettingsView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var credentials: ProviderCredentials
     @ObservedObject var tester: ProviderKeyTester
+    @ObservedObject private var parakeetModel = ParakeetModelManager.shared
 
     @State private var expandedSTT: STTProviderID?
     @State private var expandedLLM: LLMProviderID?
@@ -59,7 +60,7 @@ struct ProvidersSettingsView: View {
         SettingsSection("Speech to text", footer: "Whispur sends each recording to the active provider.") {
             SettingsCard {
                 let active = appState.selectedSTT.setupDescriptor
-                SettingsRow(icon: "waveform.badge.mic", title: "Speech provider", subtitle: credentials.status(for: active.keys).title) {
+                SettingsRow(icon: "waveform.badge.mic", title: "Speech provider", subtitle: credentials.status(for: active, localModel: parakeetModel).title) {
                     RowPicker("Speech provider", selection: $appState.selectedSTT) {
                         ForEach(STTProviderID.allCases) { provider in
                             Text(provider.displayName).tag(provider)
@@ -271,9 +272,22 @@ private struct SpokenLanguagesRow: View {
                 return "Deepgram will use nova-3's multilingual mode."
             case .apple:
                 return "Apple has no auto mode, so Whispur falls back to your system language."
+            case .parakeet:
+                return "Parakeet detects which of its 25 European languages you're speaking."
             default:
                 return "The provider will detect the language on each recording."
             }
+        }
+        if provider == .parakeet {
+            let missing = ParakeetLanguages.unsupported(in: selection)
+            if !missing.isEmpty {
+                let names = missing.map { iso in
+                    selection.codes.first { STTLanguage(code: $0, displayName: "").iso639_1 == iso }
+                        .map(STTLanguageCatalog.displayName(for:)) ?? iso
+                }
+                return "Parakeet doesn't cover \(SettingsReadiness.listPhrase(names)). Pick another provider for those."
+            }
+            return "Parakeet detects the language itself and keeps to your languages' alphabet."
         }
         guard selection.isMultilingual else {
             return "Whispur will tell \(provider.displayName) which language to expect."
@@ -291,6 +305,8 @@ private struct SpokenLanguagesRow: View {
             return "Apple listens in one language: your system language if it's on the list, otherwise the first one."
         case .groqWhisper, .elevenlabs, .mistral:
             return "\(provider.displayName) takes one language, so it detects which of yours you're speaking."
+        case .parakeet:
+            return "Parakeet detects the language itself and keeps to your languages' alphabet."
         }
     }
 }

@@ -88,12 +88,17 @@ enum ProviderSetupStatus: Equatable {
     case ready
     case needsKey
     case needsRegion
+    /// An on-device model that isn't downloaded yet.
+    case needsDownload
+    case downloading
 
     var title: String {
         switch self {
         case .ready: "Ready"
         case .needsKey: "Needs key"
         case .needsRegion: "Needs region"
+        case .needsDownload: "Needs download"
+        case .downloading: "Downloading"
         }
     }
 
@@ -102,6 +107,14 @@ enum ProviderSetupStatus: Equatable {
     }
 
     var isReady: Bool { self == .ready }
+
+    init(localModel: ParakeetModelManager.DownloadState) {
+        switch localModel {
+        case .installed: self = .ready
+        case .downloading: self = .downloading
+        case .notDownloaded, .failed: self = .needsDownload
+        }
+    }
 
     /// A provider with no required keys (Apple) is always ready.
     static func derive(requiredKeys: [KeychainKey], has: (KeychainKey) -> Bool) -> ProviderSetupStatus {
@@ -141,6 +154,7 @@ struct SettingsReadiness: Equatable {
         case .ready: break
         case .needsKey: missing.append("\(speechProviderName) key")
         case .needsRegion: missing.append("\(speechProviderName) region")
+        case .needsDownload, .downloading: missing.append("\(speechProviderName) model")
         }
 
         if !missing.isEmpty {
@@ -205,6 +219,13 @@ final class ProviderCredentials: ObservableObject {
 
     func status(for keys: [KeychainKey]) -> ProviderSetupStatus {
         ProviderSetupStatus.derive(requiredKeys: keys, has: has)
+    }
+
+    /// Key status, or the model's for a provider that runs a downloaded
+    /// model.
+    func status(for descriptor: ProviderDescriptor, localModel: ParakeetModelManager) -> ProviderSetupStatus {
+        guard descriptor.hasLocalModel else { return status(for: descriptor.keys) }
+        return ProviderSetupStatus(localModel: localModel.downloadState)
     }
 
     /// The masked form of a stored secret, or the plain value for
@@ -279,6 +300,9 @@ struct ProviderDescriptor: Identifiable, Equatable {
     let keyCheck: ProviderKeyCheck?
     let overrides: [OverrideField]
     var modelPicker: ModelPicker? = nil
+    /// The provider runs a model Whispur downloads (Parakeet): Settings
+    /// shows the download and its status comes from the model, not keys.
+    var hasLocalModel = false
 
     /// A menu of known models. Picking the default clears the stored value,
     /// so a later default change still reaches the user.
@@ -304,13 +328,15 @@ extension STTProviderID {
                     .init(kind: .model, storageKey: "openaiSTTModel", label: "Custom Model", defaultValue: OpenAISTT.defaultModel),
                 ]
                 : [],
-            modelPicker: modelStorageKey.map { ProviderDescriptor.ModelPicker(storageKey: $0, options: modelOptions) }
+            modelPicker: modelStorageKey.map { ProviderDescriptor.ModelPicker(storageKey: $0, options: modelOptions) },
+            hasLocalModel: self == .parakeet
         )
     }
 
     private var setupNote: String {
         switch self {
         case .apple: "Runs on-device. No key needed."
+        case .parakeet: "NVIDIA Parakeet on this Mac's Neural Engine. No key, and recordings never leave the Mac. Covers English, Spanish and 23 other European languages."
         case .openai: "GPT Transcribe through the OpenAI API, or any compatible gateway. Whisper shuts down in February 2027."
         case .groqWhisper: "Fast hosted Whisper. Groq bills each recording as at least 10 seconds. Shares its key with Groq cleanup."
         case .deepgram: "Nova-3 transcription with multilingual auto-detect."

@@ -15,6 +15,7 @@ struct ProviderSetupPanel: View {
     let activeNote: String?
     @ObservedObject var credentials: ProviderCredentials
     @ObservedObject var tester: ProviderKeyTester
+    @ObservedObject var localModel: ParakeetModelManager = .shared
     let focus: FocusState<String?>.Binding
     @Binding var isAdvancedOpen: Bool
     var onToggle: () -> Void = {}
@@ -25,10 +26,14 @@ struct ProviderSetupPanel: View {
     }
 
     private var status: ProviderSetupStatus {
-        credentials.status(for: descriptor.keys)
+        credentials.status(for: descriptor, localModel: localModel)
     }
 
     private var isActive: Bool { style == .active }
+
+    private var setupNoun: String {
+        descriptor.hasLocalModel ? "model setup" : "key setup"
+    }
 
     private var showsDetails: Bool {
         switch style {
@@ -77,7 +82,7 @@ struct ProviderSetupPanel: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(descriptor.name), \(status.title)")
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            .accessibilityHint(isExpanded ? "Hides key setup" : "Shows key setup")
+            .accessibilityHint(isExpanded ? "Hides \(setupNoun)" : "Shows \(setupNoun)")
         }
     }
 
@@ -108,6 +113,10 @@ struct ProviderSetupPanel: View {
             }
 
             keyCheckRow
+
+            if descriptor.hasLocalModel {
+                ParakeetModelSection(manager: localModel, isActive: isActive)
+            }
 
             if let modelPicker = descriptor.modelPicker {
                 ProviderModelPicker(picker: modelPicker, providerName: descriptor.name)
