@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/sophiie-ai/whispur/compare/v0.23.1...v0.23.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* **overlay:** show the recording widget as soon as the hold arms and remove the box around it ([#86](https://github.com/sophiie-ai/whispur/issues/86)) ([416e067](https://github.com/sophiie-ai/whispur/commit/416e06794f1c2e8162d383b14f185f45ab97fe10))
+
 ## [0.23.1](https://github.com/sophiie-ai/whispur/compare/v0.23.0...v0.23.1) (2026-11-01)
 
 
