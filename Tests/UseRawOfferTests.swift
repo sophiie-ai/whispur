@@ -14,18 +14,35 @@ final class UseRawOfferTests: XCTestCase {
 
     // MARK: - When to offer
 
-    func testOffersOnlyWhenCleanupChangedTheText() {
-        XCTAssertTrue(UseRawOffer.shouldOffer(raw: "um send it", pasted: "Send it.", bundleID: nil, enabled: true))
-        // Whitespace alone is not a cleanup.
-        XCTAssertFalse(UseRawOffer.shouldOffer(raw: " Send it. ", pasted: "Send it.\n", bundleID: nil, enabled: true))
-        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "", pasted: "Send it.", bundleID: nil, enabled: true))
+    private func offers(_ raw: String, _ pasted: String) -> Bool {
+        UseRawOffer.shouldOffer(raw: raw, pasted: pasted, bundleID: nil, enabled: true)
+    }
+
+    func testNoToastWhenOnlyCapitalAndPeriodWereAdded() {
+        XCTAssertFalse(offers("send it friday", "Send it Friday."))
+        XCTAssertFalse(offers("is it ready", "Is it ready?"))
+        XCTAssertFalse(offers(" Send it. ", "Send it.\n"), "Whitespace alone")
+        XCTAssertFalse(offers("its the \"final\" one - right", "It\u{2019}s the \u{201C}final\u{201D} one \u{2014} right?"), "Curly quotes and dashes")
+        XCTAssertFalse(offers("", "Send it."))
+    }
+
+    func testToastWhenAFillerWasRemoved() {
+        XCTAssertTrue(offers("um send it friday", "Send it Friday."))
+    }
+
+    func testToastWhenACorrectionWasApplied() {
+        XCTAssertTrue(offers("send it tuesday no wednesday", "Send it Wednesday."))
+    }
+
+    func testToastWhenWordsBecameDigits() {
+        XCTAssertTrue(offers("meet at ten thirty", "Meet at 10:30."))
     }
 
     func testNeverOffersWhenDisabledOrInATerminal() {
-        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "a", pasted: "A.", bundleID: nil, enabled: false))
-        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "a", pasted: "A.", bundleID: "com.apple.Terminal", enabled: true))
-        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "a", pasted: "A.", bundleID: "com.mitchellh.ghostty", enabled: true))
-        XCTAssertTrue(UseRawOffer.shouldOffer(raw: "a", pasted: "A.", bundleID: "com.tinyspeck.slackmacgap", enabled: true))
+        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "um a", pasted: "A.", bundleID: nil, enabled: false))
+        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "um a", pasted: "A.", bundleID: "com.apple.Terminal", enabled: true))
+        XCTAssertFalse(UseRawOffer.shouldOffer(raw: "um a", pasted: "A.", bundleID: "com.mitchellh.ghostty", enabled: true))
+        XCTAssertTrue(UseRawOffer.shouldOffer(raw: "um a", pasted: "A.", bundleID: "com.tinyspeck.slackmacgap", enabled: true))
     }
 
     func testAnUnqualifiedPasteClearsThePreviousOffer() {

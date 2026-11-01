@@ -67,15 +67,24 @@ struct UseRawOffer: Equatable {
     private(set) var lastDismissReason: DismissReason?
 
     /// Whether a paste is worth offering the raw transcript for: cleanup
-    /// changed it (ignoring surrounding whitespace) and the target app can
-    /// undo a paste.
+    /// changed the words (not just capitalisation, punctuation or spacing)
+    /// and the target app can undo a paste.
     static func shouldOffer(raw: String, pasted: String, bundleID: String?, enabled: Bool) -> Bool {
         guard enabled else { return false }
-        let raw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let pasted = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, !pasted.isEmpty, raw != pasted else { return false }
+        let rawWords = words(raw)
+        let pastedWords = words(pasted)
+        guard !rawWords.isEmpty, !pastedWords.isEmpty, rawWords != pastedWords else { return false }
         if let bundleID, excludedBundleIDs.contains(bundleID) { return false }
         return true
+    }
+
+    /// The word sequence of a text: lowercased, punctuation (including
+    /// curly quotes and dashes) removed, split on whitespace.
+    static func words(_ text: String) -> [String] {
+        let stripped = String(String.UnicodeScalarView(
+            text.lowercased().unicodeScalars.filter { !CharacterSet.punctuationCharacters.contains($0) }
+        ))
+        return stripped.split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 
     /// Starts an offer for a paste. Returns false (and leaves any previous
