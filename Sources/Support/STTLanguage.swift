@@ -104,7 +104,7 @@ enum STTLanguageCatalog {
 /// silently falls back to "send nothing and hope the model detects correctly"
 /// for providers that have a better explicit mode).
 enum STTLanguageResolver {
-    /// OpenAI / Groq Whisper / ElevenLabs Scribe: single ISO-639-1 or nil for auto.
+    /// OpenAI / Groq Whisper / ElevenLabs Scribe / Mistral: single ISO-639-1 or nil for auto.
     static func iso639_1(for selection: STTLanguageSelection) -> String? {
         switch selection {
         case .auto:

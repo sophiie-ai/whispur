@@ -41,6 +41,13 @@ final class ProviderRegistry {
         case .elevenlabs:
             guard let key = keychain.get(.elevenlabsAPIKey) else { return nil }
             return ElevenLabsSTT(apiKey: key, httpClient: httpClient)
+        case .mistral:
+            guard let key = keychain.get(.mistralAPIKey) else { return nil }
+            return MistralSTT(
+                apiKey: key,
+                httpClient: httpClient,
+                model: Self.sttModel(for: id) ?? MistralSTT.defaultModel
+            )
         case .apple:
             return AppleSTT()
         }

@@ -94,4 +94,44 @@ final class STTProviderTests: XCTestCase {
         XCTAssertNil(STTProviderID.apple.setupDescriptor.modelPicker)
         XCTAssertNil(STTProviderID.deepgram.setupDescriptor.modelPicker)
     }
+
+    // MARK: - Mistral
+
+    func testMistralSendsOneContextBiasFieldPerTerm() {
+        let fields = MistralSTT.formFields(
+            model: "voxtral-mini-transcribe-3",
+            language: .single(code: "es-MX"),
+            vocabulary: ["Whispur", " ", "Sophiie AI, Brisbane"]
+        )
+        XCTAssertEqual(fields, [
+            MultipartFormField(name: "model", value: "voxtral-mini-transcribe-3"),
+            MultipartFormField(name: "language", value: "es"),
+            MultipartFormField(name: "context_bias", value: "Whispur"),
+            MultipartFormField(name: "context_bias", value: "Sophiie AI, Brisbane"),
+        ])
+    }
+
+    func testMistralAutoLanguageOmitsLanguageAndCapsTerms() {
+        let fields = MistralSTT.formFields(
+            model: "voxtral-small-transcribe-3",
+            language: .auto,
+            vocabulary: (0 ..< 80).map { "term\($0)" }
+        )
+        XCTAssertFalse(fields.contains { $0.name == "language" })
+        XCTAssertEqual(fields.filter { $0.name == "context_bias" }.count, MistralSTT.maxContextTerms)
+    }
+
+    func testMistralTranscriptParse() {
+        let body = #"{"model":"voxtral-mini-transcribe-3","text":" Ship it Friday. ","language":null,"segments":[]}"#
+        XCTAssertEqual(MistralSTT.parseTranscript(Data(body.utf8)), "Ship it Friday.")
+        XCTAssertEqual(MistralSTT.parseTranscript(Data("not json".utf8)), "")
+    }
+
+    func testMistralProviderWiring() {
+        XCTAssertEqual(STTProviderID.mistral.keychainKeys, [.mistralAPIKey])
+        XCTAssertEqual(KeychainKey.mistralAPIKey.rawValue, "mistral-api-key")
+        XCTAssertEqual(STTProviderID.mistral.defaultModel, MistralSTT.defaultModel)
+        XCTAssertEqual(STTProviderID.mistral.modelOptions.map(\.id), ["voxtral-mini-transcribe-3", "voxtral-small-transcribe-3"])
+        XCTAssertTrue(STTProviderID.mistral.requiresAPIKey)
+    }
 }

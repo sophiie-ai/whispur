@@ -79,6 +79,7 @@ make run
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |
 | ElevenLabs Scribe | Available | Cloud STT via API key |
+| Mistral Voxtral | Available | Voxtral Mini or Small Transcribe 3, via API key |
 
 ### Transcript cleanup
 

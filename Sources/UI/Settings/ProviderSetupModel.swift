@@ -33,6 +33,7 @@ extension KeychainKey {
         case .groqAPIKey: "Paste your Groq key (gsk_...)"
         case .deepgramAPIKey: "Paste your Deepgram key"
         case .elevenlabsAPIKey: "Paste your ElevenLabs key"
+        case .mistralAPIKey: "Paste your Mistral key"
         case .awsBedrockAPIKey: "Paste your Bedrock API key"
         case .awsRegion: "us-east-1"
         }
@@ -313,6 +314,7 @@ extension STTProviderID {
         case .groqWhisper: "Fast hosted Whisper. Groq bills each recording as at least 10 seconds. Shares its key with Groq cleanup."
         case .deepgram: "Nova-3 transcription with multilingual auto-detect."
         case .elevenlabs: "Scribe transcription with keyword biasing."
+        case .mistral: "Voxtral transcription with custom vocabulary."
         }
     }
 }
