@@ -23,10 +23,17 @@ final class AppState: ObservableObject {
     @AppStorage("streamWhileTalking") var streamWhileTalking: Bool = false
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     /// "Clean up with AI". Off: paste exactly what the speech engine heard
-    /// (spoken edit commands still apply) and make no cleanup request.
+    /// (spoken edit commands and text fixes still apply) and make no cleanup
+    /// request.
     @AppStorage(AppState.cleanupEnabledKey) var cleanupEnabled: Bool = true {
         didSet { syncPipelineConfig() }
     }
+    /// Text fixes made in code on every dictation, cleanup on or off
+    /// (`TextFixes`, `SmartSpacing`). All on by default.
+    @AppStorage(AppState.removeFillersKey) var removeFillers: Bool = true
+    @AppStorage(AppState.spokenSymbolsKey) var spokenSymbols: Bool = true
+    @AppStorage(AppState.spokenQuotesKey) var spokenQuotes: Bool = true
+    @AppStorage(AppState.smartSpacingKey) var smartSpacing: Bool = true
     /// Empty = use the official OpenAI endpoint. Set to point STT/LLM at an
     /// OpenAI-compatible gateway (Azure OpenAI, internal proxy, Ollama, etc.).
     @AppStorage("openaiSTTBaseURL") var openaiSTTBaseURL: String = ""
@@ -318,6 +325,10 @@ final class AppState: ObservableObject {
 
     /// Where "Languages I speak" is stored.
     nonisolated static let cleanupEnabledKey = "cleanupEnabled"
+    nonisolated static let removeFillersKey = "textFixes.removeFillers"
+    nonisolated static let spokenSymbolsKey = "textFixes.spokenSymbols"
+    nonisolated static let spokenQuotesKey = "textFixes.spokenQuotes"
+    nonisolated static let smartSpacingKey = "textFixes.smartSpacing"
     nonisolated static let spokenLanguagesKey = "sttSpokenLanguages"
     /// The single-language picker's key (auto or one BCP-47 code). Left in
     /// place after migrating so an older build still reads it.
@@ -367,9 +378,11 @@ final class AppState: ObservableObject {
             }
         }
         useRaw.replace = { [weak self] offer in
+            // The undo also removes the leading space smart spacing added.
+            let leadingSpace = self?.pipeline.smartSpacedDictationID == offer.dictationID ? " " : ""
             let outcome = await PasteReplacer.replaceLastPaste(
                 pasted: offer.pastedText,
-                with: offer.rawTranscript,
+                with: leadingSpace + offer.rawTranscript,
                 preserveClipboard: self?.preserveClipboard ?? true
             )
             return outcome == .replaced
@@ -914,6 +927,12 @@ final class AppState: ObservableObject {
         pipeline.cleanupEnabled = cleanupEnabled
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = vocabulary.plainTerms
+        pipeline.textFixOptions = TextFixOptions(
+            removeFillers: removeFillers,
+            spokenSymbols: spokenSymbols,
+            spokenQuotes: spokenQuotes
+        )
+        pipeline.smartSpacingEnabled = smartSpacing
         pipeline.preserveClipboard = preserveClipboard
         pipeline.soundVolume = soundEnabled ? 1.0 : 0.0
         pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording

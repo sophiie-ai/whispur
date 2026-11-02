@@ -8,6 +8,12 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
   python3 scripts/eval-cleanup.py --provider groq --prompt current --runs 1
   python3 scripts/eval-cleanup.py --self-test
   python3 scripts/eval-cleanup.py --cases-file "$HOME/Library/Application Support/Whispur/MyEvalCases.jsonl"
+  python3 scripts/eval-cleanup.py --provider openai --text-fixes --runs 1
+
+--text-fixes      run each input through the app's no-AI text fixes first
+                  (Sources/Pipeline/TextFixes.swift, compiled with swiftc), as
+                  the app does before cleanup. Without it the input is sent
+                  as written, like a build without text fixes.
 
 --prompt new      system prompt = Prompts.defaultCleanup in the working tree,
                   user message = CleanupMessage (vocabulary block, wrapped
@@ -470,6 +476,33 @@ def load_cases(path: Path) -> list[dict]:
     return cases
 
 
+# Bracketed non-speech annotations ("[BLANK_AUDIO]", "(music)"), as in
+# TranscriptDecision.isOnlyNonSpeechAnnotations.
+ANNOTATIONS_RE = re.compile(r"\[[^\]]*\]|\([^)]*\)")
+
+TEXT_FIXES_SOURCES = ["Sources/Pipeline/TextFixes.swift", "scripts/text-fixes-cli/main.swift"]
+
+
+def text_fixes_binary() -> Path:
+    """Compiles the text-fixes CLI from the working tree (cached by mtime)."""
+    out = Path("/tmp/whispur-eval/text-fixes-cli")
+    sources = [ROOT / s for s in TEXT_FIXES_SOURCES]
+    if not out.exists() or any(s.stat().st_mtime > out.stat().st_mtime for s in sources):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["swiftc", "-O", *map(str, sources), "-o", str(out)], check=True)
+    return out
+
+
+def apply_text_fixes(cases: list[dict]) -> dict[str, str]:
+    """Case id -> input after the app's text fixes."""
+    lines = "".join(json.dumps({"input": c["input"], "style": c.get("style", "default")}) + "\n" for c in cases)
+    done = subprocess.run([str(text_fixes_binary())], input=lines, capture_output=True, text=True, check=True)
+    outputs = [json.loads(line)["text"] for line in done.stdout.splitlines() if line.strip()]
+    if len(outputs) != len(cases):
+        raise SystemExit("text-fixes CLI returned the wrong number of lines")
+    return {c["id"]: text for c, text in zip(cases, outputs)}
+
+
 def self_test() -> int:
     builder = RequestBuilder("new")
     golden_input = json.loads((ROOT / "Evals/cleanup/golden/input.json").read_text())
@@ -505,6 +538,8 @@ def main() -> int:
     ap.add_argument("--concurrency", type=int, default=None, help="parallel requests (Groq is always 1)")
     ap.add_argument("--report", help="JSON report path (default /tmp/whispur-eval/<prompt>-<provider>-<ts>.json)")
     ap.add_argument("--self-test", action="store_true", help="check request building against the golden file")
+    ap.add_argument("--text-fixes", action="store_true",
+                    help="apply the app's no-AI text fixes to each input before cleanup, as the app does")
     ap.add_argument("--rescore", metavar="REPORT",
                     help="re-score the outputs saved in a previous JSON report against the current cases (no API calls)")
     args = ap.parse_args()
@@ -533,13 +568,19 @@ def main() -> int:
     throttle = GroqThrottle() if args.provider == "groq" else None
     concurrency = 1 if args.provider == "groq" else (args.concurrency or 6)
 
+    fixed = apply_text_fixes(cases) if args.text_fixes else {}
+    if fixed:
+        changed = [c["id"] for c in cases if fixed[c["id"]] != c["input"]]
+        print(f"text fixes changed {len(changed)} of {len(cases)} inputs: {', '.join(changed)}", file=sys.stderr)
+
     jobs = []
     for case in cases:
-        system_prompt, user_message = builder.build(case["input"], case.get("vocabulary", []),
+        sent = fixed.get(case["id"], case["input"])
+        system_prompt, user_message = builder.build(sent, case.get("vocabulary", []),
                                                     case.get("style", "default"))
-        max_tokens = cleanup_max_tokens(len(case["input"]))
+        max_tokens = cleanup_max_tokens(len(sent))
         for run in range(args.runs):
-            jobs.append((case, run, system_prompt, user_message, max_tokens))
+            jobs.append((case, run, system_prompt, user_message, max_tokens, sent))
 
     if previous is not None:
         saved = {c["id"]: c["runs"] for c in previous["cases"]}
@@ -557,9 +598,16 @@ def main() -> int:
         stopped = []
 
         def work(job):
-            case, run, system_prompt, user_message, max_tokens = job
+            case, run, system_prompt, user_message, max_tokens, sent = job
             if stopped:
                 return None
+            if not ANNOTATIONS_RE.sub("", sent).strip():
+                # Nothing but fillers or annotations left: the app dismisses
+                # the dictation without a cleanup request.
+                result = {"text": "EMPTY", "finish_reason": "stop", "latency": 0.0, "skipped_request": True,
+                          "id": case["id"], "run": run}
+                result["passed"] = score(case, result["text"])
+                return result
             try:
                 cap.check()
                 result = call(args.provider, model, system_prompt, user_message, max_tokens, throttle)
@@ -621,7 +669,7 @@ def main() -> int:
 
     def summarize(rows):
         runs = [r for row in rows for r in row["runs"]]
-        ok = [r for r in runs if "error" not in r]
+        ok = [r for r in runs if "error" not in r and not r.get("skipped_request")]
         crit_runs = [r for row in rows if row["case"]["critical"] for r in row["runs"]]
         lat = [r["latency"] for r in ok]
         toks = [r["prompt_tokens"] for r in ok if r.get("prompt_tokens")]
@@ -633,7 +681,7 @@ def main() -> int:
             "cases_all_runs_pass": sum(row["passes"] == len(row["runs"]) for row in rows),
             "critical_failures": sum(not r["passed"] for r in crit_runs),
             "critical_cases_failed": sum(row["case"]["critical"] and row["passes"] < len(row["runs"]) for row in rows),
-            "errors": len(runs) - len(ok),
+            "errors": sum("error" in r for r in runs),
             "truncated": sum(r.get("finish_reason") == "length" for r in ok),
             "latency_p50": pct(lat, 0.5),
             "latency_p95": pct(lat, 0.95),
@@ -667,6 +715,7 @@ def main() -> int:
         "provider": args.provider,
         "model": model,
         "runs_per_case": args.runs,
+        "text_fixes": args.text_fixes,
         "system_prompt_words": len(builder.system_prompt.split()),
         "summary": summary,
         "cases": [{"id": row["case"]["id"], "split": row["case"].get("split", "tune"),
