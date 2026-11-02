@@ -130,6 +130,11 @@ final class DictationPipeline: ObservableObject {
     var onPasteCompleted: ((String) -> Void)?
     /// Fires once a pasted dictation is saved to history ("Use raw").
     var onDictationPasted: ((PipelineResult) -> Void)?
+    /// Takes the final text instead of the simulated paste when it returns
+    /// true. Onboarding's "Try it" step sets this while its own window is in
+    /// front, so the text lands in its field directly rather than through
+    /// the clipboard and a synthetic Cmd+V into Whispur itself.
+    var deliverInsteadOfPasting: (@MainActor (String) -> Bool)?
 
     private var audioLevelCancellable: AnyCancellable?
     /// Bumped by every start, stop and cancel, so a recorder start that
@@ -601,12 +606,17 @@ final class DictationPipeline: ObservableObject {
             guard !Task.isCancelled else { throw CancellationError() }
 
             phase = .pasting
-            let pasteText = await smartSpaced(finalTranscript)
-            await TextInjector.paste(pasteText, preserveClipboard: preserveClipboard)
+            let delivered = deliverInsteadOfPasting?(finalTranscript) == true
+            let pasteText = delivered ? finalTranscript : await smartSpaced(finalTranscript)
+            if !delivered {
+                await TextInjector.paste(pasteText, preserveClipboard: preserveClipboard)
+            }
 
             guard !Task.isCancelled else { throw CancellationError() }
 
-            onPasteCompleted?(finalTranscript)
+            // Learning and "Use raw" act on another app's field; a dictation
+            // delivered into Whispur's own window skips both.
+            if !delivered { onPasteCompleted?(finalTranscript) }
 
             let result = PipelineResult(
                 rawTranscript: normalizedRawTranscript,
@@ -624,7 +634,7 @@ final class DictationPipeline: ObservableObject {
             smartSpacedDictationID = pasteText == finalTranscript ? nil : result.id
             lastResult = result
             historyStore.add(result)
-            onDictationPasted?(result)
+            if !delivered { onDictationPasted?(result) }
 
             phase = .done(finalTranscript)
             scheduleResetToIdle(after: .milliseconds(1200))

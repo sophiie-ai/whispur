@@ -20,6 +20,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(sophiieHex: 0x140934)
         window.isReleasedWhenClosed = false
+        window.identifier = OnboardingWindow.windowIdentifier
         window.setContentSize(OnboardingWindow.size)
         window.center()
 
@@ -68,6 +69,8 @@ struct OnboardingWindow: View {
     /// publish on their own, so the window listens to them directly.
     @State private var accessibilityGranted: Bool
     @State private var guidedPermission: GuidedPermission?
+    /// The "Try it" field and whether a real dictation has landed in it.
+    @StateObject private var tryIt = TryItSession()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -111,6 +114,9 @@ struct OnboardingWindow: View {
             if granted { advance(afterGranting: .microphone) }
         }
         .onReceive(appState.permissionGuide.$activePermission) { guidedPermission = $0 }
+        .onAppear { routeDictationIntoTryIt(step == .tryIt) }
+        .onChange(of: step) { _, newStep in routeDictationIntoTryIt(newStep == .tryIt) }
+        .onDisappear { routeDictationIntoTryIt(false) }
     }
 
     // MARK: - Navigation
@@ -225,6 +231,7 @@ struct OnboardingWindow: View {
     private func hasOwnPrimaryAction(_ step: OnboardingStep) -> Bool {
         switch step {
         case .microphone: return !appState.microphoneAccessGranted
+        case .tryIt: return !tryIt.succeeded
         case .accessibility: return !accessibilityGranted
         default: return false
         }
@@ -251,6 +258,7 @@ struct OnboardingWindow: View {
         case .microphone: microphoneScreen
         case .accessibility: accessibilityScreen
         case .shortcuts: shortcutsScreen
+        case .tryIt: tryItScreen
         case .ready: readyScreen
         }
     }
@@ -365,6 +373,84 @@ struct OnboardingWindow: View {
             return "Right now: \(appState.shortcutSummary). Pick one below to switch, or keep yours."
         }
         return "Choose the key you'll hold while you talk. You can change it any time."
+    }
+
+    // MARK: Try it
+
+    /// While "Try it" shows, a dictation finished with this window in front
+    /// goes straight into the field: no clipboard, no synthetic Cmd+V into
+    /// Whispur itself. Anywhere else it pastes as usual.
+    private func routeDictationIntoTryIt(_ active: Bool) {
+        guard active else {
+            appState.pipeline.deliverInsteadOfPasting = nil
+            return
+        }
+        appState.pipeline.deliverInsteadOfPasting = { [weak tryIt] text in
+            guard let tryIt, NSApp.isActive,
+                  NSApp.keyWindow?.identifier == OnboardingWindow.windowIdentifier else { return false }
+            withSophiieAnimation { tryIt.receive(text) }
+            return true
+        }
+    }
+
+    static let windowIdentifier = NSUserInterfaceItemIdentifier("ai.sophiie.whispur.onboarding")
+
+    private var tryItScreen: some View {
+        let blocker = TryItBlocker.first(
+            microphone: appState.microphoneAccessGranted,
+            accessibility: accessibilityGranted,
+            hasShortcut: appState.hasAnyShortcut,
+            speechConfigured: appState.isSelectedSTTConfigured
+        )
+        return OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.tryIt.symbol, isDone: tryIt.succeeded) },
+            title: tryIt.succeeded ? "That's it" : "Try it",
+            message: tryItMessage(blocker)
+        ) {
+            if let blocker {
+                tryItBlockerAction(blocker)
+            } else {
+                TryItPanel(pipeline: appState.pipeline, session: tryIt, prompt: Self.tryItPhrase)
+            }
+        }
+    }
+
+    static let tryItPhrase = "Hi, I'm testing Whispur"
+
+    private func tryItMessage(_ blocker: TryItBlocker?) -> String {
+        switch blocker {
+        case .microphone:
+            return "Whispur needs microphone access before it can hear you."
+        case .accessibility:
+            return "Whispur needs accessibility access before your shortcut works."
+        case .shortcut:
+            return "There's no dictation shortcut yet. Pick one first."
+        case .speechProvider:
+            return "\(appState.selectedSTT.displayName) needs an API key before it can transcribe."
+        case nil:
+            break
+        }
+        if tryIt.succeeded {
+            return "Whispur types wherever your cursor is, in any app."
+        }
+        if appState.shortcutStyle == .separate, appState.holdShortcut == nil, let toggle = appState.toggleShortcut {
+            return "\(toggle.toggleStartPhrase), say \u{201C}\(Self.tryItPhrase)\u{201D}, then \(toggle.toggleStopPhrase)."
+        }
+        let key = appState.effectiveHoldShortcut?.menuTitle ?? "your shortcut"
+        return "Hold \(key) and say \u{201C}\(Self.tryItPhrase)\u{201D}. Let go to see it land below."
+    }
+
+    @ViewBuilder
+    private func tryItBlockerAction(_ blocker: TryItBlocker) -> some View {
+        if let fix = blocker.step {
+            Button(fix == .shortcuts ? "Pick a Shortcut" : "Allow \(fix.title)") { go(to: fix) }
+                .buttonStyle(.sophiiePrimary)
+                .controlSize(.large)
+        } else {
+            Button("Open Providers") { openSettings(tab: .providers) }
+                .buttonStyle(.sophiiePrimary)
+                .controlSize(.large)
+        }
     }
 
     private var readyScreen: some View {
@@ -613,5 +699,93 @@ private struct ShortcutChoiceCard: View {
         .sophiieAnimation(value: isHovering)
         .accessibilityLabel("\(choice.title). \(choice.detail)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// The "Try it" field's state, shared with the pipeline's delivery hook.
+@MainActor
+final class TryItSession: ObservableObject {
+    @Published var text = ""
+    @Published private(set) var succeeded = false
+
+    func receive(_ dictated: String) {
+        let trimmed = dictated.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        text = text.isEmpty ? trimmed : text + " " + trimmed
+        succeeded = true
+    }
+}
+
+/// The field the user dictates into, with the pipeline's live state above
+/// it and a check once text has landed.
+private struct TryItPanel: View {
+    private typealias Palette = SophiieTheme.Palette
+
+    @ObservedObject var pipeline: DictationPipeline
+    @ObservedObject var session: TryItSession
+    let prompt: String
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            TextField(prompt, text: $session.text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16))
+                .lineLimit(3, reservesSpace: true)
+                .focused($focused)
+                .padding(14)
+                .frame(width: 440)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
+                        .strokeBorder(session.succeeded ? Palette.success : (focused ? Palette.brand : Palette.controlBorder),
+                                      lineWidth: session.succeeded || focused ? 2 : 1)
+                )
+                .accessibilityLabel("Try it field")
+
+            status
+                .frame(height: 22)
+        }
+        .onAppear { focused = true }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if session.succeeded, pipeline.phase == .idle || isDone {
+            Label("It works", systemImage: "checkmark.circle.fill")
+                .font(SophiieTheme.Typography.label)
+                .foregroundStyle(Palette.success)
+        } else {
+            switch pipeline.phase {
+            case .recording:
+                Label("Listening\u{2026}", systemImage: "waveform")
+                    .font(SophiieTheme.Typography.label)
+                    .foregroundStyle(Palette.highlight)
+            case .starting, .requestingMicrophonePermission:
+                Text("Starting\u{2026}")
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.muted)
+            case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
+                Label("Transcribing\u{2026}", systemImage: "ellipsis")
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.muted)
+            case let .error(message):
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.warning)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            default:
+                Text("The text lands here, not in another app.")
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.muted)
+            }
+        }
+    }
+
+    private var isDone: Bool {
+        if case .done = pipeline.phase { return true }
+        return false
     }
 }

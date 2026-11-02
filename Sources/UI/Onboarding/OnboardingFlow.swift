@@ -6,6 +6,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     case microphone
     case accessibility
     case shortcuts
+    case tryIt
     case ready
 
     var id: Int { rawValue }
@@ -16,6 +17,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .microphone: return "Microphone"
         case .accessibility: return "Accessibility"
         case .shortcuts: return "Shortcuts"
+        case .tryIt: return "Try it"
         case .ready: return "Ready"
         }
     }
@@ -27,6 +29,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .microphone: return "mic.fill"
         case .accessibility: return "accessibility"
         case .shortcuts: return "command"
+        case .tryIt: return "text.cursor"
         case .ready: return "flag.checkered"
         }
     }
@@ -74,6 +77,37 @@ enum OnboardingFlow {
     static func firstMissingPermissionStep(microphone: Bool, accessibility: Bool) -> OnboardingStep? {
         if !microphone { return .microphone }
         if !accessibility { return .accessibility }
+        return nil
+    }
+}
+
+/// What stops the "Try it" step from working, in the order to fix it.
+enum TryItBlocker: Equatable {
+    case microphone
+    case accessibility
+    case shortcut
+    case speechProvider
+
+    /// The onboarding step that fixes it, nil when Settings does.
+    var step: OnboardingStep? {
+        switch self {
+        case .microphone: return .microphone
+        case .accessibility: return .accessibility
+        case .shortcut: return .shortcuts
+        case .speechProvider: return nil
+        }
+    }
+
+    static func first(
+        microphone: Bool,
+        accessibility: Bool,
+        hasShortcut: Bool,
+        speechConfigured: Bool
+    ) -> TryItBlocker? {
+        if !microphone { return .microphone }
+        if !accessibility { return .accessibility }
+        if !hasShortcut { return .shortcut }
+        if !speechConfigured { return .speechProvider }
         return nil
     }
 }

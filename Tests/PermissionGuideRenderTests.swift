@@ -55,7 +55,7 @@ final class PermissionGuideRenderTests: XCTestCase {
             for step in OnboardingStep.allCases {
                 appState.permissionGuide.setActivePermissionForRendering(nil)
                 try render(OnboardingWindow(appState: appState, initialStep: step) {}, scheme: scheme, size: onboardingSize,
-                           to: dir.appendingPathComponent("onboarding-\(step.title.lowercased())-\(suffix).png"))
+                           to: dir.appendingPathComponent("onboarding-\(step.title.lowercased().replacingOccurrences(of: " ", with: "-"))-\(suffix).png"))
             }
             // The accessibility step while the guide is open beside System Settings.
             appState.permissionGuide.setActivePermissionForRendering(.accessibility)
