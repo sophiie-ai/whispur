@@ -51,8 +51,8 @@ final class PermissionGuideRenderTests: XCTestCase {
                 try render(guide, scheme: scheme, size: size, to: dir.appendingPathComponent("guide-\(permission.rawValue)-\(suffix).png"))
             }
 
-            let onboardingSize = CGSize(width: 760, height: 640)
-            for step in [OnboardingStep.microphone, .accessibility] {
+            let onboardingSize = CGSize(width: OnboardingWindow.size.width, height: OnboardingWindow.size.height)
+            for step in OnboardingStep.allCases {
                 appState.permissionGuide.setActivePermissionForRendering(nil)
                 try render(OnboardingWindow(appState: appState, initialStep: step) {}, scheme: scheme, size: onboardingSize,
                            to: dir.appendingPathComponent("onboarding-\(step.title.lowercased())-\(suffix).png"))

@@ -14,8 +14,13 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        // Onboarding is always the midnight brand stage, whatever the system
+        // appearance: the dark token values are the midnight palette.
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = NSColor(sophiieHex: 0x140934)
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 760, height: 560))
+        window.setContentSize(OnboardingWindow.size)
         window.center()
 
         super.init(window: window)
@@ -45,70 +50,26 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-enum OnboardingStep: Int, CaseIterable, Identifiable {
-    case welcome
-    case microphone
-    case accessibility
-    case shortcuts
-    case ready
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .welcome:
-            return "Welcome"
-        case .microphone:
-            return "Microphone"
-        case .accessibility:
-            return "Accessibility"
-        case .shortcuts:
-            return "Shortcuts"
-        case .ready:
-            return "Ready"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .welcome:
-            return "A fast first-run pass before dictation disappears into the background."
-        case .microphone:
-            return "Whispur needs live audio input before it can capture speech."
-        case .accessibility:
-            return "Global shortcuts and paste-back depend on accessibility access."
-        case .shortcuts:
-            return "Review the default controls before you start dictating."
-        case .ready:
-            return "You can always revisit setup later from Settings."
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .welcome:
-            return "sparkles"
-        case .microphone:
-            return "mic"
-        case .accessibility:
-            return "lock.shield"
-        case .shortcuts:
-            return "keyboard"
-        case .ready:
-            return "checkmark.circle"
-        }
-    }
-}
-
+/// First-run onboarding: one thing per screen on the midnight brand stage.
+/// A large symbol, one headline, one sentence and one primary action; a
+/// thin progress bar on top and Back / Continue underneath.
 struct OnboardingWindow: View {
+    private typealias Palette = SophiieTheme.Palette
+
+    static let size = NSSize(width: 640, height: 520)
+
     @ObservedObject var appState: AppState
     let dismiss: () -> Void
 
     @State private var step: OnboardingStep
+    /// Which way the last step change went, for the slide direction.
+    @State private var movingForward = true
     /// Mirrors of the permission state. The hotkey manager and the guide
     /// publish on their own, so the window listens to them directly.
     @State private var accessibilityGranted: Bool
     @State private var guidedPermission: GuidedPermission?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// How long a fresh grant's check shows before the step moves on.
     static let grantedBeat: TimeInterval = 0.7
@@ -123,329 +84,155 @@ struct OnboardingWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
+            topBar
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    stepIndicator
-                    contentCard
-                    summaryCard
-                }
-                .padding(24)
+            ZStack {
+                screen(for: step)
+                    .id(step)
+                    .transition(stepTransition)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
 
-            Divider()
             footer
         }
-        .frame(minWidth: 760, minHeight: 560)
-        .background(SophiieTheme.Palette.surfaceWarm)
-        .foregroundStyle(SophiieTheme.Palette.ink)
-        .tint(SophiieTheme.Palette.accent)
+        .frame(width: Self.size.width, height: Self.size.height)
+        .background(Palette.midnight)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.accent)
+        .environment(\.colorScheme, .dark)
+        .preferredColorScheme(.dark)
         .onReceive(appState.hotkeyManager.$isAccessibilityGranted) { granted in
             let wasGranted = accessibilityGranted
             accessibilityGranted = granted
-            if granted, !wasGranted { advance(after: .accessibility) }
+            if granted, !wasGranted { advance(afterGranting: .accessibility) }
         }
         .onReceive(appState.$microphoneAccessGranted.removeDuplicates().dropFirst()) { granted in
-            if granted { advance(after: .microphone) }
+            if granted { advance(afterGranting: .microphone) }
         }
         .onReceive(appState.permissionGuide.$activePermission) { guidedPermission = $0 }
     }
 
+    // MARK: - Navigation
+
+    private func go(to target: OnboardingStep) {
+        movingForward = target.rawValue > step.rawValue
+        withSophiieAnimation(SophiieTheme.Motion.medium) { step = target }
+    }
+
     /// A permission just turned on while its step shows: let the check
     /// register, then move on.
-    private func advance(after granted: OnboardingStep) {
-        guard step == granted else { return }
+    private func advance(afterGranting permission: GuidedPermission) {
+        guard let next = OnboardingFlow.stepAfterGrant(of: permission, showing: step) else { return }
+        let granted = step
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.grantedBeat) {
-            guard step == granted, let next = OnboardingStep(rawValue: granted.rawValue + 1) else { return }
-            withSophiieAnimation { step = next }
+            guard step == granted else { return }
+            go(to: next)
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome to Whispur")
-                    .font(.title2.weight(.semibold))
-                    .tracking(SophiieTheme.Typography.titleTracking)
-                    .foregroundStyle(SophiieTheme.Palette.ink)
-                Text(step.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(SophiieTheme.Palette.muted)
-            }
-
-            Spacer()
-
-            PreferenceBadge(
-                title: "Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)",
-                tone: .neutral
-            )
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 20)
+    private var stepTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        let insertion: Edge = movingForward ? .trailing : .leading
+        let removal: Edge = movingForward ? .leading : .trailing
+        return .asymmetric(
+            insertion: .offset(x: insertion == .trailing ? 40 : -40).combined(with: .opacity),
+            removal: .offset(x: removal == .leading ? -40 : 40).combined(with: .opacity)
+        )
     }
 
-    private var stepIndicator: some View {
-        HStack(spacing: 10) {
-            ForEach(OnboardingStep.allCases) { currentStep in
-                VStack(spacing: 8) {
-                    Image(systemName: currentStep.icon)
-                        .font(.headline)
-                        .frame(width: 34, height: 34)
-                        .background(stepFill(for: currentStep), in: Circle())
-                        .foregroundStyle(stepForeground(for: currentStep))
+    // MARK: - Chrome
 
-                    Text(currentStep.title)
-                        .font(.caption.weight(step == currentStep ? .semibold : .regular))
-                        .foregroundStyle(step == currentStep ? SophiieTheme.Palette.ink : SophiieTheme.Palette.muted)
-                }
-                .frame(maxWidth: .infinity)
-                .sophiieAnimation(value: step)
+    private var topBar: some View {
+        HStack(spacing: 16) {
+            ProgressTrack(value: OnboardingFlow.progress(of: step))
+                .frame(maxWidth: 220)
+                .sophiieAnimation(SophiieTheme.Motion.medium, value: step)
+                .accessibilityLabel("Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)")
+
+            Spacer(minLength: 0)
+
+            if !step.isFirst, !step.isLast {
+                Button("Finish later", action: finishLater)
+                    .buttonStyle(.plain)
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.muted)
+                    .help("Close setup. Anything you skip stays in Settings → Get Started.")
             }
         }
-    }
-
-    private func stepFill(for candidate: OnboardingStep) -> Color {
-        if candidate == step { return SophiieTheme.Palette.brand }
-        if candidate.rawValue < step.rawValue { return SophiieTheme.Palette.surfaceSelected }
-        return SophiieTheme.Palette.surfaceSubtle
-    }
-
-    private func stepForeground(for candidate: OnboardingStep) -> Color {
-        if candidate == step { return SophiieTheme.Palette.onBrand }
-        if candidate.rawValue < step.rawValue { return SophiieTheme.Palette.ink }
-        return SophiieTheme.Palette.muted
-    }
-
-    private var contentCard: some View {
-        PreferenceCard(step.title, detail: step.subtitle, icon: step.icon) {
-            Group {
-                switch step {
-                case .welcome:
-                    welcomeStep
-                case .microphone:
-                    microphoneStep
-                case .accessibility:
-                    accessibilityStep
-                case .shortcuts:
-                    shortcutsStep
-                case .ready:
-                    readyStep
-                }
-            }
-        }
-    }
-
-    private var welcomeStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Whispur keeps capture, cleanup, and paste in one pass. This short setup makes sure the menu bar app is ready before your first dictation.")
-                .font(.subheadline)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-
-            HStack(spacing: 10) {
-                PreferenceBadge(
-                    title: appState.isSelectedSTTConfigured ? appState.speechReadyTitle : "\(appState.selectedSTT.displayName) needs setup",
-                    tone: appState.isSelectedSTTConfigured ? .good : .warning
-                )
-                PreferenceBadge(
-                    title: appState.showSetupGuide ? "Guide available" : "Guide hidden",
-                    tone: .neutral
-                )
-            }
-
-            parakeetDownloadLine
-        }
-    }
-
-    /// The model download's progress while Apple fills in for Parakeet.
-    @ViewBuilder
-    private var parakeetDownloadLine: some View {
-        if appState.isUsingSpeechFallback {
-            ParakeetDownloadStatusLine(manager: appState.parakeetModel)
-        }
-    }
-
-    private var microphoneStep: some View {
-        VStack(spacing: 10) {
-            SetupChecklistRow(
-                title: "Grant microphone access",
-                detail: microphoneDetail,
-                isComplete: appState.microphoneAccessGranted,
-                actionTitle: microphoneActionTitle,
-                action: appState.microphoneAccessGranted ? appState.openMicrophoneSettings : appState.requestMicrophoneAccess
-            )
-
-            Text(appState.microphoneAccessRefused && !appState.microphoneAccessGranted
-                ? "Whispur opens System Settings with a guide beside it. Once the switch is on, this step moves on by itself."
-                : "macOS asks once. If you said no earlier, Whispur takes you to the switch in System Settings.")
-                .font(.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-        }
-    }
-
-    private var microphoneDetail: String {
-        if appState.microphoneAccessGranted { return "Whispur can capture speech from your active input device." }
-        if guidedPermission == .microphone { return "Waiting for you in System Settings. Switch on Whispur in the Microphone list." }
-        if appState.microphoneAccessRefused { return "Microphone access was turned off. Switch it back on in System Settings." }
-        return "Allow microphone access so Whispur can record your voice."
-    }
-
-    private var microphoneActionTitle: String {
-        if appState.microphoneAccessGranted { return "Open Settings" }
-        if guidedPermission == .microphone { return "Show Guide Again" }
-        return appState.microphoneAccessRefused ? "Open Settings" : "Allow"
-    }
-
-    private var accessibilityStep: some View {
-        VStack(spacing: 10) {
-            SetupChecklistRow(
-                title: "Enable accessibility access",
-                detail: accessibilityDetail,
-                isComplete: accessibilityGranted,
-                actionTitle: accessibilityGranted ? "Open Settings" : (guidedPermission == .accessibility ? "Show Guide Again" : "Grant Access"),
-                action: accessibilityGranted ? appState.openAccessibilitySettings : appState.requestAccessibilityAccess
-            )
-
-            Text("Whispur opens System Settings with a guide beside it. Drag Whispur into the list and switch it on; this step moves on by itself.")
-                .font(.caption)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-        }
-    }
-
-    private var accessibilityDetail: String {
-        if accessibilityGranted { return "Global shortcuts and paste-back are available." }
-        if guidedPermission == .accessibility {
-            return "Waiting for you in System Settings. Drag Whispur into the \(GuidedPermission.accessibility.listName) list, then switch it on."
-        }
-        return "Whispur needs accessibility access for global shortcuts and text insertion."
-    }
-
-    private var shortcutsStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                if appState.shortcutStyle == .tapOrHold {
-                    ShortcutSummaryBadge(title: "Tap or hold: \(appState.tapOrHoldShortcut.menuTitle)")
-                } else {
-                    ShortcutSummaryBadge(title: "Hold: \(appState.holdShortcut?.menuTitle ?? "Off")")
-                    ShortcutSummaryBadge(title: "Toggle: \(appState.toggleShortcut?.menuTitle ?? "Off")")
-                }
-            }
-
-            SetupChecklistRow(
-                title: "Push to talk",
-                detail: appState.effectiveHoldShortcut.map {
-                    "Hold \($0.menuTitle) while speaking. Releasing the shortcut begins transcription immediately."
-                } ?? "Hold to talk is off. You can add a shortcut later in Settings.",
-                isComplete: true,
-                actionTitle: nil,
-                action: nil
-            )
-
-            SetupChecklistRow(
-                title: "Latched recording",
-                detail: appState.toggleShortcut == nil && appState.shortcutStyle == .separate
-                    ? "Toggle mode is currently off. You can add one later in Settings."
-                    : appState.toggleShortcutInstruction,
-                isComplete: true,
-                actionTitle: "Open Settings",
-                action: { openSettings(tab: .dictation) }
-            )
-        }
-    }
-
-    private var readyStep: some View {
-        VStack(spacing: 10) {
-            SetupChecklistRow(
-                title: "Permissions",
-                detail: appState.hasRequiredPermissions
-                    ? "Microphone and accessibility access are both in place."
-                    : "You can finish setup later, but Whispur won’t be seamless until both permissions are granted.",
-                isComplete: appState.hasRequiredPermissions,
-                actionTitle: appState.hasRequiredPermissions ? nil : "Open Setup Guide",
-                action: appState.hasRequiredPermissions ? nil : { openSettings(tab: .getStarted) }
-            )
-
-            SetupChecklistRow(
-                title: "Speech provider",
-                detail: speechProviderDetail,
-                isComplete: appState.isSelectedSTTConfigured,
-                actionTitle: appState.isSelectedSTTConfigured ? nil : "Providers",
-                action: appState.isSelectedSTTConfigured ? nil : { openSettings(tab: .providers) }
-            )
-
-            parakeetDownloadLine
-
-            Text("Finish here and start dictating from the menu bar. Setup, providers, and prompt tuning all stay available in Settings.")
-                .font(.subheadline)
-                .foregroundStyle(SophiieTheme.Palette.muted)
-        }
-    }
-
-    private var speechProviderDetail: String {
-        if appState.isUsingSpeechFallback {
-            return "Dictation works now: Apple's on-device recognition transcribes until Parakeet's model is downloaded, then Whispur switches to Parakeet by itself."
-        }
-        return appState.isSelectedSTTConfigured
-            ? "\(appState.selectedSTT.displayName) is ready for dictation."
-            : "The selected speech provider still needs credentials in Settings."
-    }
-
-    private var summaryCard: some View {
-        PreferenceCard(
-            "Current Status",
-            detail: "The same setup state shown here also appears in the Settings setup guide.",
-            icon: "checklist"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                ProgressView(value: appState.setupProgress)
-
-                HStack(spacing: 10) {
-                    PreferenceBadge(
-                        title: "\(appState.setupCompletedCount) of \(appState.setupItemCount) complete",
-                        tone: appState.isReadyForDailyUse ? .good : .warning
-                    )
-                    PreferenceBadge(
-                        title: appState.recordingSummary,
-                        tone: .neutral
-                    )
-                }
-            }
-        }
+        .padding(.leading, 96) // clear of the traffic lights
+        .padding(.trailing, 24)
+        .frame(height: 52)
     }
 
     private var footer: some View {
         HStack {
-            Button("Back") {
-                guard let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
-                step = previous
+            if !step.isFirst {
+                Button("Back") {
+                    guard let previous = OnboardingFlow.previous(before: step) else { return }
+                    go(to: previous)
+                }
+                .buttonStyle(.sophiieSecondary)
+                .controlSize(.large)
             }
-            .buttonStyle(.sophiieSecondary)
-            .disabled(step == .welcome)
 
             Spacer()
 
-            if step != .ready {
-                Button(step == .welcome ? "Begin Setup" : "Continue") {
-                    guard let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
-                    step = next
-                }
-                .buttonStyle(.sophiiePrimary)
-            } else {
-                Button("Open Settings") {
-                    openSettings(tab: .getStarted)
-                }
-                .buttonStyle(.sophiieSecondary)
+            footerAction
+        }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 24)
+    }
 
-                Button("Start Using Whispur") {
-                    appState.markOnboardingCompleted()
-                    dismiss()
-                }
+    /// Continue is the primary action unless the screen has its own (a
+    /// permission still to grant), in which case it steps back to a quiet
+    /// "Skip for now".
+    @ViewBuilder
+    private var footerAction: some View {
+        switch step {
+        case .welcome:
+            Button("Get Started") { go(to: .microphone) }
                 .buttonStyle(.sophiiePrimary)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+        case .ready:
+            Button("Start Using Whispur") {
+                appState.markOnboardingCompleted()
+                dismiss()
+            }
+            .buttonStyle(.sophiiePrimary)
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+        default:
+            if hasOwnPrimaryAction(step) {
+                Button("Skip for now", action: continueOn)
+                    .buttonStyle(.sophiieSecondary)
+                    .controlSize(.large)
+            } else {
+                Button("Continue", action: continueOn)
+                    .buttonStyle(.sophiiePrimary)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+    }
+
+    private func continueOn() {
+        guard let next = OnboardingFlow.next(after: step) else { return }
+        go(to: next)
+    }
+
+    private func hasOwnPrimaryAction(_ step: OnboardingStep) -> Bool {
+        switch step {
+        case .microphone: return !appState.microphoneAccessGranted
+        case .accessibility: return !accessibilityGranted
+        default: return false
+        }
+    }
+
+    private func finishLater() {
+        appState.markOnboardingCompleted()
+        dismiss()
     }
 
     private func openSettings(tab: SettingsTab) {
@@ -453,5 +240,306 @@ struct OnboardingWindow: View {
         NotificationCenter.default.post(name: .whispurOpenSettings, object: tab.rawValue)
         NSApp.activate(ignoringOtherApps: true)
         dismiss()
+    }
+
+    // MARK: - Screens
+
+    @ViewBuilder
+    private func screen(for step: OnboardingStep) -> some View {
+        switch step {
+        case .welcome: welcomeScreen
+        case .microphone: microphoneScreen
+        case .accessibility: accessibilityScreen
+        case .shortcuts: shortcutsScreen
+        case .ready: readyScreen
+        }
+    }
+
+    private var welcomeScreen: some View {
+        OnboardingScreen(
+            hero: { AppIconHero() },
+            title: "Talk instead of typing",
+            message: "Hold a key, say what you mean, and Whispur types it wherever your cursor is."
+        ) {
+            parakeetDownloadLine
+        }
+    }
+
+    private var microphoneScreen: some View {
+        OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.microphone.symbol, isDone: appState.microphoneAccessGranted) },
+            title: appState.microphoneAccessGranted ? "Whispur can hear you" : "Let Whispur hear you",
+            message: microphoneMessage
+        ) {
+            if appState.microphoneAccessGranted {
+                GrantedLabel(text: "Microphone on")
+            } else {
+                Button(microphoneActionTitle, action: appState.requestMicrophoneAccess)
+                    .buttonStyle(.sophiiePrimary)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+    }
+
+    private var microphoneMessage: String {
+        if appState.microphoneAccessGranted { return "Your voice only leaves the mic while you hold the shortcut." }
+        if guidedPermission == .microphone { return "Switch on Whispur in the Microphone list. This moves on by itself." }
+        if appState.microphoneAccessRefused { return "Microphone access is off. Switch it back on in System Settings." }
+        return "Whispur listens only while you hold the shortcut."
+    }
+
+    private var microphoneActionTitle: String {
+        if guidedPermission == .microphone { return "Show Guide Again" }
+        return appState.microphoneAccessRefused ? "Open System Settings" : "Allow Microphone"
+    }
+
+    private var accessibilityScreen: some View {
+        OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.accessibility.symbol, isDone: accessibilityGranted) },
+            title: accessibilityGranted ? "Whispur can type for you" : "Let Whispur type for you",
+            message: accessibilityMessage
+        ) {
+            if accessibilityGranted {
+                GrantedLabel(text: "Accessibility on")
+            } else {
+                Button(guidedPermission == .accessibility ? "Show Guide Again" : "Open System Settings",
+                       action: appState.requestAccessibilityAccess)
+                    .buttonStyle(.sophiiePrimary)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+    }
+
+    private var accessibilityMessage: String {
+        if accessibilityGranted { return "Your shortcut works in every app, and text lands where you're typing." }
+        if guidedPermission == .accessibility {
+            return "Drag Whispur into the \(GuidedPermission.accessibility.listName) list, then switch it on. This moves on by itself."
+        }
+        return "Accessibility lets your shortcut work in any app and paste text where you're typing."
+    }
+
+    private var shortcutsScreen: some View {
+        OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.shortcuts.symbol, isDone: false) },
+            title: "Your shortcut",
+            message: shortcutMessage
+        ) {
+            VStack(spacing: 14) {
+                if let hold = appState.effectiveHoldShortcut {
+                    KeycapCombo(keys: hold.keycapLabels, join: hold.isDoublePress ? .sequence : .chord)
+                        .scaleEffect(1.25)
+                        .padding(.vertical, 4)
+                }
+                Button("More options in Settings") { openSettings(tab: .dictation) }
+                    .buttonStyle(.plain)
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.interactive)
+            }
+        }
+    }
+
+    private var shortcutMessage: String {
+        guard let hold = appState.effectiveHoldShortcut else {
+            return "No hold shortcut is set. Start from the menu bar, or add one in Settings."
+        }
+        if appState.shortcutStyle == .tapOrHold {
+            return "Hold \(hold.menuTitle) while you speak, or tap it to keep recording hands-free."
+        }
+        return "Hold \(hold.menuTitle) while you speak. Let go and the text appears."
+    }
+
+    private var readyScreen: some View {
+        let missing = OnboardingFlow.firstMissingPermissionStep(
+            microphone: appState.microphoneAccessGranted,
+            accessibility: accessibilityGranted
+        )
+        let speechReady = appState.isSelectedSTTConfigured
+        let allSet = missing == nil && speechReady
+        return OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.ready.symbol, isDone: allSet) },
+            title: allSet ? "You're all set" : "Almost there",
+            message: readyMessage(missing: missing, speechReady: speechReady)
+        ) {
+            VStack(spacing: 12) {
+                if let missing {
+                    Button(missing == .microphone ? "Allow Microphone" : "Allow Accessibility") { go(to: missing) }
+                        .buttonStyle(.sophiieSecondary)
+                        .controlSize(.large)
+                } else if !speechReady {
+                    Button("Add a Speech Provider Key") { openSettings(tab: .providers) }
+                        .buttonStyle(.sophiieSecondary)
+                        .controlSize(.large)
+                }
+                parakeetDownloadLine
+                Button("Open Settings") { openSettings(tab: .getStarted) }
+                    .buttonStyle(.plain)
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(Palette.interactive)
+            }
+        }
+    }
+
+    private func readyMessage(missing: OnboardingStep?, speechReady: Bool) -> String {
+        if let missing {
+            return "Whispur needs \(missingPermissionName(missing)) before dictation works. You can also finish this later in Settings."
+        }
+        if !speechReady {
+            return "\(appState.selectedSTT.displayName) needs an API key. Add one in Settings, or switch to on-device speech."
+        }
+        if let hold = appState.effectiveHoldShortcut {
+            return "Hold \(hold.menuTitle) in any app and start talking. Whispur lives in your menu bar."
+        }
+        return "Start dictating from the menu bar. Whispur lives up there."
+    }
+
+    private func missingPermissionName(_ step: OnboardingStep?) -> String {
+        step == .microphone ? "microphone access" : "accessibility access"
+    }
+
+    /// The model download's progress while Apple fills in for Parakeet.
+    @ViewBuilder
+    private var parakeetDownloadLine: some View {
+        if appState.isUsingSpeechFallback {
+            ParakeetDownloadStatusLine(manager: appState.parakeetModel)
+                .frame(maxWidth: 380)
+        }
+    }
+}
+
+// MARK: - Building blocks
+
+/// The centred column every screen uses: hero, headline, one sentence,
+/// then the screen's action.
+private struct OnboardingScreen<Hero: View, Action: View>: View {
+    let hero: Hero
+    let title: String
+    let message: String
+    let action: Action
+
+    init(
+        @ViewBuilder hero: () -> Hero,
+        title: String,
+        message: String,
+        @ViewBuilder action: () -> Action
+    ) {
+        self.hero = hero()
+        self.title = title
+        self.message = message
+        self.action = action()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 12)
+            hero
+                .padding(.bottom, 28)
+            Text(title)
+                .font(.system(size: 30, weight: .semibold))
+                .tracking(SophiieTheme.Typography.displayTracking)
+                .foregroundStyle(SophiieTheme.Palette.ink)
+                .multilineTextAlignment(.center)
+            Text(message)
+                .font(.system(size: 15))
+                .foregroundStyle(SophiieTheme.Palette.inkSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 420)
+                .padding(.top, 10)
+            action
+                .padding(.top, 28)
+            Spacer(minLength: 12)
+        }
+        .padding(.horizontal, 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A large symbol on a soft sky glow; turns into a check once its step is
+/// done.
+private struct SymbolHero: View {
+    let symbol: String
+    let isDone: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [SophiieTheme.Palette.sky.opacity(0.28), SophiieTheme.Palette.sky.opacity(0)],
+                        center: .center,
+                        startRadius: 8,
+                        endRadius: 78
+                    )
+                )
+                .frame(width: 156, height: 156)
+            Circle()
+                .fill(SophiieTheme.Palette.OnDark.raised)
+                .overlay(Circle().strokeBorder(SophiieTheme.Palette.OnDark.hairline, lineWidth: 1))
+                .frame(width: 92, height: 92)
+            Image(systemName: isDone ? "checkmark" : symbol)
+                .font(.system(size: 38, weight: .medium))
+                .foregroundStyle(isDone ? SophiieTheme.Palette.success : SophiieTheme.Palette.sky)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: 156, height: 120)
+        .sophiieAnimation(value: isDone)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The app icon on the same glow, for the welcome screen.
+private struct AppIconHero: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [SophiieTheme.Palette.sky.opacity(0.30), SophiieTheme.Palette.sky.opacity(0)],
+                        center: .center,
+                        startRadius: 10,
+                        endRadius: 90
+                    )
+                )
+                .frame(width: 180, height: 180)
+            Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 112, height: 112)
+        }
+        .frame(width: 180, height: 132)
+        .accessibilityHidden(true)
+    }
+}
+
+/// "✓ Microphone on" under a granted permission.
+private struct GrantedLabel: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .font(SophiieTheme.Typography.label)
+            .foregroundStyle(SophiieTheme.Palette.success)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(SophiieTheme.Palette.success.opacity(0.12), in: Capsule())
+    }
+}
+
+/// The thin progress bar in the top strip.
+private struct ProgressTrack: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SophiieTheme.Palette.track)
+                Capsule()
+                    .fill(SophiieTheme.Palette.highlight)
+                    .frame(width: max(4, proxy.size.width * value))
+            }
+        }
+        .frame(height: 4)
     }
 }
