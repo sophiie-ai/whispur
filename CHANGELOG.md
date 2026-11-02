@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.1](https://github.com/sophiie-ai/whispur/compare/v0.27.0...v0.27.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **pipeline:** let users turn off AI cleanup and paste the transcript as spoken ([#106](https://github.com/sophiie-ai/whispur/issues/106)) ([a0fd653](https://github.com/sophiie-ai/whispur/commit/a0fd6533b1c20e3ce3260ae1713e409af9f31a72))
+
 ## [0.27.0](https://github.com/sophiie-ai/whispur/compare/v0.26.0...v0.27.0) (2026-11-02)
 
 
