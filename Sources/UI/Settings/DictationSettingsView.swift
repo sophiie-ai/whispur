@@ -17,13 +17,22 @@ struct DictationSettingsView: View {
     @ObservedObject var vocabulary: VocabularyStore
     @ObservedObject var styles: StyleStore
     let isReady: Bool
+    /// The "Clean up with AI" switch, shown in the header pill.
+    var cleanupEnabled: Bool = true
     let openTab: (SettingsTab) -> Void
+
+    /// "Ready", "Ready · Cleanup off", or "Needs setup". Cleanup is
+    /// optional, so switching it off never makes the page need setup.
+    static func pillTitle(isReady: Bool, cleanupEnabled: Bool) -> String {
+        guard isReady else { return "Needs setup" }
+        return cleanupEnabled ? "Ready" : "Ready \u{00B7} Cleanup off"
+    }
 
     var body: some View {
         SettingsPage {
             PageHeader(
                 "Dictation",
-                pill: isReady ? "Ready" : "Needs setup",
+                pill: Self.pillTitle(isReady: isReady, cleanupEnabled: cleanupEnabled),
                 pillTone: isReady ? .info : .warning
             ) {
                 Button("Share feedback") {

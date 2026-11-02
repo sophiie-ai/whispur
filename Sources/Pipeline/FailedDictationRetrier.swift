@@ -62,7 +62,14 @@ final class FailedDictationRetrier: ObservableObject {
         defer { running.remove(id) }
         do {
             let result = try await process(audioURL, item)
-            history.markRetried(id, rawTranscript: result.rawTranscript, text: result.text, llmModel: result.llmModel, style: result.style)
+            history.markRetried(
+                id,
+                rawTranscript: result.rawTranscript,
+                text: result.text,
+                llmModel: result.llmModel,
+                style: result.style,
+                cleanupOff: result.cleanupOff
+            )
             copy(result.text)
             showToast("Copied to clipboard")
             logger.info("Retried a failed dictation")

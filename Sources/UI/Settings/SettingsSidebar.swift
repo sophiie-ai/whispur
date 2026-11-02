@@ -20,6 +20,7 @@ struct SidebarStatus: Equatable {
         dictationEnabled: Bool,
         readiness: SettingsReadiness,
         speechProviderName: String,
+        cleanupEnabled: Bool,
         cleanupProviderName: String,
         cleanupReady: Bool
     ) -> SidebarStatus {
@@ -29,7 +30,7 @@ struct SidebarStatus: Equatable {
         guard dictationEnabled else {
             return SidebarStatus(tone: .off, headline: "Dictation is off", detail: "Shortcuts are paused.", target: .dictation)
         }
-        let cleanup = cleanupReady ? "\(cleanupProviderName) cleanup" : "Cleanup off"
+        let cleanup = cleanupEnabled && cleanupReady ? "\(cleanupProviderName) cleanup" : "Cleanup off"
         return SidebarStatus(tone: .ready, headline: "Ready to dictate", detail: "\(speechProviderName) \u{00B7} \(cleanup)", target: nil)
     }
 }

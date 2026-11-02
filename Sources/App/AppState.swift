@@ -22,6 +22,11 @@ final class AppState: ObservableObject {
     /// Opt-in live streaming for providers that support it.
     @AppStorage("streamWhileTalking") var streamWhileTalking: Bool = false
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
+    /// "Clean up with AI". Off: paste exactly what the speech engine heard
+    /// (spoken edit commands still apply) and make no cleanup request.
+    @AppStorage(AppState.cleanupEnabledKey) var cleanupEnabled: Bool = true {
+        didSet { syncPipelineConfig() }
+    }
     /// Empty = use the official OpenAI endpoint. Set to point STT/LLM at an
     /// OpenAI-compatible gateway (Azure OpenAI, internal proxy, Ollama, etc.).
     @AppStorage("openaiSTTBaseURL") var openaiSTTBaseURL: String = ""
@@ -312,6 +317,7 @@ final class AppState: ObservableObject {
     }
 
     /// Where "Languages I speak" is stored.
+    nonisolated static let cleanupEnabledKey = "cleanupEnabled"
     nonisolated static let spokenLanguagesKey = "sttSpokenLanguages"
     /// The single-language picker's key (auto or one BCP-47 code). Left in
     /// place after migrating so an older build still reads it.
@@ -905,6 +911,7 @@ final class AppState: ObservableObject {
     private func syncPipelineConfig() {
         pipeline.selectedSTT = selectedSTT
         pipeline.selectedLLM = selectedLLM
+        pipeline.cleanupEnabled = cleanupEnabled
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = vocabulary.plainTerms
         pipeline.preserveClipboard = preserveClipboard

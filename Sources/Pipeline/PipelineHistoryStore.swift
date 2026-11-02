@@ -100,13 +100,22 @@ final class PipelineHistoryStore: ObservableObject {
     }
 
     /// A retry worked: the entry takes the new text and its recording goes.
-    func markRetried(_ id: UUID, rawTranscript: String, text: String, llmModel: String?, style: WritingStyle?, at date: Date = Date()) {
+    func markRetried(
+        _ id: UUID,
+        rawTranscript: String,
+        text: String,
+        llmModel: String?,
+        style: WritingStyle?,
+        cleanupOff: Bool = false,
+        at date: Date = Date()
+    ) {
         update(id) { item in
             if let name = item.failure?.audioFileName { failedAudio.delete(name) }
             item.rawTranscript = rawTranscript
             item.cleanedText = text
             item.llmModel = llmModel
             item.style = style
+            item.cleanupOff = cleanupOff ? true : nil
             item.failure?.audioFileName = nil
             item.failure?.retriedAt = date
         }

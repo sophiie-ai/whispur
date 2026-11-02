@@ -56,6 +56,8 @@ Start with no API key: on Apple silicon Whispur uses NVIDIA Parakeet on your Mac
 | Meta Muse | Muse Voice Transcribe, or live streaming (opt-in) |
 
 ### Optional cleanup
+Switch off "Clean up with AI" (Settings > Providers, or the menu bar) to paste exactly what the speech engine heard: no cleanup request is made, and spoken edits like "scratch that" and "new line" still apply.
+
 | Provider | Notes |
 | --- | --- |
 | Anthropic Claude | Claude Sonnet 4 by default |

@@ -63,6 +63,11 @@ final class DictationPipeline: ObservableObject {
     /// Replaces the registry's speech providers. Tests only.
     var sttProviderOverride: ((STTProviderID) -> (any STTProvider)?)?
     var selectedLLM: LLMProviderID = .anthropic
+    /// The "Clean up with AI" switch. While off, no cleanup request is made:
+    /// the transcript is pasted with only the spoken edit commands applied.
+    var cleanupEnabled: Bool = true
+    /// Replaces the registry's cleanup providers. Tests only.
+    var llmProviderOverride: ((LLMProviderID) -> (any LLMProvider)?)?
     var sttLanguageSelection: STTLanguageSelection = .auto
     var customVocabulary: [String] = []
     var systemPrompt: String = Prompts.defaultCleanup
@@ -531,8 +536,9 @@ final class DictationPipeline: ObservableObject {
             // Warm the LLM connection in parallel with STT. By the time the
             // transcript lands, the TLS handshake to the cleanup endpoint is
             // already done, which saves ~200–500 ms on cold paths.
-            if let client = httpClient,
-               let llmProvider = registry.makeLLMProvider(for: selectedLLM),
+            if cleanupEnabled,
+               let client = httpClient,
+               let llmProvider = makeLLMProvider(),
                let origin = llmProvider.endpointOrigin {
                 client.warmConnection(to: origin)
             }
@@ -563,23 +569,15 @@ final class DictationPipeline: ObservableObject {
                 return
             }
 
-            let spoken = VoiceCommands.apply(to: normalizedRawTranscript)
-            let cleanup = await clean(spoken, styleChoice: cleanupChoice(), updatesPhase: true)
-            let cleanedText = cleanup.text
-            let llmModel = cleanup.llmModel
-            let usedStyle = cleanup.style
-
-            let finalTranscript: String
-            switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanedText) {
-            case .dismiss:
+            guard let decided = await decideText(
+                forRaw: normalizedRawTranscript,
+                styleChoice: cleanupChoice(),
+                updatesPhase: true
+            ) else {
                 dismissForNoSpeech()
                 return
-            case let .paste(text, rawFallbackReason):
-                if let rawFallbackReason, cleanedText != nil {
-                    logger.warning("Pasting raw transcript: \(rawFallbackReason.rawValue, privacy: .public)")
-                }
-                finalTranscript = text
             }
+            let finalTranscript = decided.text
 
             guard !Task.isCancelled else { throw CancellationError() }
 
@@ -595,11 +593,12 @@ final class DictationPipeline: ObservableObject {
                 cleanedText: finalTranscript,
                 sttProvider: lastRoute?.provider ?? selectedSTT,
                 llmProvider: selectedLLM,
-                llmModel: llmModel,
+                llmModel: decided.llmModel,
                 timestamp: Date(),
                 appBundleID: recordingAppBundleID,
-                style: usedStyle,
-                sttFallbackFrom: lastRoute?.fallbackFrom
+                style: decided.style,
+                sttFallbackFrom: lastRoute?.fallbackFrom,
+                cleanupOff: decided.cleanupOff
             )
 
             lastResult = result
@@ -637,6 +636,56 @@ final class DictationPipeline: ObservableObject {
         }
     }
 
+    /// The text a dictation pastes, from its normalized raw transcript.
+    struct DecidedText: Equatable {
+        let text: String
+        /// The cleanup model, when cleanup ran and returned text.
+        let llmModel: String?
+        /// The style cleanup used, when it ran and returned text.
+        let style: WritingStyle?
+        /// Why the raw transcript was pasted instead of a cleanup. Nil when
+        /// the cleanup was pasted, and when cleanup is switched off.
+        let rawFallbackReason: TranscriptDecision.RawFallbackReason?
+        /// Cleanup is switched off: the text is the transcript with only the
+        /// spoken edit commands applied, and no model saw it.
+        let cleanupOff: Bool
+    }
+
+    /// Applies the spoken edit commands, then cleanup (unless it is switched
+    /// off), then picks what to paste. Nil when there is nothing worth
+    /// pasting.
+    func decideText(
+        forRaw normalizedRaw: String,
+        styleChoice: CleanupStyleChoice?,
+        updatesPhase: Bool
+    ) async -> DecidedText? {
+        let spoken = VoiceCommands.apply(to: normalizedRaw)
+        guard cleanupEnabled else {
+            guard case let .paste(text, _) = TranscriptDecision.finalOutcome(raw: spoken, cleaned: nil) else { return nil }
+            return DecidedText(text: text, llmModel: nil, style: nil, rawFallbackReason: nil, cleanupOff: true)
+        }
+        let cleanup = await clean(spoken, styleChoice: styleChoice, updatesPhase: updatesPhase)
+        switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanup.text) {
+        case .dismiss:
+            return nil
+        case let .paste(text, rawFallbackReason):
+            if let rawFallbackReason, cleanup.text != nil {
+                logger.warning("Pasting raw transcript: \(rawFallbackReason.rawValue, privacy: .public)")
+            }
+            return DecidedText(
+                text: text,
+                llmModel: cleanup.llmModel,
+                style: cleanup.style,
+                rawFallbackReason: rawFallbackReason,
+                cleanupOff: false
+            )
+        }
+    }
+
+    private func makeLLMProvider() -> (any LLMProvider)? {
+        llmProviderOverride?(selectedLLM) ?? registry.makeLLMProvider(for: selectedLLM)
+    }
+
     /// LLM cleanup of a raw transcript. A failure or skipped cleanup comes
     /// back as nil text, which `TranscriptDecision.finalOutcome` turns into a
     /// raw-transcript paste: never a failed dictation.
@@ -647,8 +696,9 @@ final class DictationPipeline: ObservableObject {
     ) async -> (text: String?, llmModel: String?, style: WritingStyle?) {
         // Skip LLM cleanup for very short transcripts: an LLM tends to
         // answer "thanks" instead of cleaning it. They are pasted raw.
-        guard TranscriptDecision.shouldRunCleanup(for: raw),
-              let llmProvider = registry.makeLLMProvider(for: selectedLLM)
+        guard cleanupEnabled,
+              TranscriptDecision.shouldRunCleanup(for: raw),
+              let llmProvider = makeLLMProvider()
         else { return (nil, nil, nil) }
         if updatesPhase { phase = .cleaningTranscript }
 
@@ -679,6 +729,8 @@ final class DictationPipeline: ObservableObject {
         let text: String
         let llmModel: String?
         let style: WritingStyle?
+        /// Cleanup was switched off for the retry.
+        var cleanupOff: Bool = false
     }
 
     enum RetryError: LocalizedError, Equatable {
@@ -704,21 +756,18 @@ final class DictationPipeline: ObservableObject {
             throw RetryError.noSpeech
         }
         let styleChoice = cleanupStyle?(appBundleID)
-        let spoken = VoiceCommands.apply(to: normalizedRaw)
-        let cleanup = await ProviderRequestContext.$dictationID.withValue(dictationID) {
-            await clean(spoken, styleChoice: styleChoice, updatesPhase: false)
+        let decided = await ProviderRequestContext.$dictationID.withValue(dictationID) {
+            await decideText(forRaw: normalizedRaw, styleChoice: styleChoice, updatesPhase: false)
         }
-        switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanup.text) {
-        case .dismiss:
-            throw RetryError.noSpeech
-        case let .paste(text, rawFallbackReason):
-            return RetryResult(
-                rawTranscript: normalizedRaw,
-                text: text,
-                llmModel: rawFallbackReason == nil ? cleanup.llmModel : nil,
-                style: rawFallbackReason == nil ? cleanup.style : nil
-            )
-        }
+        guard let decided else { throw RetryError.noSpeech }
+        let cleaned = decided.rawFallbackReason == nil
+        return RetryResult(
+            rawTranscript: normalizedRaw,
+            text: decided.text,
+            llmModel: cleaned ? decided.llmModel : nil,
+            style: cleaned ? decided.style : nil,
+            cleanupOff: decided.cleanupOff
+        )
     }
 
     /// Transcribes the normalized recording with the selected provider,
@@ -941,6 +990,12 @@ struct PipelineResult: Identifiable, Codable {
     /// (Parakeet while its model downloads, with `sttProvider` Apple). Nil
     /// when the selected provider ran, and for results saved before this.
     var sttFallbackFrom: STTProviderID?
+    /// True when cleanup was switched off for this dictation: the pasted
+    /// text is the transcript with only spoken edit commands applied. Nil
+    /// for cleaned dictations and results saved before the switch existed.
+    var cleanupOff: Bool?
+
+    var isCleanupOff: Bool { cleanupOff == true }
 
     init(
         id: UUID = UUID(),
@@ -953,7 +1008,8 @@ struct PipelineResult: Identifiable, Codable {
         appBundleID: String? = nil,
         style: WritingStyle? = nil,
         failure: DictationFailure? = nil,
-        sttFallbackFrom: STTProviderID? = nil
+        sttFallbackFrom: STTProviderID? = nil,
+        cleanupOff: Bool = false
     ) {
         self.id = id
         self.rawTranscript = rawTranscript
@@ -966,6 +1022,7 @@ struct PipelineResult: Identifiable, Codable {
         self.style = style
         self.failure = failure
         self.sttFallbackFrom = sttFallbackFrom
+        self.cleanupOff = cleanupOff ? true : nil
     }
 
     /// The provider that transcribed, and the one it filled in for.

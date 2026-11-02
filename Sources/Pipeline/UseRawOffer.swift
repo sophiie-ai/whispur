@@ -174,7 +174,10 @@ final class UseRawController: ObservableObject {
 
     func offer(for result: PipelineResult, processID: pid_t?, bundleID: String?, enabled: Bool) {
         expiryTask?.cancel()
+        // With cleanup off nothing rewrote the words, so there is nothing
+        // to undo (spoken edit commands are what the user asked for).
         guard let processID,
+              !result.isCleanupOff,
               state.offer(
                   dictationID: result.id,
                   raw: result.rawTranscript,
