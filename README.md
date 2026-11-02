@@ -25,6 +25,7 @@ Hold a shortcut to talk, or use an optional toggle shortcut for hands-free captu
 - Multi-provider speech-to-text with on-device Apple and NVIDIA Parakeet options
 - Optional transcript cleanup with provider-selectable LLMs; switch off `Clean up with AI` (`Settings` → `Providers`, or the cleanup chip in the menu bar) to paste exactly what the speech engine heard, with no LLM request
 - Paste-back into the active app with clipboard preservation
+- Text fixes made on your Mac with no AI, cleanup on or off (`Settings` → `Preferences` → `Text fixes`): filler words removed, spoken symbols ("hashtag release" → `#release`, "dash dash force" → `--force`) and spoken quotes ("quote … end quote") written as characters, and a leading space added when the cursor sits right after a word
 - Custom vocabulary and a single editable cleanup prompt for technical dictation
 - Local-first by default: with no cloud speech key, Whispur uses NVIDIA Parakeet on Apple silicon (Apple on-device on Intel Macs), and Apple on-device transcribes while Parakeet's model downloads in the background
 - Sparkle-based auto-updates for signed releases
