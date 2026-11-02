@@ -170,7 +170,10 @@ struct SettingsView: View {
                 historyStore: historyStore,
                 retrier: appState.retrier,
                 evalCases: appState.evalCases,
-                vocabulary: { [weak appState] in appState?.vocabulary.plainTerms ?? [] }
+                vocabulary: { [weak appState] in appState?.vocabulary.plainTerms ?? [] },
+                addToVocabulary: { [weak appState] term, heardAs in
+                    appState?.vocabulary.addAlias(heardAs, toTerm: term)
+                }
             ) { [weak appState] id in
                 appState?.retryFailedDictation(id)
             }

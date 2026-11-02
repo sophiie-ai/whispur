@@ -188,12 +188,34 @@ def vocabulary_terms(vocabulary: list[str]) -> list[str]:
     return terms
 
 
-def new_user_message(transcript: str, vocabulary: list[str], contract: str) -> str:
+# Mirrors CleanupMessage.heardAsNote.
+HEARD_AS_NOTE = ('Write a term for its "heard as" word when the sentence is about that term; '
+                 "keep the word when it means a person, another product, or its ordinary sense.")
+
+
+def vocabulary_lines(vocabulary: list[str], heard_as: dict[str, list[str]] | None) -> list[str]:
+    """Mirrors CleanupMessage.vocabularyLines: "Term (heard as: a, b)"."""
+    hints: dict[str, list[str]] = {}
+    for term, aliases in (heard_as or {}).items():
+        key = (vocabulary_terms([term]) or [""])[0]
+        hints[key] = hints.get(key, []) + vocabulary_terms(aliases)
+    lines = []
+    for term in vocabulary_terms(vocabulary):
+        aliases = hints.get(term)
+        lines.append(f"{term} (heard as: {', '.join(aliases)})" if aliases else term)
+    return lines
+
+
+def new_user_message(transcript: str, vocabulary: list[str], contract: str,
+                     heard_as: dict[str, list[str]] | None = None) -> str:
     """Mirrors CleanupMessage.userMessage."""
     sections = []
-    terms = vocabulary_terms(vocabulary)
+    terms = vocabulary_lines(vocabulary, heard_as)
     if terms:
-        sections.append(f"<{VOCAB_TAG}>\n" + "\n".join(terms) + f"\n</{VOCAB_TAG}>")
+        block = f"<{VOCAB_TAG}>\n" + "\n".join(terms) + f"\n</{VOCAB_TAG}>"
+        if any(line != term for line, term in zip(terms, vocabulary_terms(vocabulary))):
+            block += "\n" + HEARD_AS_NOTE
+        sections.append(block)
     sections.append(f"<{TRANSCRIPT_TAG}>\n{neutralize_tags(transcript)}\n</{TRANSCRIPT_TAG}>")
     sections.append(contract)
     return "\n\n".join(sections)
@@ -244,10 +266,11 @@ class RequestBuilder:
                  f"above and the examples below where they conflict:\n{section}\n\n")
         return self.system_prompt[:at] + block + self.system_prompt[at:]
 
-    def build(self, transcript: str, vocabulary: list[str], style: str = "default") -> tuple[str, str]:
+    def build(self, transcript: str, vocabulary: list[str], style: str = "default",
+              heard_as: dict[str, list[str]] | None = None) -> tuple[str, str]:
         system_prompt = self.system_prompt_for(style)
         if self.contract is not None:
-            return system_prompt, new_user_message(transcript, vocabulary, self.contract)
+            return system_prompt, new_user_message(transcript, vocabulary, self.contract, heard_as)
         return current_request(system_prompt, transcript, vocabulary)
 
 
@@ -480,7 +503,8 @@ def load_cases(path: Path) -> list[dict]:
 # TranscriptDecision.isOnlyNonSpeechAnnotations.
 ANNOTATIONS_RE = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 
-TEXT_FIXES_SOURCES = ["Sources/Pipeline/TextFixes.swift", "scripts/text-fixes-cli/main.swift"]
+TEXT_FIXES_SOURCES = ["Sources/Pipeline/TextFixes.swift", "Sources/Pipeline/VocabularyAliases.swift",
+                      "Sources/Learning/CommonWords.swift", "scripts/text-fixes-cli/main.swift"]
 
 
 def text_fixes_binary() -> Path:
@@ -493,20 +517,55 @@ def text_fixes_binary() -> Path:
     return out
 
 
-def apply_text_fixes(cases: list[dict]) -> dict[str, str]:
-    """Case id -> input after the app's text fixes."""
-    lines = "".join(json.dumps({"input": c["input"], "style": c.get("style", "default")}) + "\n" for c in cases)
+def apply_text_fixes(cases: list[dict]) -> dict[str, dict]:
+    """Case id -> {"text", "heard_as", "replaced"}: the input after the app's
+    text fixes and clear-cut "heard as" replacements, and the ambiguous
+    aliases cleanup gets as hints."""
+    lines = "".join(json.dumps({
+        "input": c["input"], "style": c.get("style", "default"), "vocabulary": c.get("vocabulary", []),
+        "aliases": c.get("aliases", {}), "always_replace": c.get("always_replace", []),
+    }) + "\n" for c in cases)
     done = subprocess.run([str(text_fixes_binary())], input=lines, capture_output=True, text=True, check=True)
-    outputs = [json.loads(line)["text"] for line in done.stdout.splitlines() if line.strip()]
+    outputs = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
     if len(outputs) != len(cases):
         raise SystemExit("text-fixes CLI returned the wrong number of lines")
-    return {c["id"]: text for c, text in zip(cases, outputs)}
+    return {c["id"]: out for c, out in zip(cases, outputs)}
+
+
+def alias_metrics(cases: list[dict], outputs: dict[str, list[str]]) -> dict:
+    """Term recall on `alias_check.kind == "recall"` cases and false
+    replacements on `"guard"` cases (the alias is meant as written), counted
+    per run: a run replaces falsely when its output has the term."""
+    recall = [term_in(c, o) for c in cases if c.get("alias_check", {}).get("kind") == "recall" for o in outputs.get(c["id"], [])]
+    guard = [term_in(c, o) for c in cases if c.get("alias_check", {}).get("kind") == "guard" for o in outputs.get(c["id"], [])]
+    return {"recall": sum(recall), "recall_runs": len(recall), "false": sum(guard), "guard_runs": len(guard)}
+
+
+def term_in(case: dict, output: str) -> bool:
+    return case["alias_check"]["term"] in output
+
+
+def alias_report(cases: list[dict]) -> int:
+    """The deterministic stage alone (cleanup off): no API calls."""
+    fixed = apply_text_fixes(cases)
+    checked = [c for c in cases if "alias_check" in c]
+    for c in checked:
+        out = fixed[c["id"]]
+        hit = term_in(c, out["text"])
+        kind = c["alias_check"]["kind"]
+        mark = ("ok" if hit else "missed (left to cleanup)") if kind == "recall" else ("FALSE REPLACEMENT" if hit else "ok")
+        print(f"{kind:6} {c['id']:28} {mark:26} {out['text']!r}  hints={out['heard_as']}")
+    m = alias_metrics(checked, {c["id"]: [fixed[c["id"]]["text"]] for c in checked})
+    print(f"\ndeterministic (cleanup off): recall {m['recall']}/{m['recall_runs']}, "
+          f"false replacements {m['false']}/{m['guard_runs']}")
+    return 1 if m["false"] else 0
 
 
 def self_test() -> int:
     builder = RequestBuilder("new")
     golden_input = json.loads((ROOT / "Evals/cleanup/golden/input.json").read_text())
-    built = new_user_message(golden_input["transcript"], golden_input["vocabulary"], builder.contract)
+    built = new_user_message(golden_input["transcript"], golden_input["vocabulary"], builder.contract,
+                             golden_input.get("heardAs"))
     expected = GOLDEN_PATH.read_text()
     ok = built == expected
     print(f"user message matches golden: {ok}")
@@ -539,13 +598,17 @@ def main() -> int:
     ap.add_argument("--report", help="JSON report path (default /tmp/whispur-eval/<prompt>-<provider>-<ts>.json)")
     ap.add_argument("--self-test", action="store_true", help="check request building against the golden file")
     ap.add_argument("--text-fixes", action="store_true",
-                    help="apply the app's no-AI text fixes to each input before cleanup, as the app does")
+                    help="apply the app's no-AI text fixes and the cases' \"heard as\" vocabulary before cleanup, as the app does")
+    ap.add_argument("--alias-report", action="store_true",
+                    help="score the deterministic \"heard as\" replacements alone (cleanup off), no API calls")
     ap.add_argument("--rescore", metavar="REPORT",
                     help="re-score the outputs saved in a previous JSON report against the current cases (no API calls)")
     args = ap.parse_args()
 
     if args.self_test:
         return self_test()
+    if args.alias_report:
+        return alias_report(load_cases(Path(args.cases_file).expanduser()))
 
     previous = None
     if args.rescore:
@@ -568,16 +631,17 @@ def main() -> int:
     throttle = GroqThrottle() if args.provider == "groq" else None
     concurrency = 1 if args.provider == "groq" else (args.concurrency or 6)
 
-    fixed = apply_text_fixes(cases) if args.text_fixes else {}
+    fixed = apply_text_fixes(cases) if args.text_fixes and previous is None else {}
     if fixed:
-        changed = [c["id"] for c in cases if fixed[c["id"]] != c["input"]]
+        changed = [c["id"] for c in cases if fixed[c["id"]]["text"] != c["input"]]
         print(f"text fixes changed {len(changed)} of {len(cases)} inputs: {', '.join(changed)}", file=sys.stderr)
 
     jobs = []
     for case in cases:
-        sent = fixed.get(case["id"], case["input"])
+        sent = fixed[case["id"]]["text"] if fixed else case["input"]
+        heard_as = fixed[case["id"]]["heard_as"] if fixed else None
         system_prompt, user_message = builder.build(sent, case.get("vocabulary", []),
-                                                    case.get("style", "default"))
+                                                    case.get("style", "default"), heard_as)
         max_tokens = cleanup_max_tokens(len(sent))
         for run in range(args.runs):
             jobs.append((case, run, system_prompt, user_message, max_tokens, sent))
@@ -704,6 +768,12 @@ def main() -> int:
             continue
         print(f"{name:8} {s['cases']:>5} {s['passed_runs']:>4}/{s['runs']:<4} {s['critical_failures']:>10} "
               f"{s['latency_p50']:>6.2f} {s['latency_p95']:>6.2f} {s['prompt_tokens_mean']:>7.0f}")
+    aliases = alias_metrics(cases, {row["case"]["id"]: [r.get("text") or "" for r in row["runs"]] for row in case_rows})
+    if aliases["recall_runs"] or aliases["guard_runs"]:
+        summary["aliases"] = aliases
+        print(f"heard-as: term recall {aliases['recall']}/{aliases['recall_runs']}, "
+              f"false replacements {aliases['false']}/{aliases['guard_runs']}"
+              + ("" if args.text_fixes else " (aliases not sent: like a build without them)"))
     if summary["all"]["errors"] or summary["all"]["truncated"]:
         print(f"errors: {summary['all']['errors']}, truncated: {summary['all']['truncated']}")
 

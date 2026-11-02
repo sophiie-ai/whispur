@@ -927,6 +927,11 @@ final class AppState: ObservableObject {
         pipeline.cleanupEnabled = cleanupEnabled
         pipeline.sttLanguageSelection = sttLanguageSelection
         pipeline.customVocabulary = vocabulary.plainTerms
+        pipeline.aliasPlan = VocabularyAliasPlan.build(
+            entries: vocabulary.aliasEntries,
+            terms: vocabulary.plainTerms,
+            isCommonWord: CommonWords.isCommon
+        )
         pipeline.textFixOptions = TextFixOptions(
             removeFillers: removeFillers,
             spokenSymbols: spokenSymbols,
