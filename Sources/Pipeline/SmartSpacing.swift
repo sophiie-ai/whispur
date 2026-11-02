@@ -44,25 +44,8 @@ enum SmartSpacing {
         c.isLetterOrNumber || ".,;:!?)]}\u{201D}\u{2019}%".contains(c)
     }
 
-    /// Scripts that don't put spaces between words (same set as Hex's
-    /// replacement boundaries).
     static func isUnspacedScript(_ c: Character) -> Bool {
-        c.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x1100 ... 0x11FF, 0x3130 ... 0x318F, 0xAC00 ... 0xD7AF, // Hangul
-                 0x2E80 ... 0x2FDF, 0x3000 ... 0x303F, // CJK radicals, punctuation
-                 0x3040 ... 0x30FF, 0x31F0 ... 0x31FF, // Hiragana, Katakana
-                 0x3400 ... 0x4DBF, 0x4E00 ... 0x9FFF, 0xF900 ... 0xFAFF, // Han
-                 0xFF00 ... 0xFFEF, // Fullwidth forms
-                 0x0E00 ... 0x0EFF, // Thai, Lao
-                 0x0F00 ... 0x0FFF, // Tibetan
-                 0x1000 ... 0x109F, // Myanmar
-                 0x1780 ... 0x17FF: // Khmer
-                return true
-            default:
-                return false
-            }
-        }
+        TextScan.isUnspacedScript(c)
     }
 
     // MARK: - Reading the field

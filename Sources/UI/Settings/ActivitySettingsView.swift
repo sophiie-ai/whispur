@@ -8,11 +8,15 @@ struct ActivitySettingsView: View {
     @ObservedObject var evalCases: MyEvalCaseStore
     /// The dictionary terms to save with a marked case.
     var vocabulary: () -> [String] = { [] }
+    /// Adds a "heard as" spelling to a dictionary term (creating the term).
+    /// Nil hides "Add to vocabulary".
+    var addToVocabulary: ((_ term: String, _ heardAs: String) -> Void)?
     /// Opens this entry expanded (renders).
     var initiallyExpanded: UUID?
     let onRetry: (UUID) -> Void
 
     @State private var markingItem: PipelineResult?
+    @State private var vocabularyItem: PipelineResult?
 
     var body: some View {
         SettingsPage {
@@ -54,7 +58,8 @@ struct ActivitySettingsView: View {
                                         item: item,
                                         isMarkedWrong: evalCases.isMarked(item.id),
                                         startsExpanded: item.id == initiallyExpanded,
-                                        onMarkWrong: { markingItem = item }
+                                        onMarkWrong: { markingItem = item },
+                                        onAddToVocabulary: addToVocabulary == nil ? nil : { vocabularyItem = item }
                                     )
                                 }
                             }
@@ -78,6 +83,16 @@ struct ActivitySettingsView: View {
                     if saved { markingItem = nil }
                 },
                 onCancel: { markingItem = nil }
+            )
+        }
+        .sheet(item: $vocabularyItem) { item in
+            AddToVocabularySheet(
+                item: item,
+                onSave: { term, heardAs in
+                    addToVocabulary?(term, heardAs)
+                    vocabularyItem = nil
+                },
+                onCancel: { vocabularyItem = nil }
             )
         }
     }
@@ -114,13 +129,21 @@ private struct ActivityEntry: View {
     let item: PipelineResult
     let isMarkedWrong: Bool
     let onMarkWrong: () -> Void
+    let onAddToVocabulary: (() -> Void)?
 
     @State private var isExpanded: Bool
 
-    init(item: PipelineResult, isMarkedWrong: Bool, startsExpanded: Bool, onMarkWrong: @escaping () -> Void) {
+    init(
+        item: PipelineResult,
+        isMarkedWrong: Bool,
+        startsExpanded: Bool,
+        onMarkWrong: @escaping () -> Void,
+        onAddToVocabulary: (() -> Void)?
+    ) {
         self.item = item
         self.isMarkedWrong = isMarkedWrong
         self.onMarkWrong = onMarkWrong
+        self.onAddToVocabulary = onAddToVocabulary
         _isExpanded = State(initialValue: startsExpanded)
     }
 
@@ -154,6 +177,9 @@ private struct ActivityEntry: View {
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .contextMenu {
                 Button("Mark as Wrong…", action: onMarkWrong)
+                if let onAddToVocabulary {
+                    Button("Add to Vocabulary…", action: onAddToVocabulary)
+                }
             }
 
             if isExpanded {
@@ -185,12 +211,18 @@ private struct ActivityEntry: View {
                             PreferenceBadge(title: "Used raw", tone: .neutral)
                         }
                         Spacer(minLength: 8)
+                        if let onAddToVocabulary {
+                            TextAction(title: "Add word", systemImage: "character.book.closed", action: onAddToVocabulary)
+                                .fixedSize()
+                                .help("Add to vocabulary: teach Whispur a word it misheard in this dictation")
+                        }
                         if isMarkedWrong {
                             Label("Marked as wrong", systemImage: "checkmark")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(SophiieTheme.Palette.muted)
                         } else {
                             TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
+                                .fixedSize()
                                 .help("Save this dictation as a private test case for the cleanup prompt")
                         }
                     }

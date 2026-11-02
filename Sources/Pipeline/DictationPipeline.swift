@@ -85,6 +85,9 @@ final class DictationPipeline: ObservableObject {
     var llmProviderOverride: ((LLMProviderID) -> (any LLMProvider)?)?
     var sttLanguageSelection: STTLanguageSelection = .auto
     var customVocabulary: [String] = []
+    /// The dictionary's "heard as" spellings: clear-cut ones replaced in
+    /// code with the text fixes, ambiguous ones sent to cleanup as hints.
+    var aliasPlan: VocabularyAliasPlan = .empty
     var systemPrompt: String = Prompts.defaultCleanup
     /// Picks the cleanup style for the app the recording started in. When
     /// nil, cleanup uses `systemPrompt` as is.
@@ -711,6 +714,7 @@ final class DictationPipeline: ObservableObject {
     func textFixOptions(for appBundleID: String?) -> TextFixOptions {
         var options = textFixOptions
         options.spokenLanguages = sttLanguageSelection.codes
+        options.vocabulary = aliasPlan.replacements
         options.quoteStyle = appBundleID.flatMap(AppGroup.group(for:)) == .code ? .straight : .curly
         return options
     }
@@ -749,7 +753,8 @@ final class DictationPipeline: ObservableObject {
                     systemPrompt: styleChoice?.systemPrompt ?? systemPrompt,
                     userMessage: CleanupMessage.userMessage(
                         transcript: raw,
-                        vocabulary: customVocabulary
+                        vocabulary: customVocabulary,
+                        heardAs: aliasPlan.heardAs
                     ),
                     maxTokens: LLMRequest.cleanupMaxTokens(
                         forTranscriptCharacters: raw.count

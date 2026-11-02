@@ -1,6 +1,7 @@
 import Foundation
 
-/// One dictionary term and where it came from.
+/// One dictionary term, where it came from, and how speech engines mishear
+/// it.
 struct VocabularyTerm: Codable, Identifiable, Equatable {
     enum Source: Codable, Equatable {
         /// Typed in by the user (or carried over from the old plain list).
@@ -15,12 +16,39 @@ struct VocabularyTerm: Codable, Identifiable, Equatable {
     let source: Source
     /// When the term was added. Nil for terms migrated from the old list.
     let addedAt: Date?
+    /// Spellings a transcript shows instead of the term ("heard as":
+    /// "Sophie" for "Sophiie", "open code" for "OpenCode"). Clear-cut ones
+    /// are replaced in code; ones that are ordinary words go to cleanup as
+    /// hints (`VocabularyAliasPlan`).
+    var aliases: [String]
+    /// Replace every alias in code, even one that is an ordinary word.
+    var alwaysReplace: Bool
 
-    init(id: UUID = UUID(), text: String, source: Source, addedAt: Date?) {
+    /// Most "heard as" spellings kept per term.
+    static let aliasLimit = 16
+
+    init(id: UUID = UUID(), text: String, source: Source, addedAt: Date?, aliases: [String] = [], alwaysReplace: Bool = false) {
         self.id = id
         self.text = text
         self.source = source
         self.addedAt = addedAt
+        self.aliases = aliases
+        self.alwaysReplace = alwaysReplace
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, text, source, addedAt, aliases, alwaysReplace
+    }
+
+    /// Terms saved before aliases existed decode with none.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        text = try container.decode(String.self, forKey: .text)
+        source = try container.decode(Source.self, forKey: .source)
+        addedAt = try container.decodeIfPresent(Date.self, forKey: .addedAt)
+        aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        alwaysReplace = try container.decodeIfPresent(Bool.self, forKey: .alwaysReplace) ?? false
     }
 
     var isLearned: Bool {
@@ -60,7 +88,8 @@ struct VocabularyTerm: Codable, Identifiable, Equatable {
 /// Persisted as JSON under `vocabularyTerms`. The first load migrates the old
 /// plain `customVocabulary` list (one term per line or comma separated) as
 /// manual terms with no date. Every save also writes the plain list back to
-/// `customVocabulary`, so an older build still sees the same terms.
+/// `customVocabulary`, so an older build still sees the same terms. Aliases
+/// are extra keys an older build ignores; it keeps its own copy of the terms.
 @MainActor
 final class VocabularyStore: ObservableObject {
     static let termsKey = "vocabularyTerms"
@@ -81,6 +110,12 @@ final class VocabularyStore: ObservableObject {
         terms.map(\.text)
     }
 
+    /// Every term with its "heard as" spellings, for `VocabularyAliasPlan`.
+    var aliasEntries: [VocabularyAliasEntry] {
+        terms.filter { !$0.aliases.isEmpty }
+            .map { VocabularyAliasEntry(term: $0.text, aliases: $0.aliases, alwaysReplace: $0.alwaysReplace) }
+    }
+
     func contains(_ text: String) -> Bool {
         let key = Self.normalized(text).lowercased()
         return terms.contains { $0.text.lowercased() == key }
@@ -99,6 +134,56 @@ final class VocabularyStore: ObservableObject {
 
     func remove(id: VocabularyTerm.ID) {
         terms.removeAll { $0.id == id }
+        save()
+    }
+
+    // MARK: - Heard as
+
+    /// Adds a "heard as" spelling to a term. Returns false when it is empty,
+    /// the term itself, already listed (case-insensitively), or the term is
+    /// at `VocabularyTerm.aliasLimit`.
+    @discardableResult
+    func addAlias(_ alias: String, to id: VocabularyTerm.ID) -> Bool {
+        let cleaned = Self.normalized(alias)
+        guard !cleaned.isEmpty, let index = terms.firstIndex(where: { $0.id == id }) else { return false }
+        let term = terms[index]
+        let key = cleaned.lowercased()
+        guard key != term.text.lowercased(),
+              !term.aliases.contains(where: { $0.lowercased() == key }),
+              term.aliases.count < VocabularyTerm.aliasLimit
+        else { return false }
+        terms[index].aliases.append(cleaned)
+        save()
+        return true
+    }
+
+    /// Adds `alias` to the term spelled `text`, creating the term (added by
+    /// the user) when it isn't in the dictionary yet. Returns false when
+    /// nothing changed.
+    @discardableResult
+    func addAlias(_ alias: String, toTerm text: String, at date: Date = Date()) -> Bool {
+        let cleaned = Self.normalized(text)
+        guard !cleaned.isEmpty else { return false }
+        if let existing = terms.first(where: { $0.text.lowercased() == cleaned.lowercased() }) {
+            return addAlias(alias, to: existing.id)
+        }
+        let aliasText = Self.normalized(alias)
+        guard !aliasText.isEmpty, aliasText.lowercased() != cleaned.lowercased() else { return false }
+        terms.insert(VocabularyTerm(text: cleaned, source: .manual, addedAt: date, aliases: [aliasText]), at: 0)
+        save()
+        return true
+    }
+
+    func removeAlias(_ alias: String, from id: VocabularyTerm.ID) {
+        guard let index = terms.firstIndex(where: { $0.id == id }) else { return }
+        terms[index].aliases.removeAll { $0 == alias }
+        if terms[index].aliases.isEmpty { terms[index].alwaysReplace = false }
+        save()
+    }
+
+    func setAlwaysReplace(_ on: Bool, for id: VocabularyTerm.ID) {
+        guard let index = terms.firstIndex(where: { $0.id == id }), terms[index].alwaysReplace != on else { return }
+        terms[index].alwaysReplace = on
         save()
     }
 
@@ -123,7 +208,9 @@ final class VocabularyStore: ObservableObject {
     static func filter(_ terms: [VocabularyTerm], query: String, filter: Filter) -> [VocabularyTerm] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return terms.filter { term in
-            filter.includes(term) && (needle.isEmpty || term.text.localizedCaseInsensitiveContains(needle))
+            filter.includes(term) && (needle.isEmpty
+                || term.text.localizedCaseInsensitiveContains(needle)
+                || term.aliases.contains { $0.localizedCaseInsensitiveContains(needle) })
         }
     }
 
