@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.29.0](https://github.com/sophiie-ai/whispur/compare/v0.28.0...v0.29.0) (2026-11-02)
+
+
+### Features
+
+* **onboarding:** add a Try it test dictation step ([#115](https://github.com/sophiie-ai/whispur/issues/115)) ([2f7bfe6](https://github.com/sophiie-ai/whispur/commit/2f7bfe65f0eaba357c1c318fe74b71cca774a40b))
+* **onboarding:** offer to move Whispur into Applications ([#112](https://github.com/sophiie-ai/whispur/issues/112)) ([029329e](https://github.com/sophiie-ai/whispur/commit/029329eb2d43916558eb7e203b28e5efc4754d9a))
+* **onboarding:** pick a shortcut during onboarding; fix Right Option hold ([#114](https://github.com/sophiie-ai/whispur/issues/114)) ([1708d1d](https://github.com/sophiie-ai/whispur/commit/1708d1df8ac38a7807decc7403453ec7f55fa90c))
+* **onboarding:** redesign onboarding as one screen per step ([#113](https://github.com/sophiie-ai/whispur/issues/113)) ([5b4cf80](https://github.com/sophiie-ai/whispur/commit/5b4cf800e1f734c84eccc14ae9889dd7afe0a708))
+
 ## [0.28.0](https://github.com/sophiie-ai/whispur/compare/v0.27.1...v0.28.0) (2026-11-02)
 
 
