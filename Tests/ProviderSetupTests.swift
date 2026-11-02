@@ -71,6 +71,7 @@ final class ProviderSetupTests: XCTestCase {
             accessibilityGranted: true,
             speechProviderName: "Deepgram",
             speechStatus: .needsKey,
+            cleanupEnabled: true,
             cleanupProviderName: "Groq",
             cleanupStatus: .ready
         )
@@ -83,6 +84,7 @@ final class ProviderSetupTests: XCTestCase {
             accessibilityGranted: true,
             speechProviderName: "Apple (on-device)",
             speechStatus: .ready,
+            cleanupEnabled: true,
             cleanupProviderName: "Anthropic Claude",
             cleanupStatus: .needsKey
         )
@@ -96,6 +98,7 @@ final class ProviderSetupTests: XCTestCase {
         let readiness = SettingsReadiness.derive(
             microphoneGranted: false, accessibilityGranted: false,
             speechProviderName: "X", speechStatus: .needsRegion,
+            cleanupEnabled: true,
             cleanupProviderName: "Y", cleanupStatus: .needsKey
         )
         var strings = [readiness.headline, readiness.detail]

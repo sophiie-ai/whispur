@@ -158,7 +158,7 @@ private struct ActivityEntry: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
-                    transcriptBlock("Cleaned", item.cleanedText)
+                    transcriptBlock(item.isCleanupOff ? "Pasted" : "Cleaned", item.cleanedText)
                     transcriptBlock("Raw", item.rawTranscript)
                     HStack(spacing: 8) {
                         PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
@@ -166,9 +166,14 @@ private struct ActivityEntry: View {
                             PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
                                 .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
                         }
-                        PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
-                        if let llmModel = item.llmModel {
-                            PreferenceBadge(title: llmModel, tone: .neutral)
+                        if item.isCleanupOff {
+                            PreferenceBadge(title: "Cleanup off", tone: .neutral)
+                                .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits applied.")
+                        } else {
+                            PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
+                            if let llmModel = item.llmModel {
+                                PreferenceBadge(title: llmModel, tone: .neutral)
+                            }
                         }
                         if let style = item.style {
                             PreferenceBadge(title: "\(style.title) style", tone: .neutral)

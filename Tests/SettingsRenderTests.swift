@@ -253,6 +253,11 @@ final class SettingsRenderTests: XCTestCase {
     // MARK: - Rendering
 
     private func render<V: View>(_ view: V, scheme: ColorScheme, size: CGSize = SettingsRenderTests.size, to url: URL) throws {
+        try Self.renderPNG(view, scheme: scheme, size: size, to: url)
+    }
+
+    /// Draws `view` at `size` in `scheme` and writes a 2x PNG to `url`.
+    static func renderPNG<V: View>(_ view: V, scheme: ColorScheme, size: CGSize, to url: URL) throws {
         let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         let rect = CGRect(origin: .zero, size: size)
         let host = NSHostingView(rootView: view

@@ -148,6 +148,7 @@ struct SettingsReadiness: Equatable {
         accessibilityGranted: Bool,
         speechProviderName: String,
         speechStatus: ProviderSetupStatus,
+        cleanupEnabled: Bool,
         cleanupProviderName: String,
         cleanupStatus: ProviderSetupStatus
     ) -> SettingsReadiness {
@@ -166,6 +167,16 @@ struct SettingsReadiness: Equatable {
                 tone: .incomplete,
                 headline: "Setup incomplete",
                 detail: "Needs " + listPhrase(missing) + "."
+            )
+        }
+
+        // Cleanup is optional: switched off, or without a key, dictation
+        // still pastes the transcript.
+        if !cleanupEnabled {
+            return SettingsReadiness(
+                tone: .ready,
+                headline: "Ready",
+                detail: "\(speechProviderName), cleanup switched off."
             )
         }
 

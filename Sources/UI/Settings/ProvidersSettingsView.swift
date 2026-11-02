@@ -42,7 +42,9 @@ struct ProvidersSettingsView: View {
             otherSpeechSection
             languageSection
             cleanupSection
-            otherCleanupSection
+            if appState.cleanupEnabled {
+                otherCleanupSection
+            }
         }
         .onChange(of: appState.selectedSTT) { _, provider in
             if expandedSTT == provider { expandedSTT = nil }
@@ -116,25 +118,37 @@ struct ProvidersSettingsView: View {
 
     // MARK: - Cleanup
 
+    static let cleanupSwitchTitle = "Clean up with AI"
+    static let cleanupSwitchSubtitle = "Off: paste exactly what the speech engine heard."
+
     private var cleanupSection: some View {
-        SettingsSection("Cleanup", footer: "Adds punctuation, removes filler, and smooths dictation before paste.") {
+        SettingsSection("Cleanup", footer: appState.cleanupEnabled
+            ? "Adds punctuation, removes filler, and smooths dictation before paste."
+            : "Spoken edits like \u{201C}scratch that\u{201D} and \u{201C}new line\u{201D} still apply. No transcript is sent to a cleanup provider.") {
             SettingsCard {
-                let active = appState.selectedLLM.setupDescriptor
-                SettingsRow(icon: "wand.and.stars", title: "Cleanup provider", subtitle: credentials.status(for: active.keys).title) {
-                    RowPicker("Cleanup provider", selection: $appState.selectedLLM) {
-                        ForEach(LLMProviderID.allCases) { provider in
-                            Text(provider.displayName).tag(provider)
+                SettingsRow(icon: "sparkles", title: Self.cleanupSwitchTitle, subtitle: Self.cleanupSwitchSubtitle) {
+                    SettingsSwitch(label: Self.cleanupSwitchTitle, isOn: $appState.cleanupEnabled)
+                }
+                if appState.cleanupEnabled {
+                    CardDivider()
+                    let active = appState.selectedLLM.setupDescriptor
+                    SettingsRow(icon: "wand.and.stars", title: "Cleanup provider", subtitle: credentials.status(for: active.keys).title) {
+                        RowPicker("Cleanup provider", selection: $appState.selectedLLM) {
+                            ForEach(LLMProviderID.allCases) { provider in
+                                Text(provider.displayName).tag(provider)
+                            }
                         }
                     }
+                    panel(
+                        for: active,
+                        style: .active,
+                        activeNote: credentials.status(for: active.keys).isReady
+                            ? nil
+                            : "Until a key is saved, Whispur pastes the raw transcript without cleanup."
+                    )
                 }
-                panel(
-                    for: active,
-                    style: .active,
-                    activeNote: credentials.status(for: active.keys).isReady
-                        ? nil
-                        : "Until a key is saved, Whispur pastes the raw transcript without cleanup."
-                )
             }
+            .sophiieAnimation(value: appState.cleanupEnabled)
         }
     }
 

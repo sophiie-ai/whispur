@@ -99,6 +99,7 @@ struct SettingsView: View {
             accessibilityGranted: accessibilityGranted,
             speechProviderName: speech.name,
             speechStatus: credentials.readinessStatus(for: speech, localModel: parakeetModel),
+            cleanupEnabled: appState.cleanupEnabled,
             cleanupProviderName: cleanup.name,
             cleanupStatus: credentials.status(for: cleanup.keys)
         )
@@ -120,6 +121,7 @@ struct SettingsView: View {
             dictationEnabled: appState.dictationEnabled,
             readiness: readiness,
             speechProviderName: appState.selectedSTT.setupDescriptor.name,
+            cleanupEnabled: appState.cleanupEnabled,
             cleanupProviderName: cleanup.name,
             cleanupReady: credentials.status(for: cleanup.keys).isReady
         )
@@ -150,6 +152,7 @@ struct SettingsView: View {
                 vocabulary: appState.vocabulary,
                 styles: appState.styles,
                 isReady: setupState.isComplete,
+                cleanupEnabled: appState.cleanupEnabled,
                 openTab: open
             )
         case .dictionary:

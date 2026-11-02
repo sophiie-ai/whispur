@@ -46,6 +46,7 @@ final class SettingsPagesTests: XCTestCase {
         SettingsReadiness.derive(
             microphoneGranted: mic, accessibilityGranted: true,
             speechProviderName: "Deepgram", speechStatus: speech,
+            cleanupEnabled: true,
             cleanupProviderName: "Anthropic Claude", cleanupStatus: .ready
         )
     }
@@ -53,7 +54,7 @@ final class SettingsPagesTests: XCTestCase {
     func testSidebarStatusReady() {
         let status = SidebarStatus.derive(
             dictationEnabled: true, readiness: readiness(),
-            speechProviderName: "Deepgram", cleanupProviderName: "Anthropic Claude", cleanupReady: true
+            speechProviderName: "Deepgram", cleanupEnabled: true, cleanupProviderName: "Anthropic Claude", cleanupReady: true
         )
         XCTAssertEqual(status.tone, .ready)
         XCTAssertEqual(status.headline, "Ready to dictate")
@@ -62,7 +63,7 @@ final class SettingsPagesTests: XCTestCase {
 
         let noCleanup = SidebarStatus.derive(
             dictationEnabled: true, readiness: readiness(),
-            speechProviderName: "Deepgram", cleanupProviderName: "Anthropic Claude", cleanupReady: false
+            speechProviderName: "Deepgram", cleanupEnabled: true, cleanupProviderName: "Anthropic Claude", cleanupReady: false
         )
         XCTAssertEqual(noCleanup.detail, "Deepgram \u{00B7} Cleanup off")
     }
@@ -70,7 +71,7 @@ final class SettingsPagesTests: XCTestCase {
     func testSidebarStatusPointsAtTheFix() {
         let incomplete = SidebarStatus.derive(
             dictationEnabled: true, readiness: readiness(mic: false),
-            speechProviderName: "Deepgram", cleanupProviderName: "Anthropic Claude", cleanupReady: true
+            speechProviderName: "Deepgram", cleanupEnabled: true, cleanupProviderName: "Anthropic Claude", cleanupReady: true
         )
         XCTAssertEqual(incomplete.tone, .attention)
         XCTAssertEqual(incomplete.target, .getStarted)
@@ -78,7 +79,7 @@ final class SettingsPagesTests: XCTestCase {
 
         let off = SidebarStatus.derive(
             dictationEnabled: false, readiness: readiness(),
-            speechProviderName: "Deepgram", cleanupProviderName: "Anthropic Claude", cleanupReady: true
+            speechProviderName: "Deepgram", cleanupEnabled: true, cleanupProviderName: "Anthropic Claude", cleanupReady: true
         )
         XCTAssertEqual(off.tone, .off)
         XCTAssertEqual(off.target, .dictation)

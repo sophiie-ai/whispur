@@ -21,6 +21,10 @@ struct StylesSettingsView: View {
                     .help("Back to Default for every group and app, with no per-app styles")
             }
 
+            if !appState.cleanupEnabled {
+                cleanupOffNotice
+            }
+
             HStack(spacing: 10) {
                 ForEach(Self.previewed) { style in
                     StyleCard(style: style)
@@ -54,6 +58,24 @@ struct StylesSettingsView: View {
 
             perAppSection
             customSection
+        }
+    }
+
+    static let cleanupOffTitle = "Styles need cleanup"
+    static let cleanupOffDetail = "Clean up with AI is off, so Whispur pastes what the speech engine heard and these styles have no effect."
+
+    private var cleanupOffNotice: some View {
+        SettingsCard(hero: true) {
+            SettingsRow(
+                icon: "info.circle",
+                title: Self.cleanupOffTitle,
+                subtitle: Self.cleanupOffDetail,
+                iconTint: SophiieTheme.Palette.warning
+            ) {
+                Button("Turn On Cleanup") { appState.cleanupEnabled = true }
+                    .buttonStyle(.sophiieSecondary)
+                    .help("Switches on Clean up with AI (also on the Providers page)")
+            }
         }
     }
 

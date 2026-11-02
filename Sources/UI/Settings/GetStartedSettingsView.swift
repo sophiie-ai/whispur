@@ -135,7 +135,9 @@ struct GetStartedSettingsView: View {
             SettingsCard {
                 CardContent {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Hold your shortcut to speak, or use the hands-free shortcut when you want to stay in dictation mode. After you stop, Whispur transcribes, cleans up the wording, and pastes the final text back into the frontmost app.")
+                        Text(appState.cleanupEnabled
+                            ? "Hold your shortcut to speak, or use the hands-free shortcut when you want to stay in dictation mode. After you stop, Whispur transcribes, cleans up the wording, and pastes the final text back into the frontmost app."
+                            : "Hold your shortcut to speak, or use the hands-free shortcut when you want to stay in dictation mode. After you stop, Whispur transcribes and pastes exactly what it heard into the frontmost app. Cleanup is off.")
                             .font(.system(size: 13))
                             .foregroundStyle(SophiieTheme.Palette.inkSecondary)
                             .fixedSize(horizontal: false, vertical: true)

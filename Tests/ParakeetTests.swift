@@ -131,6 +131,7 @@ final class ParakeetTests: XCTestCase {
         let readiness = SettingsReadiness.derive(
             microphoneGranted: true, accessibilityGranted: true,
             speechProviderName: "Parakeet", speechStatus: .needsDownload,
+            cleanupEnabled: true,
             cleanupProviderName: "Y", cleanupStatus: .ready
         )
         XCTAssertEqual(readiness.tone, .incomplete)

@@ -23,7 +23,7 @@ Hold a shortcut to talk, or use an optional toggle shortcut for hands-free captu
 - Lives in the macOS menu bar instead of taking over your desktop
 - Hold-to-talk or toggle-to-latch recording
 - Multi-provider speech-to-text with on-device Apple and NVIDIA Parakeet options
-- Optional transcript cleanup with provider-selectable LLMs
+- Optional transcript cleanup with provider-selectable LLMs; switch off `Clean up with AI` (`Settings` → `Providers`, or the cleanup chip in the menu bar) to paste exactly what the speech engine heard, with no LLM request
 - Paste-back into the active app with clipboard preservation
 - Custom vocabulary and a single editable cleanup prompt for technical dictation
 - Local-first by default: with no cloud speech key, Whispur uses NVIDIA Parakeet on Apple silicon (Apple on-device on Intel Macs), and Apple on-device transcribes while Parakeet's model downloads in the background

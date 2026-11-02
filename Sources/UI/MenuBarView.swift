@@ -234,12 +234,7 @@ struct MenuBarView: View {
                 tab: .providers
             )
 
-            providerChip(
-                icon: "sparkles",
-                value: appState.selectedLLM.displayName,
-                configured: appState.isSelectedLLMConfigured,
-                tab: .providers
-            )
+            cleanupChip
 
             Spacer(minLength: 0)
 
@@ -260,6 +255,12 @@ struct MenuBarView: View {
         .padding(.horizontal, 4)
     }
 
+    private enum ChipState {
+        case configured
+        case needsSetup
+        case off
+    }
+
     private func providerChip(
         icon: String,
         value: String,
@@ -269,19 +270,54 @@ struct MenuBarView: View {
         Button {
             openSettings(tab: tab)
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                Text(value)
-                    .lineLimit(1)
-                Image(systemName: configured ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(configured ? SophiieTheme.Palette.success : SophiieTheme.Palette.warning)
-            }
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(SophiieTheme.Palette.surfaceSubtle, in: Capsule())
+            chipLabel(icon: icon, value: value, state: configured ? .configured : .needsSetup)
         }
         .buttonStyle(.plain)
+    }
+
+    /// The cleanup chip opens a small menu: the "Clean up with AI" switch
+    /// and a link to the Providers page.
+    private var cleanupChip: some View {
+        Menu {
+            Toggle(ProvidersSettingsView.cleanupSwitchTitle, isOn: $appState.cleanupEnabled)
+            Divider()
+            Button("Cleanup Settings\u{2026}") { openSettings(tab: .providers) }
+        } label: {
+            chipLabel(
+                icon: "sparkles",
+                value: appState.cleanupEnabled ? appState.selectedLLM.displayName : "Cleanup off",
+                state: !appState.cleanupEnabled ? .off : (appState.isSelectedLLMConfigured ? .configured : .needsSetup)
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(appState.cleanupEnabled ? "Cleanup: \(appState.selectedLLM.displayName)" : "Cleanup off")
+    }
+
+    private func chipLabel(icon: String, value: String, state: ChipState) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+            Text(value)
+                .lineLimit(1)
+            switch state {
+            case .configured:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(SophiieTheme.Palette.success)
+            case .needsSetup:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(SophiieTheme.Palette.warning)
+            case .off:
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(SophiieTheme.Palette.muted)
+            }
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(state == .off ? SophiieTheme.Palette.muted : SophiieTheme.Palette.ink)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(SophiieTheme.Palette.surfaceSubtle, in: Capsule())
     }
 
     private func warningCard(
