@@ -168,7 +168,7 @@ private struct ActivityEntry: View {
                         }
                         if item.isCleanupOff {
                             PreferenceBadge(title: "Cleanup off", tone: .neutral)
-                                .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits applied.")
+                                .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits and text fixes applied.")
                         } else {
                             PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
                             if let llmModel = item.llmModel {

@@ -64,8 +64,23 @@ final class DictationPipeline: ObservableObject {
     var sttProviderOverride: ((STTProviderID) -> (any STTProvider)?)?
     var selectedLLM: LLMProviderID = .anthropic
     /// The "Clean up with AI" switch. While off, no cleanup request is made:
-    /// the transcript is pasted with only the spoken edit commands applied.
+    /// the transcript is pasted with only the spoken edit commands and text
+    /// fixes applied.
     var cleanupEnabled: Bool = true
+    /// Fillers, spoken quotes and spoken symbols, fixed in code on every
+    /// dictation (`TextFixes`). The quote style follows the app.
+    var textFixOptions = TextFixOptions()
+    /// Adds a leading space when the cursor sits right after a word
+    /// (`SmartSpacing`).
+    var smartSpacingEnabled = true
+    /// Reads what sits before the cursor in the focused field. Injectable
+    /// for tests.
+    var readBeforeCursor: () async -> SmartSpacing.Before = {
+        await Task.detached(priority: .userInitiated) { SmartSpacing.readBeforeCursor() }.value
+    }
+    /// The dictation whose paste got a leading space from smart spacing, so
+    /// "Use raw" can paste the raw transcript the same way.
+    private(set) var smartSpacedDictationID: UUID?
     /// Replaces the registry's cleanup providers. Tests only.
     var llmProviderOverride: ((LLMProviderID) -> (any LLMProvider)?)?
     var sttLanguageSelection: STTLanguageSelection = .auto
@@ -572,6 +587,7 @@ final class DictationPipeline: ObservableObject {
             guard let decided = await decideText(
                 forRaw: normalizedRawTranscript,
                 styleChoice: cleanupChoice(),
+                appBundleID: recordingAppBundleID,
                 updatesPhase: true
             ) else {
                 dismissForNoSpeech()
@@ -582,7 +598,8 @@ final class DictationPipeline: ObservableObject {
             guard !Task.isCancelled else { throw CancellationError() }
 
             phase = .pasting
-            await TextInjector.paste(finalTranscript, preserveClipboard: preserveClipboard)
+            let pasteText = await smartSpaced(finalTranscript)
+            await TextInjector.paste(pasteText, preserveClipboard: preserveClipboard)
 
             guard !Task.isCancelled else { throw CancellationError() }
 
@@ -601,6 +618,7 @@ final class DictationPipeline: ObservableObject {
                 cleanupOff: decided.cleanupOff
             )
 
+            smartSpacedDictationID = pasteText == finalTranscript ? nil : result.id
             lastResult = result
             historyStore.add(result)
             onDictationPasted?(result)
@@ -647,19 +665,25 @@ final class DictationPipeline: ObservableObject {
         /// the cleanup was pasted, and when cleanup is switched off.
         let rawFallbackReason: TranscriptDecision.RawFallbackReason?
         /// Cleanup is switched off: the text is the transcript with only the
-        /// spoken edit commands applied, and no model saw it.
+        /// spoken edit commands and text fixes applied, and no model saw it.
         let cleanupOff: Bool
     }
 
-    /// Applies the spoken edit commands, then cleanup (unless it is switched
-    /// off), then picks what to paste. Nil when there is nothing worth
-    /// pasting.
+    /// Applies the spoken edit commands and the text fixes, then cleanup
+    /// (unless it is switched off), then picks what to paste. Nil when there
+    /// is nothing worth pasting.
+    ///
+    /// The text fixes run before cleanup, so the model reads "#release"
+    /// rather than "hashtag release", and the raw-transcript fallback gets
+    /// them too.
     func decideText(
         forRaw normalizedRaw: String,
         styleChoice: CleanupStyleChoice?,
+        appBundleID: String? = nil,
         updatesPhase: Bool
     ) async -> DecidedText? {
-        let spoken = VoiceCommands.apply(to: normalizedRaw)
+        let spoken = TextFixes.apply(VoiceCommands.apply(to: normalizedRaw), options: textFixOptions(for: appBundleID))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleanupEnabled else {
             guard case let .paste(text, _) = TranscriptDecision.finalOutcome(raw: spoken, cleaned: nil) else { return nil }
             return DecidedText(text: text, llmModel: nil, style: nil, rawFallbackReason: nil, cleanupOff: true)
@@ -680,6 +704,23 @@ final class DictationPipeline: ObservableObject {
                 cleanupOff: false
             )
         }
+    }
+
+    /// The text fixes for a dictation into `appBundleID`: straight quotes in
+    /// code apps, curly quotes everywhere else.
+    func textFixOptions(for appBundleID: String?) -> TextFixOptions {
+        var options = textFixOptions
+        options.spokenLanguages = sttLanguageSelection.codes
+        options.quoteStyle = appBundleID.flatMap(AppGroup.group(for:)) == .code ? .straight : .curly
+        return options
+    }
+
+    /// `text` with a leading space when smart spacing is on and the cursor in
+    /// the frontmost app sits right after a word.
+    private func smartSpaced(_ text: String) async -> String {
+        guard smartSpacingEnabled else { return text }
+        if let bundleID = frontmostBundleID(), SmartSpacing.excludedBundleIDs.contains(bundleID) { return text }
+        return SmartSpacing.adjusted(text, before: await readBeforeCursor())
     }
 
     private func makeLLMProvider() -> (any LLMProvider)? {
@@ -757,7 +798,7 @@ final class DictationPipeline: ObservableObject {
         }
         let styleChoice = cleanupStyle?(appBundleID)
         let decided = await ProviderRequestContext.$dictationID.withValue(dictationID) {
-            await decideText(forRaw: normalizedRaw, styleChoice: styleChoice, updatesPhase: false)
+            await decideText(forRaw: normalizedRaw, styleChoice: styleChoice, appBundleID: appBundleID, updatesPhase: false)
         }
         guard let decided else { throw RetryError.noSpeech }
         let cleaned = decided.rawFallbackReason == nil
@@ -991,7 +1032,7 @@ struct PipelineResult: Identifiable, Codable {
     /// when the selected provider ran, and for results saved before this.
     var sttFallbackFrom: STTProviderID?
     /// True when cleanup was switched off for this dictation: the pasted
-    /// text is the transcript with only spoken edit commands applied. Nil
+    /// text is the transcript with only spoken edits and text fixes. Nil
     /// for cleaned dictations and results saved before the switch existed.
     var cleanupOff: Bool?
 

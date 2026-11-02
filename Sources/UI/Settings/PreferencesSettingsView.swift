@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Preferences: permissions, sound and output, the recording indicator, and
-/// the app version. Shortcuts live on the Dictation page and the custom
+/// Preferences: permissions, sound and output, text fixes, the recording
+/// indicator, and the app version. Shortcuts live on the Dictation page and the custom
 /// cleanup prompt on the Styles page.
 struct PreferencesSettingsView: View {
     @ObservedObject var appState: AppState
@@ -12,6 +12,7 @@ struct PreferencesSettingsView: View {
             PageHeader(SettingsTab.preferences.title, subtitle: SettingsTab.preferences.summary)
             permissionsSection
             outputSection
+            textFixesSection
             indicatorSection
             aboutSection
         }
@@ -114,6 +115,48 @@ struct PreferencesSettingsView: View {
                     subtitle: "Reserved for future capture-aware cleanup. It has no effect yet."
                 ) {
                     SettingsSwitch(label: "Deep context", isOn: $appState.deepContextEnabled)
+                }
+            }
+        }
+    }
+
+    // MARK: - Text fixes
+
+    static let textFixesFooter = "Made on this Mac with no AI, on every dictation: before cleanup when it\u{2019}s on, and on their own when it\u{2019}s off."
+
+    private var textFixesSection: some View {
+        SettingsSection("Text fixes", footer: Self.textFixesFooter) {
+            SettingsCard {
+                SettingsRow(
+                    icon: "text.badge.minus",
+                    title: "Remove filler words",
+                    subtitle: "Drops um, uh, er and hmm. Words that can be real, like \u{201C}like\u{201D} and \u{201C}so\u{201D}, stay."
+                ) {
+                    SettingsSwitch(label: "Remove filler words", isOn: $appState.removeFillers)
+                }
+                CardDivider()
+                SettingsRow(
+                    icon: "number",
+                    title: "Spoken symbols",
+                    subtitle: "\u{201C}hashtag release\u{201D} becomes #release, \u{201C}my underscore variable\u{201D} my_variable, \u{201C}dash dash force\u{201D} --force."
+                ) {
+                    SettingsSwitch(label: "Spoken symbols", isOn: $appState.spokenSymbols)
+                }
+                CardDivider()
+                SettingsRow(
+                    icon: "quote.opening",
+                    title: "Spoken quotes",
+                    subtitle: "\u{201C}quote \u{2026} end quote\u{201D} becomes quotation marks. Straight quotes in code apps."
+                ) {
+                    SettingsSwitch(label: "Spoken quotes", isOn: $appState.spokenQuotes)
+                }
+                CardDivider()
+                SettingsRow(
+                    icon: "space",
+                    title: "Smart spacing",
+                    subtitle: "Adds a space before the text when the cursor is right after a word. Skipped in terminals and fields Whispur can\u{2019}t read."
+                ) {
+                    SettingsSwitch(label: "Smart spacing", isOn: $appState.smartSpacing)
                 }
             }
         }

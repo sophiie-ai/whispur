@@ -4,7 +4,7 @@ Checks the default cleanup prompt (`Prompts.defaultCleanup`) against a fixed set
 Each request is built the way the app builds it, sent to a real provider, and the model's output
 is scored against an expected cleanup.
 
-- `cases.jsonl`: 105 cases (85 tune, 20 held-out), one JSON object per line.
+- `cases.jsonl`: 112 cases (92 tune, 20 held-out), one JSON object per line.
 - `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it,
   and the system prompt for a Chat app (`system-prompt-chat.txt`).
   `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile`,
@@ -27,6 +27,7 @@ python3 scripts/eval-cleanup.py --provider groq --prompt current  # origin/main 
 python3 scripts/eval-cleanup.py --provider openai --cases sorry-late,code-npm --runs 3
 python3 scripts/eval-cleanup.py --provider openai --split tune    # tuning cases only
 python3 scripts/eval-cleanup.py --provider openai --cases-file ~/Library/Application\ Support/Whispur/MyEvalCases.jsonl
+python3 scripts/eval-cleanup.py --provider openai --text-fixes --runs 1   # inputs through the app's text fixes first
 ```
 
 Options:
@@ -38,6 +39,7 @@ Options:
 | `--provider groq` / `openai` | Groq `openai/gpt-oss-20b` or OpenAI `gpt-6-luna`, with the same parameters the app sends (`OpenAIChatFormat.body`): Groq `reasoning_effort: low`, `include_reasoning: false`, `temperature: 0`; OpenAI `reasoning_effort: none`, `temperature: 0`; both `max_completion_tokens` from `LLMRequest.cleanupMaxTokens`. |
 | `--model ID` | Any other model on that provider (`openai/gpt-oss-120b`, `gpt-6.1-terra`, ...). Parameters follow `OpenAIChatFormat.parameterStyle`, so a model gets the request shape the app would send it. |
 | `--token-cap N` | Stop sending requests once the run has used N tokens (prompt + completion); the runs that finished are scored and saved. Use it to keep a Groq free-tier run inside a daily budget. |
+| `--text-fixes` | Run every input through the app's no-AI text fixes first (`Sources/Pipeline/TextFixes.swift`, compiled with `swiftc` into `/tmp/whispur-eval/text-fixes-cli` from `scripts/text-fixes-cli/main.swift`), with every fix on and straight quotes for `code` cases, as the app sends it to cleanup. An input left with nothing but fillers or annotations is scored as `EMPTY` with no request, as the app dismisses it. Without the flag the input is sent as written, like a build without text fixes. |
 | `--runs N` | Runs per case (default 2). |
 | `--cases-file PATH` | Read cases from another JSONL file in the `cases.jsonl` schema (default `Evals/cleanup/cases.jsonl`), such as the private `MyEvalCases.jsonl` that Activity's `Mark as wrong` writes. Its cases use `"split": "mine"` and get their own summary row. |
 | `--cases a,b` / `--split tune\|heldout\|mine` | Run a subset. |
@@ -127,6 +129,12 @@ loosening the scorer.
   transcript before cleanup, so this eval never sees them. What the eval does pin is the cleanup
   keeping the line breaks they insert (`linebreak-kept`, `linebreak-paragraph-kept`; blank lines
   are dropped by the scorer, and the app restores them after cleanup).
+- **Text fixes are code too.** Filler removal ("um", "uh", "hmm"), spoken quote pairs ("quote ...
+  end quote") and spoken symbols ("hashtag release", "max underscore retries", "dash dash force")
+  run in `TextFixes` before cleanup, unit-tested in `TextFixesTests`. The `text-fixes` cases pin what
+  cleanup does with their output (`fix-hashtag`, `fix-quote-pair`, ...) and that the words stay when
+  they aren't the symbol (`fix-hashtag-word`, `fix-quote-price`: a quote is also a price). Run them
+  with `--text-fixes`; without it they measure a build that has no text fixes.
 - **Emails and URLs.** Spoken addresses are written out (`jake at sophiie dot ai` becomes
   `jake@sophiie.ai`, `whispur dot app slash download` becomes `whispur.app/download`), lowercase,
   with vocabulary spellings applied to the domain. A dictation that is only an address gets no final
@@ -146,6 +154,16 @@ Run 2026-11-02 on all 105 cases, OpenAI `gpt-6-luna`, N=2. Self-correction cases
 | corrections (first layer) | 428 | on its 90 cases: 178/180 vs v0.24.0's 176/180 | 0 | 32/34 | 58/58 | | 0.98 s / 1.31 s | 690 |
 | corrections + lists | 464 | **208/210** | 0 | 38/40 | 58/58 | **30/30** | 0.84 s / 1.05 s | 750 |
 | any | | Groq `gpt-oss-20b`: pending | | | | | | |
+
+Text fixes, run 2026-11-02 on all 112 cases, OpenAI `gpt-6-luna`, N=1, same prompt (464 words):
+
+| Input | Runs passed | Critical failures | Held-out | `text-fixes` (7) | p50 / p95 latency |
+|---|---|---|---|---|---|
+| as written (no text fixes) | 110/112 | 0 | 19/20 | 6/7 | 1.12 s / 1.75 s |
+| `--text-fixes` | **111/112** | 0 | 19/20 | **7/7** | 1.02 s / 1.37 s |
+
+The only case that changed is `fix-hashtag`: without the fix the model keeps "hashtag release" as
+words. Both runs fail only the held-out `prose-first-then`.
 
 Groq results are pending: the free-tier quota was kept for a separate run, so none of these prompts
 was scored on Groq yet. Every prompt fails the held-out `prose-first-then` (written as two

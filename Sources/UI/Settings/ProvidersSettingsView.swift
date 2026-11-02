@@ -124,7 +124,7 @@ struct ProvidersSettingsView: View {
     private var cleanupSection: some View {
         SettingsSection("Cleanup", footer: appState.cleanupEnabled
             ? "Adds punctuation, removes filler, and smooths dictation before paste."
-            : "Spoken edits like \u{201C}scratch that\u{201D} and \u{201C}new line\u{201D} still apply. No transcript is sent to a cleanup provider.") {
+            : "Spoken edits like \u{201C}scratch that\u{201D} and \u{201C}new line\u{201D}, and the text fixes in Preferences, still apply. No transcript is sent to a cleanup provider.") {
             SettingsCard {
                 SettingsRow(icon: "sparkles", title: Self.cleanupSwitchTitle, subtitle: Self.cleanupSwitchSubtitle) {
                     SettingsSwitch(label: Self.cleanupSwitchTitle, isOn: $appState.cleanupEnabled)
