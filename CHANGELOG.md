@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/sophiie-ai/whispur/compare/v0.26.0...v0.27.0) (2026-11-02)
+
+
+### Features
+
+* **stt:** make on-device Parakeet the default for users without speech keys ([#104](https://github.com/sophiie-ai/whispur/issues/104)) ([a1b4100](https://github.com/sophiie-ai/whispur/commit/a1b41004dc6866c61dba0b856cb316a5b0663da0))
+
 ## [0.26.0](https://github.com/sophiie-ai/whispur/compare/v0.25.0...v0.26.0) (2026-11-01)
 
 
