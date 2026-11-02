@@ -97,11 +97,34 @@ final class CleanupPromptTests: XCTestCase {
         let inputData = try Data(contentsOf: golden.appendingPathComponent("input.json"))
         let input = try JSONDecoder().decode(GoldenInput.self, from: inputData)
         let expected = try String(contentsOf: golden.appendingPathComponent("user-message.txt"), encoding: .utf8)
-        XCTAssertEqual(CleanupMessage.userMessage(transcript: input.transcript, vocabulary: input.vocabulary), expected)
+        XCTAssertEqual(
+            CleanupMessage.userMessage(transcript: input.transcript, vocabulary: input.vocabulary, heardAs: input.heardAs),
+            expected
+        )
+    }
+
+    func testHeardAsSpellingsFollowTheirTerm() {
+        let message = CleanupMessage.userMessage(
+            transcript: "I use whisper daily",
+            vocabulary: ["Whispur", "Xero"],
+            heardAs: ["Whispur": ["Whisper", " Whisper\napp "], "Missing": ["x"]]
+        )
+        XCTAssertTrue(message.hasPrefix("<vocabulary>\nWhispur (heard as: Whisper, Whisper app)\nXero\n</vocabulary>\n\(CleanupMessage.heardAsNote)\n\n<dictation-to-clean>"), message)
+        XCTAssertFalse(message.contains("Missing"), "Hints only ride on listed terms")
+        XCTAssertFalse(
+            CleanupMessage.userMessage(transcript: "hi", vocabulary: ["Xero"], heardAs: ["Missing": ["x"]]).contains(CleanupMessage.heardAsNote),
+            "No hint shown, no note"
+        )
+        XCTAssertEqual(
+            CleanupMessage.userMessage(transcript: "hi", vocabulary: ["Xero"]),
+            CleanupMessage.userMessage(transcript: "hi", vocabulary: ["Xero"], heardAs: [:]),
+            "No hints: the block is unchanged"
+        )
     }
 
     private struct GoldenInput: Decodable {
         let transcript: String
         let vocabulary: [String]
+        let heardAs: [String: [String]]
     }
 }

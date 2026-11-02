@@ -4,7 +4,7 @@ Checks the default cleanup prompt (`Prompts.defaultCleanup`) against a fixed set
 Each request is built the way the app builds it, sent to a real provider, and the model's output
 is scored against an expected cleanup.
 
-- `cases.jsonl`: 112 cases (92 tune, 20 held-out), one JSON object per line.
+- `cases.jsonl`: 128 cases (108 tune, 20 held-out), one JSON object per line.
 - `golden/`: a fixed transcript + vocabulary and the exact user message the app builds for it,
   and the system prompt for a Chat app (`system-prompt-chat.txt`).
   `CleanupPromptTests.testUserMessageMatchesEvalGoldenFile`,
@@ -28,6 +28,7 @@ python3 scripts/eval-cleanup.py --provider openai --cases sorry-late,code-npm --
 python3 scripts/eval-cleanup.py --provider openai --split tune    # tuning cases only
 python3 scripts/eval-cleanup.py --provider openai --cases-file ~/Library/Application\ Support/Whispur/MyEvalCases.jsonl
 python3 scripts/eval-cleanup.py --provider openai --text-fixes --runs 1   # inputs through the app's text fixes first
+python3 scripts/eval-cleanup.py --alias-report                            # "heard as" replacements in code alone, no API calls
 ```
 
 Options:
@@ -40,6 +41,7 @@ Options:
 | `--model ID` | Any other model on that provider (`openai/gpt-oss-120b`, `gpt-6.1-terra`, ...). Parameters follow `OpenAIChatFormat.parameterStyle`, so a model gets the request shape the app would send it. |
 | `--token-cap N` | Stop sending requests once the run has used N tokens (prompt + completion); the runs that finished are scored and saved. Use it to keep a Groq free-tier run inside a daily budget. |
 | `--text-fixes` | Run every input through the app's no-AI text fixes first (`Sources/Pipeline/TextFixes.swift`, compiled with `swiftc` into `/tmp/whispur-eval/text-fixes-cli` from `scripts/text-fixes-cli/main.swift`), with every fix on and straight quotes for `code` cases, as the app sends it to cleanup. An input left with nothing but fillers or annotations is scored as `EMPTY` with no request, as the app dismisses it. Without the flag the input is sent as written, like a build without text fixes. |
+| `--alias-report` | Score the dictionary's "heard as" replacements made in code (what cleanup-off users get) on the cases with `alias_check`: term recall and false replacements, no API calls. Exits 1 on any false replacement. |
 | `--runs N` | Runs per case (default 2). |
 | `--cases-file PATH` | Read cases from another JSONL file in the `cases.jsonl` schema (default `Evals/cleanup/cases.jsonl`), such as the private `MyEvalCases.jsonl` that Activity's `Mark as wrong` writes. Its cases use `"split": "mine"` and get their own summary row. |
 | `--cases a,b` / `--split tune\|heldout\|mine` | Run a subset. |
@@ -65,6 +67,9 @@ Each line has:
 | `split` | `tune` or `heldout`. |
 | `input` | The raw transcript. |
 | `vocabulary` | Optional list of the user's custom terms. |
+| `aliases` | Optional "heard as" spellings per term (`{"Whispur": ["Whisper", "Wispur"]}`). Only sent with `--text-fixes`: clear-cut ones are replaced in code, ordinary words go to the vocabulary block as `Whispur (heard as: Whisper)` (`VocabularyAliasPlan`). |
+| `always_replace` | Optional terms whose aliases are all replaced in code ("Always replace" in Dictionary). |
+| `alias_check` | Optional `{"term": ..., "kind": "recall" \| "guard"}`: `recall` cases should end up with the term, `guard` cases mean the alias as written ("Sophie from accounting called") and must not. Summarized as term recall and false replacements. |
 | `style` | Optional. The kind of app the dictation goes into: `chat`, `email`, `docs`, `code` (an `AppGroup`), or `default` (an app outside every group; the default). Every group is on the Default writing style, as on a fresh install, so only `chat` changes the system prompt today: it adds the Chat formatting section (`Prompts.chatFormatting`) the way `Prompts.cleanupPrompt(for:group:customPrompt:)` does. With `--prompt current`, a prompt that has no group sections is used as is for every style. |
 | `expected` | The cleanup we want. `EMPTY` means "no speech". |
 | `alternates` | Optional other acceptable outputs. |
@@ -164,6 +169,21 @@ Text fixes, run 2026-11-02 on all 112 cases, OpenAI `gpt-6-luna`, N=1, same prom
 
 The only case that changed is `fix-hashtag`: without the fix the model keeps "hashtag release" as
 words. Both runs fail only the held-out `prose-first-then`.
+
+"Heard as" vocabulary, run 2026-11-02 on the 16 `aliases` cases (10 recall, 6 guard), OpenAI
+`gpt-6-luna`:
+
+| Build | Term recall | False replacements (guard) |
+|---|---|---|
+| In code alone (`--alias-report`, cleanup off) | 5/10 (the clear-cut ones) | **0/6** |
+| Vocabulary only, no aliases (`main`), N=2 | 20/20 | 8/12 |
+| Aliases as bare `(heard as: ...)` hints, N=2 | 20/20 | 10/12 |
+| Aliases + the `heardAsNote` line (shipped), N=3 | **30/30** | **3/18** |
+
+The bare hints made the model replace more ("Please Whispur it so the baby doesn't wake up"); the
+one-line note after the block (`CleanupMessage.heardAsNote`) brought false replacements below
+`main`'s without losing recall. The remaining one is `guard-whisper-openai` ("I use Whisper from
+OpenAI"). On all 128 cases with `--text-fixes`, N=1: 125/128, the original 112 at 111/112 as before.
 
 Groq results are pending: the free-tier quota was kept for a separate run, so none of these prompts
 was scored on Groq yet. Every prompt fails the held-out `prose-first-then` (written as two

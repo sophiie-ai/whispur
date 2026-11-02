@@ -87,6 +87,7 @@ final class SettingsRenderTests: XCTestCase {
                     historyStore: appState.historyStore,
                     retrier: appState.retrier,
                     evalCases: appState.evalCases,
+                    addToVocabulary: { _, _ in },
                     initiallyExpanded: open.id,
                     onRetry: { _ in }
                 )
@@ -94,6 +95,26 @@ final class SettingsRenderTests: XCTestCase {
                 try render(activity, scheme: scheme, size: CGSize(width: 1000, height: 1400), to: dir.appendingPathComponent("activity-expanded-\(suffix).png"))
                 let sheet = MarkAsWrongSheet(item: open, onSave: { _, _ in }, onCancel: {})
                 try render(sheet, scheme: scheme, size: CGSize(width: 520, height: 600), to: dir.appendingPathComponent("activity-mark-wrong-sheet-\(suffix).png"))
+            }
+            // Add to vocabulary, prefilled from the raw vs cleaned difference:
+            // a clear-cut spelling, and an ordinary word.
+            for (name, raw, cleaned) in Self.vocabularySheetSamples {
+                let item = PipelineResult(
+                    rawTranscript: raw, cleanedText: cleaned, sttProvider: .deepgram,
+                    llmProvider: .anthropic, llmModel: "claude-haiku", timestamp: Date()
+                )
+                let sheet = AddToVocabularySheet(item: item, onSave: { _, _ in }, onCancel: {})
+                try render(sheet, scheme: scheme, size: CGSize(width: 520, height: 560), to: dir.appendingPathComponent("activity-add-vocabulary-\(name)-\(suffix).png"))
+            }
+            // A dictionary row adding a spelling.
+            if let term = appState.vocabulary.terms.first(where: { $0.text == "Whispur" }) {
+                let row = TermRow(
+                    term: term, isCommonWord: CommonWords.isCommon, onRemove: {}, onAddAlias: { _ in true },
+                    onRemoveAlias: { _ in }, onAlwaysReplace: { _ in }, startsAdding: true
+                )
+                .padding(.horizontal, 16)
+                .background(SophiieTheme.Palette.surface)
+                try render(row, scheme: scheme, size: CGSize(width: 700, height: 130), to: dir.appendingPathComponent("dictionary-row-adding-\(suffix).png"))
             }
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
@@ -127,6 +148,20 @@ final class SettingsRenderTests: XCTestCase {
         ("groqWhisper", .stt, ProviderHTTPClient.scriptGuardMethod, nil),
     ]
 
+    static let vocabularySheetSamples: [(name: String, raw: String, cleaned: String)] = [
+        ("clear", "um can you push the wispur build tonight", "Can you push the Whispur build tonight?"),
+        ("ordinary", "ask sophie to call the plumber back", "Ask Sophiie to call the plumber back."),
+    ]
+
+    /// "Heard as" spellings on some sample terms: clear-cut ones, ordinary
+    /// words, and one term set to always replace.
+    static let sampleAliases: [String: (aliases: [String], always: Bool)] = [
+        "ElevenLabs": (["eleven labs"], false),
+        "Sophiie": (["Sophie", "Sofie"], false),
+        "kubectl": (["cube cuddle", "kube control"], true),
+        "Whispur": (["Whisper", "Wispur"], false),
+    ]
+
     static let sampleTerms: [(text: String, learnedFrom: String?)] = [
         ("Brisbane CBD", nil),
         ("ElevenLabs", "eleven labs"),
@@ -154,6 +189,11 @@ final class SettingsRenderTests: XCTestCase {
         for (index, term) in sampleTerms.enumerated().reversed() {
             guard let original = term.learnedFrom else { continue }
             vocabulary.add(term.text, source: .learned(original: original), at: now.addingTimeInterval(Double(-index) * 86_400))
+        }
+        for term in vocabulary.terms {
+            guard let sample = sampleAliases[term.text] else { continue }
+            for alias in sample.aliases { vocabulary.addAlias(alias, to: term.id) }
+            vocabulary.setAlwaysReplace(sample.always, for: term.id)
         }
         var items = sampleHistory.map { entry in
             PipelineResult(
