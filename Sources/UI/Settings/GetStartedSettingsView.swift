@@ -6,6 +6,10 @@ struct GetStartedSettingsView: View {
     let setup: SettingsSetupState
     let openTab: (SettingsTab) -> Void
 
+    /// Accessibility granted but only honoured after a relaunch. Mirrored
+    /// from the hotkey manager, which AppState doesn't republish.
+    @State private var needsRestart = false
+
     /// Steps shown in the checklist; each one is counted in `pendingSteps`.
     private static let stepCount = 5
 
@@ -26,6 +30,8 @@ struct GetStartedSettingsView: View {
             checklistSection
             howItWorksSection
         }
+        .onAppear { needsRestart = appState.hotkeyManager.needsRestartForAccessibility }
+        .onReceive(appState.hotkeyManager.$needsRestartForAccessibility.removeDuplicates()) { needsRestart = $0 }
     }
 
     private var progressCard: some View {
@@ -38,6 +44,12 @@ struct GetStartedSettingsView: View {
                             .tracking(SophiieTheme.Typography.titleTracking)
                             .foregroundStyle(SophiieTheme.Palette.ink)
                         Spacer()
+                        Button("Run Setup Again") {
+                            NotificationCenter.default.post(name: .whispurRunSetupAgain, object: nil)
+                        }
+                        .buttonStyle(.sophiieSecondary)
+                        .controlSize(.small)
+                        .help("Opens the welcome window from the start. Your settings and permissions stay as they are.")
                     }
                     Text(setup.isComplete
                         ? "Whispur is ready to dictate across your Mac."
@@ -63,12 +75,21 @@ struct GetStartedSettingsView: View {
                     action: setup.microphoneGranted ? nil : (appState.microphoneAccessRefused ? "Turn On" : "Allow", { appState.requestMicrophoneAccess() })
                 )
                 CardDivider()
-                step(
-                    "Enable accessibility access",
-                    detail: "Lets Whispur trigger shortcuts globally and paste text back into the active app.",
-                    isComplete: setup.accessibilityGranted,
-                    action: setup.accessibilityGranted ? nil : ("Grant", { appState.requestAccessibilityAccess() })
-                )
+                if needsRestart {
+                    step(
+                        "Restart Whispur to finish",
+                        detail: "Accessibility is on, but macOS only applies it to Whispur after a quick restart.",
+                        isComplete: false,
+                        action: ("Restart Whispur", { appState.restartWhispur() })
+                    )
+                } else {
+                    step(
+                        "Enable accessibility access",
+                        detail: "Lets Whispur trigger shortcuts globally and paste text back into the active app.",
+                        isComplete: setup.accessibilityGranted,
+                        action: setup.accessibilityGranted ? nil : ("Grant", { appState.requestAccessibilityAccess() })
+                    )
+                }
                 CardDivider()
                 step(
                     "Choose a speech provider",

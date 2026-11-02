@@ -5,7 +5,7 @@ import SwiftUI
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private let onClose: () -> Void
 
-    init(appState: AppState, onClose: @escaping () -> Void) {
+    init(appState: AppState, initialStep: OnboardingStep = .welcome, onClose: @escaping () -> Void) {
         self.onClose = onClose
 
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
@@ -27,7 +27,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
 
         hostingController.rootView = AnyView(
-            OnboardingWindow(appState: appState) { [weak self] in
+            OnboardingWindow(appState: appState, initialStep: initialStep) { [weak self] in
                 self?.close()
             }
         )
@@ -67,7 +67,8 @@ struct OnboardingWindow: View {
     @State private var movingForward = true
     /// Mirrors of the permission state. The hotkey manager and the guide
     /// publish on their own, so the window listens to them directly.
-    @State private var accessibilityGranted: Bool
+    /// Granted, still finishing, on, or waiting on a restart.
+    @State private var accessibility: AccessibilityStatus
     @State private var guidedPermission: GuidedPermission?
     /// The "Try it" field and whether a real dictation has landed in it.
     @StateObject private var tryIt = TryItSession()
@@ -81,7 +82,7 @@ struct OnboardingWindow: View {
         self.appState = appState
         self.dismiss = dismiss
         _step = State(initialValue: initialStep)
-        _accessibilityGranted = State(initialValue: appState.hotkeyManager.isAccessibilityGranted)
+        _accessibility = State(initialValue: appState.hotkeyManager.accessibilityStatus)
         _guidedPermission = State(initialValue: appState.permissionGuide.activePermission)
     }
 
@@ -105,10 +106,12 @@ struct OnboardingWindow: View {
         .tint(Palette.accent)
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
-        .onReceive(appState.hotkeyManager.$isAccessibilityGranted) { granted in
-            let wasGranted = accessibilityGranted
-            accessibilityGranted = granted
-            if granted, !wasGranted { advance(afterGranting: .accessibility) }
+        .onReceive(appState.hotkeyManager.accessibilityStatusPublisher) { status in
+            let wasOn = accessibility == .on
+            accessibility = status
+            // Only a working shortcut moves on: a grant macOS hasn't honoured
+            // yet stays here to finish, or to offer the restart.
+            if status == .on, !wasOn { advance(afterGranting: .accessibility) }
         }
         .onReceive(appState.$microphoneAccessGranted.removeDuplicates().dropFirst()) { granted in
             if granted { advance(afterGranting: .microphone) }
@@ -232,7 +235,7 @@ struct OnboardingWindow: View {
         switch step {
         case .microphone: return !appState.microphoneAccessGranted
         case .tryIt: return !tryIt.succeeded
-        case .accessibility: return !accessibilityGranted
+        case .accessibility: return accessibility != .on
         default: return false
         }
     }
@@ -304,13 +307,24 @@ struct OnboardingWindow: View {
 
     private var accessibilityScreen: some View {
         OnboardingScreen(
-            hero: { SymbolHero(symbol: OnboardingStep.accessibility.symbol, isDone: accessibilityGranted) },
-            title: accessibilityGranted ? "Whispur can type for you" : "Let Whispur type for you",
+            hero: { SymbolHero(symbol: accessibilitySymbol, isDone: accessibility == .on) },
+            title: accessibilityTitle,
             message: accessibilityMessage
         ) {
-            if accessibilityGranted {
+            switch accessibility {
+            case .on:
                 GrantedLabel(text: "Accessibility on")
-            } else {
+            case .finishing:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Turning on your shortcut\u{2026}")
+                        .font(SophiieTheme.Typography.label)
+                        .foregroundStyle(Palette.inkSecondary)
+                }
+                .frame(height: 32)
+            case .needsRestart:
+                restartButton
+            case .off:
                 Button(guidedPermission == .accessibility ? "Show Guide Again" : "Open System Settings",
                        action: appState.requestAccessibilityAccess)
                     .buttonStyle(.sophiiePrimary)
@@ -320,12 +334,45 @@ struct OnboardingWindow: View {
         }
     }
 
-    private var accessibilityMessage: String {
-        if accessibilityGranted { return "Your shortcut works in every app, and text lands where you're typing." }
-        if guidedPermission == .accessibility {
-            return "Drag Whispur into the \(GuidedPermission.accessibility.listName) list, then switch it on. This moves on by itself."
+    private var accessibilitySymbol: String {
+        accessibility == .needsRestart ? "arrow.clockwise" : OnboardingStep.accessibility.symbol
+    }
+
+    private var accessibilityTitle: String {
+        switch accessibility {
+        case .on: return "Whispur can type for you"
+        case .needsRestart: return Self.restartTitle
+        case .off, .finishing: return "Let Whispur type for you"
         }
-        return "Accessibility lets your shortcut work in any app and paste text where you're typing."
+    }
+
+    private var accessibilityMessage: String {
+        switch accessibility {
+        case .on:
+            return "Your shortcut works in every app, and text lands where you're typing."
+        case .finishing:
+            return "Accessibility is on. Whispur is hooking up your shortcut."
+        case .needsRestart:
+            return Self.restartMessage
+        case .off:
+            if guidedPermission == .accessibility {
+                return "Drag Whispur into the \(GuidedPermission.accessibility.listName) list, then switch it on. This moves on by itself."
+            }
+            return "Accessibility lets your shortcut work in any app and paste text where you're typing."
+        }
+    }
+
+    static let restartTitle = "Whispur needs a quick restart to finish"
+    static let restartMessage = "macOS has switched Accessibility on, but Whispur only sees it after a restart. Setup picks up where you left off."
+
+    /// Relaunches Whispur; onboarding reopens past the accessibility step.
+    private var restartButton: some View {
+        Button("Restart Whispur") {
+            appState.restartWhispur(resumingOnboardingAt: OnboardingFlow.resumeStep(afterRestartFrom: step))
+        }
+        .buttonStyle(.sophiiePrimary)
+        .controlSize(.large)
+        .keyboardShortcut(.defaultAction)
     }
 
     private var shortcutsScreen: some View {
@@ -398,7 +445,8 @@ struct OnboardingWindow: View {
     private var tryItScreen: some View {
         let blocker = TryItBlocker.first(
             microphone: appState.microphoneAccessGranted,
-            accessibility: accessibilityGranted,
+            accessibility: accessibility.isGranted,
+            needsRestart: accessibility == .needsRestart,
             hasShortcut: appState.hasAnyShortcut,
             speechConfigured: appState.isSelectedSTTConfigured
         )
@@ -423,6 +471,8 @@ struct OnboardingWindow: View {
             return "Whispur needs microphone access before it can hear you."
         case .accessibility:
             return "Whispur needs accessibility access before your shortcut works."
+        case .restart:
+            return "Accessibility is on, but your shortcut only works after Whispur restarts."
         case .shortcut:
             return "There's no dictation shortcut yet. Pick one first."
         case .speechProvider:
@@ -442,7 +492,9 @@ struct OnboardingWindow: View {
 
     @ViewBuilder
     private func tryItBlockerAction(_ blocker: TryItBlocker) -> some View {
-        if let fix = blocker.step {
+        if blocker == .restart {
+            restartButton
+        } else if let fix = blocker.step {
             Button(fix == .shortcuts ? "Pick a Shortcut" : "Allow \(fix.title)") { go(to: fix) }
                 .buttonStyle(.sophiiePrimary)
                 .controlSize(.large)
@@ -456,20 +508,30 @@ struct OnboardingWindow: View {
     private var readyScreen: some View {
         let missing = OnboardingFlow.firstMissingPermissionStep(
             microphone: appState.microphoneAccessGranted,
-            accessibility: accessibilityGranted
+            accessibility: accessibility.isGranted
         )
+        let needsRestart = missing == nil && accessibility == .needsRestart
         let speechReady = appState.isSelectedSTTConfigured
-        let allSet = missing == nil && speechReady
+        let allSet = missing == nil && !needsRestart && speechReady
         return OnboardingScreen(
-            hero: { SymbolHero(symbol: OnboardingStep.ready.symbol, isDone: allSet) },
-            title: allSet ? "You're all set" : "Almost there",
-            message: readyMessage(missing: missing, speechReady: speechReady)
+            hero: {
+                if allSet {
+                    OnboardingMenuBarPreview(caption: readyCaption)
+                        .frame(height: 120)
+                } else {
+                    SymbolHero(symbol: needsRestart ? "arrow.clockwise" : OnboardingStep.ready.symbol, isDone: false)
+                }
+            },
+            title: allSet ? "You're all set" : (needsRestart ? Self.restartTitle : "Almost there"),
+            message: needsRestart ? Self.restartMessage : readyMessage(missing: missing, speechReady: speechReady)
         ) {
             VStack(spacing: 12) {
                 if let missing {
                     Button(missing == .microphone ? "Allow Microphone" : "Allow Accessibility") { go(to: missing) }
                         .buttonStyle(.sophiieSecondary)
                         .controlSize(.large)
+                } else if needsRestart {
+                    restartButton
                 } else if !speechReady {
                     Button("Add a Speech Provider Key") { openSettings(tab: .providers) }
                         .buttonStyle(.sophiieSecondary)
@@ -484,6 +546,17 @@ struct OnboardingWindow: View {
         }
     }
 
+    /// The one line to remember, under the menu bar preview.
+    private var readyCaption: String {
+        if let hold = appState.effectiveHoldShortcut {
+            return "Hold \(hold.menuTitle) anywhere, then talk."
+        }
+        if let toggle = appState.toggleShortcut {
+            return "\(toggle.toggleStartPhrase) anywhere, then talk."
+        }
+        return "Click Whispur in the menu bar, then talk."
+    }
+
     private func readyMessage(missing: OnboardingStep?, speechReady: Bool) -> String {
         if let missing {
             return "Whispur needs \(missingPermissionName(missing)) before dictation works. You can also finish this later in Settings."
@@ -491,10 +564,7 @@ struct OnboardingWindow: View {
         if !speechReady {
             return "\(appState.selectedSTT.displayName) needs an API key. Add one in Settings, or switch to on-device speech."
         }
-        if let hold = appState.effectiveHoldShortcut {
-            return "Hold \(hold.menuTitle) in any app and start talking. Whispur lives in your menu bar."
-        }
-        return "Start dictating from the menu bar. Whispur lives up there."
+        return "Whispur waits up in your menu bar. Click it any time for settings and your recent dictations."
     }
 
     private func missingPermissionName(_ step: OnboardingStep?) -> String {

@@ -79,12 +79,42 @@ enum OnboardingFlow {
         if !accessibility { return .accessibility }
         return nil
     }
+
+    /// Where onboarding picks up after "Restart Whispur": past the
+    /// accessibility step it restarted for, or the later step it was on.
+    static func resumeStep(afterRestartFrom step: OnboardingStep) -> OnboardingStep {
+        let pastAccessibility = next(after: .accessibility) ?? .accessibility
+        return step.rawValue > pastAccessibility.rawValue ? step : pastAccessibility
+    }
+}
+
+/// Whether onboarding opens at launch, and on which step. Pure, so the
+/// first-run, resume-after-restart and replay cases are unit tested.
+enum OnboardingLaunch {
+    /// The step to resume on after a restart Whispur asked for. Read and
+    /// cleared at the next launch.
+    static let resumeStepDefaultsKey = "whispur.onboarding.resumeStep"
+    /// `open -a Whispur --args --reset-onboarding` runs setup again from the
+    /// welcome screen; settings and permissions stay as they are.
+    static let replayArgument = "--reset-onboarding"
+
+    static func isReplayRequested(arguments: [String]) -> Bool {
+        arguments.contains(replayArgument)
+    }
+
+    static func initialStep(onboardingCompleted: Bool, resumeStepRaw: Int?, replayRequested: Bool) -> OnboardingStep? {
+        if replayRequested { return .welcome }
+        if let resumeStepRaw, let step = OnboardingStep(rawValue: resumeStepRaw) { return step }
+        return onboardingCompleted ? nil : .welcome
+    }
 }
 
 /// What stops the "Try it" step from working, in the order to fix it.
 enum TryItBlocker: Equatable {
     case microphone
     case accessibility
+    /// Accessibility is granted but only takes effect after a restart.
+    case restart
     case shortcut
     case speechProvider
 
@@ -94,18 +124,20 @@ enum TryItBlocker: Equatable {
         case .microphone: return .microphone
         case .accessibility: return .accessibility
         case .shortcut: return .shortcuts
-        case .speechProvider: return nil
+        case .restart, .speechProvider: return nil
         }
     }
 
     static func first(
         microphone: Bool,
         accessibility: Bool,
+        needsRestart: Bool = false,
         hasShortcut: Bool,
         speechConfigured: Bool
     ) -> TryItBlocker? {
         if !microphone { return .microphone }
         if !accessibility { return .accessibility }
+        if needsRestart { return .restart }
         if !hasShortcut { return .shortcut }
         if !speechConfigured { return .speechProvider }
         return nil

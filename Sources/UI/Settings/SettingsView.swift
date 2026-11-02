@@ -88,7 +88,8 @@ struct SettingsView: View {
     }
 
     private var accessibilityGranted: Bool {
-        permissionsOverride?.accessibility ?? appState.hotkeyManager.isAccessibilityGranted
+        permissionsOverride?.accessibility
+            ?? (appState.hotkeyManager.isAccessibilityGranted && !appState.hotkeyManager.needsRestartForAccessibility)
     }
 
     private var readiness: SettingsReadiness {

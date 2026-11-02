@@ -725,6 +725,22 @@ final class AppState: ObservableObject {
 
     private static var didPromptAccessibility = false
 
+    #if DEBUG
+    /// A fixed microphone grant for renders in tests.
+    func setMicrophoneAccessForRendering(_ granted: Bool) {
+        microphoneAccessGranted = granted
+    }
+    #endif
+
+    /// Relaunches Whispur so a grant macOS only honours after a restart takes
+    /// effect. From onboarding, the next launch opens it again on `resumeStep`.
+    func restartWhispur(resumingOnboardingAt resumeStep: OnboardingStep? = nil) {
+        if let resumeStep {
+            UserDefaults.standard.set(resumeStep.rawValue, forKey: OnboardingLaunch.resumeStepDefaultsKey)
+        }
+        AppRelauncher.relaunch()
+    }
+
     /// Shows the guide for `permission`. Once it is granted, Whispur picks
     /// the grant up straight away and comes back to the front, where
     /// onboarding moves on by itself.

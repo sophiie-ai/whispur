@@ -6,6 +6,9 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "AppDeleg
 
 extension Notification.Name {
     static let whispurOpenSettings = Notification.Name("ai.sophiie.whispur.open-settings")
+    /// Opens onboarding again from the welcome screen (Settings → Get
+    /// Started, the menu bar). Settings and permissions stay as they are.
+    static let whispurRunSetupAgain = Notification.Name("ai.sophiie.whispur.run-setup-again")
 }
 
 /// Handles application lifecycle events.
@@ -14,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var appState: AppState?
     private var didFinishLaunching = false
     private var onboardingWindowController: OnboardingWindowController?
+    /// `--reset-onboarding` on the command line: show setup once this launch.
+    private var replayRequested = false
+    private var runSetupObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("Whispur launched")
@@ -23,6 +29,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the modal alert can't put onboarding up behind it.
         if ApplicationsFolderMover.offerMoveIfNeeded() { return }
         didFinishLaunching = true
+        replayRequested = OnboardingLaunch.isReplayRequested(arguments: ProcessInfo.processInfo.arguments)
+        runSetupObserver = NotificationCenter.default.addObserver(
+            forName: .whispurRunSetupAgain,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.runSetupAgain() }
+        }
         presentOnboardingIfNeeded()
     }
 
@@ -41,14 +55,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentOnboardingIfNeeded() {
-        guard didFinishLaunching,
-              let appState,
-              !appState.onboardingCompleted,
-              onboardingWindowController == nil else {
+        guard didFinishLaunching, let appState, onboardingWindowController == nil else { return }
+
+        let defaults = UserDefaults.standard
+        let resumeStep = defaults.object(forKey: OnboardingLaunch.resumeStepDefaultsKey) as? Int
+        guard let step = OnboardingLaunch.initialStep(
+            onboardingCompleted: appState.onboardingCompleted,
+            resumeStepRaw: resumeStep,
+            replayRequested: replayRequested
+        ) else { return }
+
+        // A resume or replay applies to this launch only.
+        defaults.removeObject(forKey: OnboardingLaunch.resumeStepDefaultsKey)
+        replayRequested = false
+        presentOnboarding(at: step, appState: appState)
+    }
+
+    /// "Run Setup Again": the welcome screen, or the open window to the front.
+    private func runSetupAgain() {
+        guard didFinishLaunching, let appState else { return }
+        if let onboardingWindowController {
+            onboardingWindowController.present()
             return
         }
+        presentOnboarding(at: .welcome, appState: appState)
+    }
 
-        let controller = OnboardingWindowController(appState: appState) { [weak self] in
+    private func presentOnboarding(at step: OnboardingStep, appState: AppState) {
+        let controller = OnboardingWindowController(appState: appState, initialStep: step) { [weak self] in
             self?.onboardingWindowController = nil
         }
         onboardingWindowController = controller
