@@ -36,6 +36,7 @@ struct ProviderRequestRow: View {
 
     private var statusLabel: String {
         if entry.isScriptGuard { return "Script guard" }
+        if entry.isOnDevice { return entry.errorMessage == nil ? "On device" : "Failed" }
         if let statusCode = entry.statusCode {
             return "\(statusCode)"
         }
@@ -44,6 +45,7 @@ struct ProviderRequestRow: View {
 
     private var statusTone: PreferenceBadge.Tone {
         if entry.isScriptGuard { return .neutral }
+        if entry.isOnDevice { return entry.errorMessage == nil ? .good : .critical }
         guard let statusCode = entry.statusCode else { return .warning }
         switch statusCode {
         case 200 ... 299: return .good

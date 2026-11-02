@@ -7,7 +7,7 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "Parakeet
 /// Downloads, deletes and warms the Parakeet model, and publishes where each
 /// of those stands for Settings.
 @MainActor
-final class ParakeetModelManager: ObservableObject {
+final class ParakeetModelManager: ObservableObject, ParakeetModelDownloading {
     static let shared = ParakeetModelManager()
 
     enum DownloadState: Equatable {
@@ -17,6 +17,9 @@ final class ParakeetModelManager: ObservableObject {
         case downloading(fraction: Double, isPreparing: Bool)
         case failed(String)
         case installed(bytesOnDisk: Int64)
+        /// An automatic download held back on a metered or Low Data Mode
+        /// network. Partial files stay and resume.
+        case waitingForNetwork
     }
 
     enum LoadState: Equatable {
@@ -28,6 +31,8 @@ final class ParakeetModelManager: ObservableObject {
 
     @Published private(set) var downloadState: DownloadState = .notDownloaded
     @Published private(set) var loadState: LoadState = .unloaded
+    /// The running download was started automatically, not by the user.
+    private(set) var isAutomaticDownload = false
 
     let spec: ParakeetModelSpec
     private let modelsDirectory: URL
@@ -40,6 +45,8 @@ final class ParakeetModelManager: ObservableObject {
     /// Runs after a download finishes, so the app can warm the model when
     /// Parakeet is the selected provider.
     var onInstalled: (() -> Void)?
+    /// Runs when the user cancels the download or deletes the model.
+    var onUserStopped: (() -> Void)?
 
     init(
         spec: ParakeetModelSpec = .current,
@@ -69,6 +76,8 @@ final class ParakeetModelManager: ObservableObject {
             downloadState = .installed(bytesOnDisk: ParakeetModelLocation.bytesOnDisk(spec, in: modelsDirectory))
         } else if case .failed = downloadState {
             // Keep the error on screen until the user retries.
+        } else if downloadState == .waitingForNetwork {
+            // Still waiting; the network monitor resumes it.
         } else {
             downloadState = .notDownloaded
         }
@@ -77,12 +86,20 @@ final class ParakeetModelManager: ObservableObject {
     /// Starts the download. Files already on disk (a finished file from a
     /// cancelled attempt, say) are checked against their Hugging Face
     /// checksums and kept; partial files resume.
-    func download() {
+    ///
+    /// - Parameters:
+    ///   - priority: The download task's priority. Automatic downloads run
+    ///     at `.utility` so they never compete with dictation.
+    ///   - automatic: Started by Whispur rather than the user. Only
+    ///     automatic downloads pause on a metered network.
+    func download(priority: TaskPriority? = nil, automatic: Bool = false) {
         guard !isDownloading else { return }
         if ParakeetModelLocation.isInstalled(spec, in: modelsDirectory) {
+            if downloadState == .waitingForNetwork { downloadState = .notDownloaded }
             refresh()
             return
         }
+        isAutomaticDownload = automatic
         downloadState = .downloading(fraction: 0, isPreparing: false)
         downloadGeneration += 1
         let generation = downloadGeneration
@@ -97,13 +114,14 @@ final class ParakeetModelManager: ObservableObject {
                 self.downloadState = .downloading(fraction: fraction, isPreparing: isPreparing)
             }
         }
-        downloadTask = Task { [weak self] in
+        downloadTask = Task(priority: priority) { [weak self] in
             do {
                 try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
                 try await AsrModels.download(to: target, version: spec.version, progressHandler: onProgress)
                 try Task.checkCancellation()
                 guard let self, self.downloadGeneration == generation else { return }
                 self.downloadTask = nil
+                self.isAutomaticDownload = false
                 self.downloadState = .notDownloaded
                 self.refresh()
                 logger.info("Downloaded \(spec.displayName, privacy: .public)")
@@ -111,6 +129,7 @@ final class ParakeetModelManager: ObservableObject {
             } catch {
                 guard let self, self.downloadGeneration == generation else { return }
                 self.downloadTask = nil
+                self.isAutomaticDownload = false
                 if error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled {
                     self.downloadState = .notDownloaded
                     self.refresh()
@@ -122,17 +141,42 @@ final class ParakeetModelManager: ObservableObject {
         }
     }
 
+    /// The user's Cancel.
     func cancelDownload() {
+        stopDownload()
+        onUserStopped?()
+    }
+
+    /// Cancels an automatic download without counting as the user's Cancel.
+    func cancelAutomaticDownload() {
+        stopDownload()
+    }
+
+    /// Stops an automatic download, or holds back one that hasn't started,
+    /// until the network is unmetered. A download the user started keeps
+    /// going.
+    func pauseForNetwork() {
+        guard !isInstalled else { return }
+        if isDownloading {
+            guard isAutomaticDownload else { return }
+            stopDownload()
+        }
+        downloadState = .waitingForNetwork
+    }
+
+    private func stopDownload() {
         downloadGeneration += 1
         downloadTask?.cancel()
         downloadTask = nil
+        isAutomaticDownload = false
         downloadState = .notDownloaded
         refresh()
     }
 
     /// Removes the model from disk and memory.
     func delete() async {
-        cancelDownload()
+        stopDownload()
+        onUserStopped?()
         warmTask?.cancel()
         warmTask = nil
         await engine.unload()

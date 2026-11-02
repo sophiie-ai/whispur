@@ -52,6 +52,16 @@ final class DictationPipeline: ObservableObject {
     private let httpClient: ProviderHTTPClient?
 
     var selectedSTT: STTProviderID = .apple
+    /// Whether Parakeet's model is on disk. While it isn't, a Parakeet
+    /// selection transcribes with Apple on-device (`STTRoute`). Injectable
+    /// for tests.
+    var parakeetInstalled: () -> Bool = { ParakeetModelLocation.isInstalled(.current) }
+    /// The provider that transcribed the current (or latest) recording in a
+    /// batch request. Nil while nothing has been sent, and for a streamed
+    /// transcript, which always comes from `selectedSTT`.
+    private(set) var lastRoute: STTRoute?
+    /// Replaces the registry's speech providers. Tests only.
+    var sttProviderOverride: ((STTProviderID) -> (any STTProvider)?)?
     var selectedLLM: LLMProviderID = .anthropic
     var sttLanguageSelection: STTLanguageSelection = .auto
     var customVocabulary: [String] = []
@@ -188,7 +198,10 @@ final class DictationPipeline: ObservableObject {
         case .normalizingAudio:
             return "Converting the captured audio to 16 kHz mono WAV."
         case .transcribing:
-            return "Sending the recording to \(selectedSTT.displayName)."
+            let provider = lastRoute?.provider ?? selectedSTT
+            return provider.runsOnDevice
+                ? "Transcribing on this Mac with \(provider.displayName)."
+                : "Sending the recording to \(provider.displayName)."
         case .cleaningTranscript:
             return "Polishing the raw transcript before paste."
         case .pasting:
@@ -511,6 +524,7 @@ final class DictationPipeline: ObservableObject {
             }
         }
         let dictationID = UUID()
+        lastRoute = nil
 
         do {
 
@@ -579,12 +593,13 @@ final class DictationPipeline: ObservableObject {
             let result = PipelineResult(
                 rawTranscript: normalizedRawTranscript,
                 cleanedText: finalTranscript,
-                sttProvider: selectedSTT,
+                sttProvider: lastRoute?.provider ?? selectedSTT,
                 llmProvider: selectedLLM,
                 llmModel: llmModel,
                 timestamp: Date(),
                 appBundleID: recordingAppBundleID,
-                style: usedStyle
+                style: usedStyle,
+                sttFallbackFrom: lastRoute?.fallbackFrom
             )
 
             lastResult = result
@@ -611,7 +626,8 @@ final class DictationPipeline: ObservableObject {
                     id: dictationID,
                     error: error.localizedDescription,
                     wavURL: try? await normalization.value,
-                    sttProvider: selectedSTT,
+                    sttProvider: lastRoute?.provider ?? selectedSTT,
+                    sttFallbackFrom: lastRoute?.fallbackFrom,
                     llmProvider: selectedLLM,
                     appBundleID: recordingAppBundleID,
                     style: cleanupChoice()?.style
@@ -710,13 +726,53 @@ final class DictationPipeline: ObservableObject {
     /// languages. `initial` is a streamed transcript the guard already
     /// rejected.
     private func batchTranscript(wavURL: URL, initial: String?, updatesPhase: Bool = true) async throws -> String {
-        if updatesPhase { phase = .transcribing }
-        guard let sttProvider = registry.makeSTTProvider(for: selectedSTT) else {
-            throw STTError.missingAPIKey(provider: selectedSTT)
+        let route = STTRoute.resolve(selected: selectedSTT, parakeetInstalled: parakeetInstalled())
+        // A retry from Activity runs beside the live dictation; only the
+        // live one owns `lastRoute`.
+        if updatesPhase {
+            lastRoute = route
+            phase = .transcribing
         }
-        return try await MultiLanguageTranscription.transcribe(
+        guard let sttProvider = sttProviderOverride?(route.provider) ?? registry.makeSTTProvider(for: route.provider) else {
+            throw STTError.missingAPIKey(provider: route.provider)
+        }
+        let started = ContinuousClock.now
+        do {
+            let text = try await transcribe(with: sttProvider, route: route, wavURL: wavURL, initial: initial)
+            reportOnDevice(route, since: started, text: text, error: nil)
+            return text
+        } catch {
+            if !(error is CancellationError) { reportOnDevice(route, since: started, text: nil, error: error) }
+            throw error
+        }
+    }
+
+    /// Lists a Parakeet selection's transcription in the Requests tab, so it
+    /// shows whether Parakeet or the Apple fallback did the work. Other
+    /// on-device transcriptions make no request and aren't listed.
+    private func reportOnDevice(_ route: STTRoute, since started: ContinuousClock.Instant, text: String?, error: Error?) {
+        guard route.provider == .parakeet || route.fallbackFrom != nil else { return }
+        let elapsed = started.duration(to: .now)
+        httpClient?.recordOnDevice(
+            providerID: route.provider.rawValue,
+            summary: Self.onDeviceSummary(for: route),
+            durationMS: Int(elapsed / .milliseconds(1)),
+            responsePreview: text ?? "",
+            errorMessage: error?.localizedDescription
+        )
+    }
+
+    static func onDeviceSummary(for route: STTRoute) -> String {
+        if let from = route.fallbackFrom {
+            return "Transcribed on this Mac with \(route.provider.displayName) because \(from.displayName)'s model isn't downloaded yet."
+        }
+        return "Transcribed on this Mac with \(route.provider.displayName)."
+    }
+
+    private func transcribe(with sttProvider: any STTProvider, route: STTRoute, wavURL: URL, initial: String?) async throws -> String {
+        try await MultiLanguageTranscription.transcribe(
             provider: sttProvider,
-            providerID: selectedSTT,
+            providerID: route.provider,
             fileURL: wavURL,
             language: sttLanguageSelection,
             vocabulary: customVocabulary,
@@ -881,6 +937,10 @@ struct PipelineResult: Identifiable, Codable {
     var failure: DictationFailure?
     /// When the user swapped the cleaned paste for the raw transcript.
     var usedRawAt: Date?
+    /// The selected provider when another one transcribed in its place
+    /// (Parakeet while its model downloads, with `sttProvider` Apple). Nil
+    /// when the selected provider ran, and for results saved before this.
+    var sttFallbackFrom: STTProviderID?
 
     init(
         id: UUID = UUID(),
@@ -892,7 +952,8 @@ struct PipelineResult: Identifiable, Codable {
         timestamp: Date,
         appBundleID: String? = nil,
         style: WritingStyle? = nil,
-        failure: DictationFailure? = nil
+        failure: DictationFailure? = nil,
+        sttFallbackFrom: STTProviderID? = nil
     ) {
         self.id = id
         self.rawTranscript = rawTranscript
@@ -904,6 +965,13 @@ struct PipelineResult: Identifiable, Codable {
         self.appBundleID = appBundleID
         self.style = style
         self.failure = failure
+        self.sttFallbackFrom = sttFallbackFrom
+    }
+
+    /// The provider that transcribed, and the one it filled in for.
+    var sttProviderSummary: String {
+        guard let from = sttFallbackFrom else { return sttProvider.displayName }
+        return "\(sttProvider.displayName), filling in for \(from.displayName)"
     }
 
     /// Failed and not yet retried successfully.

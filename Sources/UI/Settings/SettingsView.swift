@@ -98,7 +98,7 @@ struct SettingsView: View {
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
             speechProviderName: speech.name,
-            speechStatus: credentials.status(for: speech, localModel: parakeetModel),
+            speechStatus: credentials.readinessStatus(for: speech, localModel: parakeetModel),
             cleanupProviderName: cleanup.name,
             cleanupStatus: credentials.status(for: cleanup.keys)
         )
@@ -108,7 +108,7 @@ struct SettingsView: View {
         SettingsSetupState(
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
-            speechReady: credentials.status(for: appState.selectedSTT.setupDescriptor, localModel: parakeetModel).isReady,
+            speechReady: credentials.readinessStatus(for: appState.selectedSTT.setupDescriptor, localModel: parakeetModel).isReady,
             hasDictated: historyStore.items.contains { !$0.isFailed },
             hasShortcut: appState.hasAnyShortcut
         )

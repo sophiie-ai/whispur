@@ -22,6 +22,15 @@ struct ParakeetModelSection: View {
                 failed(message)
             case let .installed(bytes):
                 installed(bytesOnDisk: bytes)
+            case .waitingForNetwork:
+                waitingForNetwork
+            }
+
+            if isActive, !manager.isInstalled {
+                Text(ParakeetDownloadCopy.fallbackNote)
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text("\(spec.attribution) License: \(spec.license).")
@@ -38,7 +47,7 @@ struct ParakeetModelSection: View {
             }
         } message: {
             Text(isActive
-                ? "Dictation won't work with Parakeet until you download it again."
+                ? "Apple's on-device recognition transcribes until you download it again."
                 : "You can download it again any time.")
         }
     }
@@ -81,6 +90,19 @@ struct ParakeetModelSection: View {
                     .buttonStyle(.sophiieSecondary)
                     .accessibilityLabel("Cancel the model download")
             }
+        }
+    }
+
+    private var waitingForNetwork: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Label("Waiting for Wi-Fi. This network is metered or in Low Data Mode, so the \(Self.size(spec.downloadBytes)) download waits.", systemImage: "wifi.exclamationmark")
+                .font(SophiieTheme.Typography.caption)
+                .foregroundStyle(SophiieTheme.Palette.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Download Now") { manager.download() }
+                .buttonStyle(.sophiieSecondary)
+                .accessibilityLabel("Download the \(spec.displayName) model now")
         }
     }
 
@@ -134,5 +156,49 @@ struct ParakeetModelSection: View {
         formatter.countStyle = .file
         formatter.allowedUnits = [.useMB, .useGB]
         return formatter.string(fromByteCount: bytes)
+    }
+}
+
+/// One line on the model download for onboarding and Get started, shown
+/// while Parakeet is the speech provider and its model isn't here. Never
+/// blocks anything; a failed download gets a Retry.
+struct ParakeetDownloadStatusLine: View {
+    @ObservedObject var manager: ParakeetModelManager
+
+    var body: some View {
+        if let line = ParakeetDownloadCopy.line(for: manager.downloadState) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundStyle(SophiieTheme.Palette.muted)
+                Text(line)
+                    .font(SophiieTheme.Typography.caption)
+                    .foregroundStyle(SophiieTheme.Palette.inkSecondary)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                if let action {
+                    Button(action.title, action: action.run)
+                        .buttonStyle(.sophiieSecondary)
+                        .controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var icon: String {
+        switch manager.downloadState {
+        case .failed: "exclamationmark.triangle"
+        case .waitingForNetwork: "wifi.exclamationmark"
+        default: "arrow.down.circle"
+        }
+    }
+
+    private var action: (title: String, run: () -> Void)? {
+        switch manager.downloadState {
+        case .failed: ("Retry", { manager.download() })
+        case .notDownloaded: ("Download", { manager.download() })
+        default: nil
+        }
     }
 }
