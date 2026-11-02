@@ -53,7 +53,7 @@ make run
 ## Setup
 
 1. Open Whispur. If it isn't in your Applications folder yet (say it's still on the DMG or in Downloads), it offers to move itself there and relaunches.
-2. A short welcome window walks you through first run: microphone access, Accessibility access (a guide docks beside System Settings so you can drag Whispur into the list), and your dictation shortcut, then lets you try a dictation right in the window. Each permission step moves on by itself once it's granted.
+2. A short welcome window walks you through first run. On Apple silicon without a cloud speech key it first asks which languages you speak and starts downloading the on-device speech model, with its progress pinned at the top of every later screen. Then: microphone access, Accessibility access (a guide docks beside System Settings so you can drag Whispur into the list), and your dictation shortcut, then lets you try a dictation right in the window. Each permission step moves on by itself once it's granted.
 3. That's it: dictation works with no API keys. On Apple silicon Whispur transcribes on-device with NVIDIA Parakeet (Apple's on-device recognition fills in while Parakeet's model downloads); on Intel Macs it uses Apple's on-device recognition.
 4. Optional: in `Settings`, add API keys for a cloud speech provider, or an LLM provider for transcript cleanup. Setup, shortcuts and providers all stay available there, and you can skip the welcome window and finish setup later.
 

@@ -4,6 +4,9 @@ extension EnvironmentValues {
     /// Renders onboarding's entrance animations at their end state. Renders
     /// and tests set it; the live window never does.
     @Entry var onboardingStillFrames = false
+    /// Draws onboarding as Reduce Motion would, whatever the system says.
+    /// Renders only: the system setting can't be overridden in a test.
+    @Entry var onboardingRendersReducedMotion = false
 }
 
 /// The ready screen's picture of where Whispur lives: a quiet strip of menu

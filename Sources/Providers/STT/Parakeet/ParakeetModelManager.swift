@@ -83,6 +83,13 @@ final class ParakeetModelManager: ObservableObject, ParakeetModelDownloading {
         }
     }
 
+    #if DEBUG
+    /// A fixed download state for renders in tests.
+    func setDownloadStateForRendering(_ state: DownloadState) {
+        downloadState = state
+    }
+    #endif
+
     /// Starts the download. Files already on disk (a finished file from a
     /// cancelled attempt, say) are checked against their Hugging Face
     /// checksums and kept; partial files resume.

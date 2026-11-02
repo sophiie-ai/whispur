@@ -213,7 +213,7 @@ struct ProvidersSettingsView: View {
 
 /// "Languages I speak": a menu of checkable languages plus a chip per
 /// chosen language. Empty means auto-detect.
-private struct SpokenLanguagesRow: View {
+struct SpokenLanguagesRow: View {
     @ObservedObject var appState: AppState
 
     private var selection: STTLanguageSelection { appState.sttLanguageSelection }

@@ -263,6 +263,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Onboarding opened for a user Parakeet is the default for: start the
+    /// model now if nothing has started it yet. A download waiting for an
+    /// unmetered network keeps waiting; the onboarding pill offers it.
+    func startParakeetDownloadForOnboarding() {
+        guard startsServices, selectedSTT == .parakeet else { return }
+        switch parakeetModel.downloadState {
+        case .notDownloaded, .failed:
+            parakeetModel.download(priority: .utility, automatic: parakeetAutoDownload.isActive)
+        case .downloading, .installed, .waitingForNetwork:
+            break
+        }
+    }
+
     /// Dictation transcribes with Apple on-device because Parakeet is
     /// selected and its model isn't downloaded yet.
     var isUsingSpeechFallback: Bool {
