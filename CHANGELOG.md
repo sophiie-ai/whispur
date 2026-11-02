@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.0](https://github.com/sophiie-ai/whispur/compare/v0.27.1...v0.28.0) (2026-11-02)
+
+
+### Features
+
+* **pipeline:** fix fillers, spoken symbols and quotes in code, and add smart spacing ([#108](https://github.com/sophiie-ai/whispur/issues/108)) ([e72c5ee](https://github.com/sophiie-ai/whispur/commit/e72c5ee1b73e91e99e9bd1afb0cb19727e6882ac))
+* **vocabulary:** teach Whispur how dictionary terms get misheard ([#109](https://github.com/sophiie-ai/whispur/issues/109)) ([d1d281d](https://github.com/sophiie-ai/whispur/commit/d1d281d8fd0fe969b41eed45ce3ddc865a1ac3cd))
+
 ## [0.27.1](https://github.com/sophiie-ai/whispur/compare/v0.27.0...v0.27.1) (2026-11-02)
 
 
