@@ -845,6 +845,12 @@ final class HotkeyManager {
         }
 
         if let keyCode = binding.keyCode {
+            // A modifier key (Right Option) only ever arrives as
+            // flagsChanged, so it lives in the held-modifier set, never in
+            // the keyDown set.
+            if trackedModifierKeyCodes.contains(keyCode) {
+                return state.pressedModifierKeyCodes.contains(keyCode)
+            }
             return state.pressedKeyCodes.contains(keyCode)
         }
 
