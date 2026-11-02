@@ -321,17 +321,35 @@ struct OnboardingWindow: View {
     }
 
     private var shortcutsScreen: some View {
-        OnboardingScreen(
-            hero: { SymbolHero(symbol: OnboardingStep.shortcuts.symbol, isDone: false) },
-            title: "Your shortcut",
-            message: shortcutMessage
+        let selected = appState.currentShortcutChoice
+        return OnboardingScreen(
+            hero: { EmptyView() },
+            title: "Pick your shortcut",
+            message: shortcutMessage(selected)
         ) {
-            VStack(spacing: 14) {
-                if let hold = appState.effectiveHoldShortcut {
-                    KeycapCombo(keys: hold.keycapLabels, join: hold.isDoublePress ? .sequence : .chord)
-                        .scaleEffect(1.25)
-                        .padding(.vertical, 4)
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    ForEach(OnboardingShortcutChoice.allCases) { choice in
+                        ShortcutChoiceCard(choice: choice, isSelected: selected == choice) {
+                            withSophiieAnimation { appState.applyShortcutChoice(choice) }
+                        }
+                    }
                 }
+
+                if selected?.usesFn == true {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Label(Self.globeKeyHint, systemImage: "globe")
+                            .font(SophiieTheme.Typography.caption)
+                            .foregroundStyle(Palette.inkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Open Keyboard Settings", action: appState.openKeyboardSettings)
+                            .buttonStyle(.sophiieSecondary)
+                            .controlSize(.small)
+                    }
+                    .frame(maxWidth: 540)
+                    .transition(.opacity)
+                }
+
                 Button("More options in Settings") { openSettings(tab: .dictation) }
                     .buttonStyle(.plain)
                     .font(SophiieTheme.Typography.caption)
@@ -340,14 +358,13 @@ struct OnboardingWindow: View {
         }
     }
 
-    private var shortcutMessage: String {
-        guard let hold = appState.effectiveHoldShortcut else {
-            return "No hold shortcut is set. Start from the menu bar, or add one in Settings."
+    static let globeKeyHint = "So quick Fn taps don't open the Emoji panel, set \"Press \u{1F310} key to\" to Do Nothing in System Settings → Keyboard."
+
+    private func shortcutMessage(_ selected: OnboardingShortcutChoice?) -> String {
+        if selected == nil {
+            return "Right now: \(appState.shortcutSummary). Pick one below to switch, or keep yours."
         }
-        if appState.shortcutStyle == .tapOrHold {
-            return "Hold \(hold.menuTitle) while you speak, or tap it to keep recording hands-free."
-        }
-        return "Hold \(hold.menuTitle) while you speak. Let go and the text appears."
+        return "Choose the key you'll hold while you talk. You can change it any time."
     }
 
     private var readyScreen: some View {
@@ -541,5 +558,60 @@ private struct ProgressTrack: View {
             }
         }
         .frame(height: 4)
+    }
+}
+
+/// One preset on the Shortcuts screen: the key, its name and one line.
+private struct ShortcutChoiceCard: View {
+    private typealias Palette = SophiieTheme.Palette
+
+    let choice: OnboardingShortcutChoice
+    let isSelected: Bool
+    let select: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: select) {
+            VStack(spacing: 12) {
+                KeycapCombo(keys: choice.binding.keycapLabels)
+                    .frame(height: 30)
+                VStack(spacing: 4) {
+                    Text(choice.title)
+                        .font(SophiieTheme.Typography.label)
+                        .foregroundStyle(Palette.ink)
+                    Text(choice.detail)
+                        .font(SophiieTheme.Typography.caption)
+                        .foregroundStyle(Palette.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 18)
+            .padding(.horizontal, 12)
+            .frame(width: 168, height: 132)
+            .background(
+                RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
+                    .fill(isSelected ? Palette.surfaceSelected : (isHovering ? Palette.surfaceSubtle : Palette.OnDark.raised.opacity(0.5)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
+                    .strokeBorder(isSelected ? Palette.highlight : Palette.hairline, lineWidth: isSelected ? 2 : 1)
+            )
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Palette.highlight)
+                        .padding(8)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .sophiieAnimation(value: isSelected)
+        .sophiieAnimation(value: isHovering)
+        .accessibilityLabel("\(choice.title). \(choice.detail)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
