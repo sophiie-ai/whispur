@@ -16,8 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindowController: OnboardingWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        didFinishLaunching = true
         logger.info("Whispur launched")
+        // Before onboarding: a copy outside Applications offers to move
+        // itself, and a moved copy relaunches and onboards from there.
+        // didFinishLaunching stays false meanwhile, so a connect() during
+        // the modal alert can't put onboarding up behind it.
+        if ApplicationsFolderMover.offerMoveIfNeeded() { return }
+        didFinishLaunching = true
         presentOnboardingIfNeeded()
     }
 
