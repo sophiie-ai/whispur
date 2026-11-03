@@ -266,11 +266,13 @@ final class AppState: ObservableObject {
     /// Onboarding opened for a user Parakeet is the default for: start the
     /// model now if nothing has started it yet. A download waiting for an
     /// unmetered network keeps waiting; the onboarding pill offers it.
+    /// A download the user cancelled, or a model they deleted, stays stopped:
+    /// that clears the automatic flag, and replaying setup must not undo it.
     func startParakeetDownloadForOnboarding() {
-        guard startsServices, selectedSTT == .parakeet else { return }
+        guard startsServices, selectedSTT == .parakeet, parakeetAutoDownload.isActive else { return }
         switch parakeetModel.downloadState {
         case .notDownloaded, .failed:
-            parakeetModel.download(priority: .utility, automatic: parakeetAutoDownload.isActive)
+            parakeetModel.download(priority: .utility, automatic: true)
         case .downloading, .installed, .waitingForNetwork:
             break
         }

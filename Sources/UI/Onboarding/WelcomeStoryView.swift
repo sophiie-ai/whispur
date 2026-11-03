@@ -35,10 +35,6 @@ struct WelcomeStoryView: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
-        )
     }
 
     private func scene(_ frame: Story.Frame) -> some View {
@@ -61,11 +57,20 @@ struct WelcomeStoryView: View {
                     VoiceComposer(phase: frame.voicePhase, text: frame.voiceText)
                 }
             }
+            // One spoken summary for the decorative scene; the replay button
+            // below stays its own VoiceOver element.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
+            )
             replayButton
-                .opacity(finished && fixedTime == nil && !reduceMotion ? 1 : 0)
+                .opacity(showsReplay ? 1 : 0)
+                .accessibilityHidden(!showsReplay)
                 .animation(.easeOut(duration: 0.25), value: finished)
         }
     }
+
+    private var showsReplay: Bool { finished && fixedTime == nil && !reduceMotion }
 
     private var replayButton: some View {
         Button {
