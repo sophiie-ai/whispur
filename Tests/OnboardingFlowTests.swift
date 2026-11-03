@@ -5,14 +5,15 @@ final class OnboardingFlowTests: XCTestCase {
     func testStepsRunInOrderAndStopAtTheEnds() {
         var seen: [OnboardingStep] = [.welcome]
         while let next = OnboardingFlow.next(after: seen.last!) { seen.append(next) }
-        XCTAssertEqual(seen, OnboardingStep.allCases)
+        XCTAssertEqual(seen, OnboardingPlan.standard.steps)
+        XCTAssertFalse(seen.contains(.languages))
         XCTAssertNil(OnboardingFlow.previous(before: .welcome))
         XCTAssertNil(OnboardingFlow.next(after: OnboardingStep.allCases.last!))
         XCTAssertEqual(OnboardingFlow.previous(before: .microphone), .welcome)
     }
 
     func testProgressGrowsToFull() {
-        let values = OnboardingStep.allCases.map(OnboardingFlow.progress(of:))
+        let values = OnboardingPlan.standard.steps.map { OnboardingFlow.progress(of: $0) }
         XCTAssertEqual(values, values.sorted())
         XCTAssertGreaterThan(values.first!, 0)
         XCTAssertEqual(values.last!, 1, accuracy: 0.0001)

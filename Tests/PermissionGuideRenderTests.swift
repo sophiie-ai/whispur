@@ -31,6 +31,14 @@ final class PermissionGuideRenderTests: XCTestCase {
             if let savedSTT { UserDefaults.standard.set(savedSTT, forKey: sttKey) } else { UserDefaults.standard.removeObject(forKey: sttKey) }
         }
         appState.selectedSTT = .apple
+        // The language step preselects "Languages I speak"; put that back too.
+        let languagesKey = AppState.spokenLanguagesKey
+        let savedLanguages = UserDefaults.standard.object(forKey: languagesKey)
+        defer {
+            if let savedLanguages { UserDefaults.standard.set(savedLanguages, forKey: languagesKey) } else { UserDefaults.standard.removeObject(forKey: languagesKey) }
+        }
+        let savedDownload = appState.parakeetModel.downloadState
+        defer { appState.parakeetModel.setDownloadStateForRendering(savedDownload) }
 
         let icon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         icon.size = CGSize(width: 32, height: 32)
@@ -81,6 +89,44 @@ final class PermissionGuideRenderTests: XCTestCase {
                            to: dir.appendingPathComponent("onboarding-\(name)-\(suffix).png"))
             }
             appState.hotkeyManager.setAccessibilityForRendering(savedAccessibility)
+
+            // The welcome story at a few moments, and its Reduce Motion form.
+            let storyMoments: [(TimeInterval, String)] = [
+                (WelcomeStoryTimeline.lead + 0.6, "listening"),
+                (WelcomeStoryTimeline.lead + 1.8, "voice-done"),
+                (WelcomeStoryTimeline.lead + 4.0, "typing"),
+                (WelcomeStoryTimeline.end, "end"),
+            ]
+            for (time, name) in storyMoments {
+                try render(OnboardingWindow(appState: appState, initialStep: .welcome, storyTime: time) {}, scheme: scheme, size: onboardingSize,
+                           to: dir.appendingPathComponent("onboarding-welcome-story-\(name)-\(suffix).png"))
+            }
+            try render(OnboardingWindow(appState: appState, initialStep: .welcome) {}.environment(\.onboardingRendersReducedMotion, true),
+                       scheme: scheme, size: onboardingSize,
+                       to: dir.appendingPathComponent("onboarding-welcome-story-reduce-motion-\(suffix).png"))
+
+            // The Parakeet download framing: the language question, then the
+            // pill on later screens at 40% and once ready, and on failure.
+            appState.sttLanguageSelection = .single(code: "en-US")
+            appState.parakeetModel.setDownloadStateForRendering(.downloading(fraction: 0.05, isPreparing: false))
+            try render(OnboardingWindow(appState: appState, initialStep: .languages, usesParakeetDownload: true) {}, scheme: scheme, size: onboardingSize,
+                       to: dir.appendingPathComponent("onboarding-languages-download-\(suffix).png"))
+            appState.sttLanguageSelection = STTLanguageSelection(codes: ["en-US", "es-MX", "ja-JP"])
+            try render(OnboardingWindow(appState: appState, initialStep: .languages, usesParakeetDownload: false) {}, scheme: scheme, size: onboardingSize,
+                       to: dir.appendingPathComponent("onboarding-languages-no-download-\(suffix).png"))
+            appState.sttLanguageSelection = .single(code: "en-US")
+            let pillStates: [(ParakeetModelManager.DownloadState, OnboardingStep, String)] = [
+                (.downloading(fraction: 0.4, isPreparing: false), .shortcuts, "shortcuts-pill-40"),
+                (.downloading(fraction: 0.4, isPreparing: false), .tryIt, "try-it-pill-40"),
+                (.installed(bytesOnDisk: 632_000_000), .microphone, "microphone-pill-ready"),
+                (.failed("The network connection was lost."), .accessibility, "accessibility-pill-failed"),
+            ]
+            for (state, step, name) in pillStates {
+                appState.parakeetModel.setDownloadStateForRendering(state)
+                try render(OnboardingWindow(appState: appState, initialStep: step, usesParakeetDownload: true) {}, scheme: scheme, size: onboardingSize,
+                           to: dir.appendingPathComponent("onboarding-\(name)-\(suffix).png"))
+            }
+            appState.parakeetModel.setDownloadStateForRendering(savedDownload)
             appState.setMicrophoneAccessForRendering(savedMicrophone)
         }
     }

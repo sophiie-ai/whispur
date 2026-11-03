@@ -72,15 +72,40 @@ struct OnboardingWindow: View {
     @State private var guidedPermission: GuidedPermission?
     /// The "Try it" field and whether a real dictation has landed in it.
     @StateObject private var tryIt = TryItSession()
+    /// This run's steps, fixed when the window opens.
+    private let plan: OnboardingPlan
+    /// Speech setup is framed around the Parakeet download (see
+    /// `OnboardingSpeechSetup`); fixed when the window opens.
+    private let usesParakeetDownload: Bool
+    /// A fixed moment of the welcome story, for renders.
+    private let storyTime: TimeInterval?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// How long a fresh grant's check shows before the step moves on.
     static let grantedBeat: TimeInterval = 0.7
 
-    init(appState: AppState, initialStep: OnboardingStep = .welcome, dismiss: @escaping () -> Void) {
+    init(
+        appState: AppState,
+        initialStep: OnboardingStep = .welcome,
+        storyTime: TimeInterval? = nil,
+        usesParakeetDownload usesDownloadOverride: Bool? = nil,
+        dismiss: @escaping () -> Void
+    ) {
         self.appState = appState
         self.dismiss = dismiss
+        self.storyTime = storyTime
+        let usesDownload = usesDownloadOverride ?? OnboardingSpeechSetup.usesParakeetDownload(
+            selected: appState.selectedSTT,
+            parakeetSupported: ParakeetSupport.isSupported,
+            modelInstalled: appState.parakeetModel.isInstalled
+        )
+        usesParakeetDownload = usesDownload
+        plan = OnboardingPlan(asksLanguages: OnboardingSpeechSetup.asksLanguages(
+            usesParakeetDownload: usesDownload,
+            languagesStored: usesDownloadOverride != nil
+                || UserDefaults.standard.object(forKey: AppState.spokenLanguagesKey) != nil
+        ))
         _step = State(initialValue: initialStep)
         _accessibility = State(initialValue: appState.hotkeyManager.accessibilityStatus)
         _guidedPermission = State(initialValue: appState.permissionGuide.activePermission)
@@ -117,7 +142,12 @@ struct OnboardingWindow: View {
             if granted { advance(afterGranting: .microphone) }
         }
         .onReceive(appState.permissionGuide.$activePermission) { guidedPermission = $0 }
-        .onAppear { routeDictationIntoTryIt(step == .tryIt) }
+        .onAppear {
+            routeDictationIntoTryIt(step == .tryIt)
+            // The model starts downloading as soon as setup opens, so it has
+            // the whole walkthrough to arrive.
+            if usesParakeetDownload { appState.startParakeetDownloadForOnboarding() }
+        }
         .onChange(of: step) { _, newStep in routeDictationIntoTryIt(newStep == .tryIt) }
         .onDisappear { routeDictationIntoTryIt(false) }
     }
@@ -132,7 +162,7 @@ struct OnboardingWindow: View {
     /// A permission just turned on while its step shows: let the check
     /// register, then move on.
     private func advance(afterGranting permission: GuidedPermission) {
-        guard let next = OnboardingFlow.stepAfterGrant(of: permission, showing: step) else { return }
+        guard let next = OnboardingFlow.stepAfterGrant(of: permission, showing: step, in: plan) else { return }
         let granted = step
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.grantedBeat) {
             guard step == granted else { return }
@@ -154,12 +184,19 @@ struct OnboardingWindow: View {
 
     private var topBar: some View {
         HStack(spacing: 16) {
-            ProgressTrack(value: OnboardingFlow.progress(of: step))
+            ProgressTrack(value: plan.progress(of: step))
                 .frame(maxWidth: 220)
                 .sophiieAnimation(SophiieTheme.Motion.medium, value: step)
-                .accessibilityLabel("Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)")
+                .accessibilityLabel("Step \(plan.number(of: step)) of \(plan.steps.count)")
 
             Spacer(minLength: 0)
+
+            if OnboardingSpeechSetup.showsDownloadPill(on: step, plan: plan, usesParakeetDownload: usesParakeetDownload) {
+                OnboardingDownloadPillView(model: appState.parakeetModel) {
+                    appState.parakeetModel.download()
+                }
+                .transition(.opacity)
+            }
 
             if !step.isFirst, !step.isLast {
                 Button("Finish later", action: finishLater)
@@ -178,7 +215,7 @@ struct OnboardingWindow: View {
         HStack {
             if !step.isFirst {
                 Button("Back") {
-                    guard let previous = OnboardingFlow.previous(before: step) else { return }
+                    guard let previous = plan.previous(before: step) else { return }
                     go(to: previous)
                 }
                 .buttonStyle(.sophiieSecondary)
@@ -200,7 +237,7 @@ struct OnboardingWindow: View {
     private var footerAction: some View {
         switch step {
         case .welcome:
-            Button("Get Started") { go(to: .microphone) }
+            Button("Get Started", action: continueOn)
                 .buttonStyle(.sophiiePrimary)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
@@ -227,7 +264,7 @@ struct OnboardingWindow: View {
     }
 
     private func continueOn() {
-        guard let next = OnboardingFlow.next(after: step) else { return }
+        guard let next = plan.next(after: step) else { return }
         go(to: next)
     }
 
@@ -258,6 +295,7 @@ struct OnboardingWindow: View {
     private func screen(for step: OnboardingStep) -> some View {
         switch step {
         case .welcome: welcomeScreen
+        case .languages: languagesScreen
         case .microphone: microphoneScreen
         case .accessibility: accessibilityScreen
         case .shortcuts: shortcutsScreen
@@ -268,11 +306,30 @@ struct OnboardingWindow: View {
 
     private var welcomeScreen: some View {
         OnboardingScreen(
-            hero: { AppIconHero() },
+            hero: { WelcomeStoryView(fixedTime: storyTime) },
             title: "Talk instead of typing",
             message: "Hold a key, say what you mean, and Whispur types it wherever your cursor is."
         ) {
-            parakeetDownloadLine
+            EmptyView()
+        }
+    }
+
+    private var languagesScreen: some View {
+        OnboardingScreen(
+            hero: { SymbolHero(symbol: OnboardingStep.languages.symbol, isDone: false) },
+            title: "Which languages do you speak?",
+            message: usesParakeetDownload
+                ? "Whispur's on-device speech model has started downloading. Pick every language you dictate in."
+                : "Pick every language you dictate in. You can change this any time in Settings."
+        ) {
+            OnboardingLanguagePicker(appState: appState, provider: usesParakeetDownload ? .parakeet : appState.selectedSTT)
+        }
+        .onAppear {
+            // Preselect from the system language the first time only.
+            guard UserDefaults.standard.object(forKey: AppState.spokenLanguagesKey) == nil else { return }
+            appState.sttLanguageSelection = OnboardingSpeechSetup.defaultLanguages(
+                systemLocaleIdentifier: Locale.current.identifier
+            )
         }
     }
 
@@ -571,10 +628,12 @@ struct OnboardingWindow: View {
         step == .microphone ? "microphone access" : "accessibility access"
     }
 
-    /// The model download's progress while Apple fills in for Parakeet.
+    /// The model download's progress while Apple fills in for Parakeet, for
+    /// anyone the top-bar pill doesn't already tell.
     @ViewBuilder
     private var parakeetDownloadLine: some View {
-        if appState.isUsingSpeechFallback {
+        if appState.isUsingSpeechFallback,
+           !OnboardingSpeechSetup.showsDownloadPill(on: step, plan: plan, usesParakeetDownload: usesParakeetDownload) {
             ParakeetDownloadStatusLine(manager: appState.parakeetModel)
                 .frame(maxWidth: 380)
         }
@@ -658,30 +717,6 @@ private struct SymbolHero: View {
         }
         .frame(width: 156, height: 120)
         .sophiieAnimation(value: isDone)
-        .accessibilityHidden(true)
-    }
-}
-
-/// The app icon on the same glow, for the welcome screen.
-private struct AppIconHero: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [SophiieTheme.Palette.sky.opacity(0.30), SophiieTheme.Palette.sky.opacity(0)],
-                        center: .center,
-                        startRadius: 10,
-                        endRadius: 90
-                    )
-                )
-                .frame(width: 180, height: 180)
-            Image(nsImage: NSApp.applicationIconImage ?? NSImage())
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 112, height: 112)
-        }
-        .frame(width: 180, height: 132)
         .accessibilityHidden(true)
     }
 }

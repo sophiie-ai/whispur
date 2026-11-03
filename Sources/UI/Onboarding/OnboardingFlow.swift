@@ -3,6 +3,9 @@ import Foundation
 /// The onboarding screens, in order. One thing per screen.
 enum OnboardingStep: Int, CaseIterable, Identifiable {
     case welcome
+    /// "Which languages do you speak?", only for some users: see
+    /// `OnboardingSpeechSetup.asksLanguages`.
+    case languages
     case microphone
     case accessibility
     case shortcuts
@@ -14,6 +17,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .welcome: return "Welcome"
+        case .languages: return "Languages"
         case .microphone: return "Microphone"
         case .accessibility: return "Accessibility"
         case .shortcuts: return "Shortcuts"
@@ -26,6 +30,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .welcome: return "waveform"
+        case .languages: return "character.bubble"
         case .microphone: return "mic.fill"
         case .accessibility: return "accessibility"
         case .shortcuts: return "command"
@@ -47,29 +52,81 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     var isLast: Bool { self == Self.allCases.last }
 }
 
-/// Step sequencing, kept free of SwiftUI so it can be unit tested.
-enum OnboardingFlow {
-    static func next(after step: OnboardingStep) -> OnboardingStep? {
-        OnboardingStep(rawValue: step.rawValue + 1)
+/// The steps one run of onboarding shows, in order. Most users skip the
+/// language step.
+struct OnboardingPlan: Equatable {
+    let steps: [OnboardingStep]
+
+    init(asksLanguages: Bool) {
+        steps = OnboardingStep.allCases.filter { $0 != .languages || asksLanguages }
     }
 
-    static func previous(before step: OnboardingStep) -> OnboardingStep? {
-        OnboardingStep(rawValue: step.rawValue - 1)
+    /// Without the language step.
+    static let standard = OnboardingPlan(asksLanguages: false)
+
+    var asksLanguages: Bool { steps.contains(.languages) }
+
+    /// Position in the plan; a step the plan leaves out sits where it would
+    /// have been, so navigating from it still goes the right way.
+    private func position(of step: OnboardingStep) -> Double {
+        if let index = steps.firstIndex(of: step) { return Double(index) }
+        let before = steps.filter { $0.rawValue < step.rawValue }.count
+        return Double(before) - 0.5
+    }
+
+    func next(after step: OnboardingStep) -> OnboardingStep? {
+        let here = position(of: step)
+        return steps.first { position(of: $0) > here }
+    }
+
+    func previous(before step: OnboardingStep) -> OnboardingStep? {
+        let here = position(of: step)
+        return steps.last { position(of: $0) < here }
     }
 
     /// Fraction for the progress bar: the welcome screen shows a sliver,
     /// the last screen a full bar.
-    static func progress(of step: OnboardingStep) -> Double {
-        let count = OnboardingStep.allCases.count
-        guard count > 1 else { return 1 }
-        return Double(step.rawValue + 1) / Double(count)
+    func progress(of step: OnboardingStep) -> Double {
+        guard steps.count > 1 else { return 1 }
+        return min(max((position(of: step) + 1) / Double(steps.count), 0), 1)
+    }
+
+    /// "Step 2 of 6" for VoiceOver.
+    func number(of step: OnboardingStep) -> Int {
+        Int(position(of: step).rounded(.up)) + 1
+    }
+
+    /// Whether `step` comes after `other` in this plan.
+    func isAfter(_ step: OnboardingStep, _ other: OnboardingStep) -> Bool {
+        position(of: step) > position(of: other)
+    }
+}
+
+/// Step sequencing, kept free of SwiftUI so it can be unit tested.
+enum OnboardingFlow {
+    static func next(after step: OnboardingStep, in plan: OnboardingPlan = .standard) -> OnboardingStep? {
+        plan.next(after: step)
+    }
+
+    static func previous(before step: OnboardingStep, in plan: OnboardingPlan = .standard) -> OnboardingStep? {
+        plan.previous(before: step)
+    }
+
+    /// Fraction for the progress bar: the welcome screen shows a sliver,
+    /// the last screen a full bar.
+    static func progress(of step: OnboardingStep, in plan: OnboardingPlan = .standard) -> Double {
+        plan.progress(of: step)
     }
 
     /// Where a fresh grant moves the window: only off the step that asked
     /// for that permission, never from somewhere else.
-    static func stepAfterGrant(of permission: GuidedPermission, showing step: OnboardingStep) -> OnboardingStep? {
+    static func stepAfterGrant(
+        of permission: GuidedPermission,
+        showing step: OnboardingStep,
+        in plan: OnboardingPlan = .standard
+    ) -> OnboardingStep? {
         guard step.permission == permission else { return nil }
-        return next(after: step)
+        return next(after: step, in: plan)
     }
 
     /// The first step whose permission is still missing, for the "fix it"
@@ -83,7 +140,7 @@ enum OnboardingFlow {
     /// Where onboarding picks up after "Restart Whispur": past the
     /// accessibility step it restarted for, or the later step it was on.
     static func resumeStep(afterRestartFrom step: OnboardingStep) -> OnboardingStep {
-        let pastAccessibility = next(after: .accessibility) ?? .accessibility
+        let pastAccessibility = next(after: .accessibility, in: .standard) ?? .accessibility
         return step.rawValue > pastAccessibility.rawValue ? step : pastAccessibility
     }
 }
