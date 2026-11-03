@@ -57,6 +57,10 @@ make run
 3. That's it: dictation works with no API keys. On Apple silicon Whispur transcribes on-device with NVIDIA Parakeet (Apple's on-device recognition fills in while Parakeet's model downloads); on Intel Macs it uses Apple's on-device recognition.
 4. Optional: in `Settings`, add API keys for a cloud speech provider, or an LLM provider for transcript cleanup. Setup, shortcuts and providers all stay available there, and you can skip the welcome window and finish setup later.
 
+If macOS switches Accessibility on but Whispur's shortcut still can't listen (this can happen after an earlier denial or an older Whispur entry), the welcome window and `Settings` → `Get Started` offer `Restart Whispur`; setup reopens after the restart where it left off.
+
+To walk through the welcome window again, choose `Run Setup Again` in `Settings` → `Get Started` (or `Run Setup` on the menu bar's Setup Guide card). From a terminal, `open -a Whispur --args --reset-onboarding` does the same. Neither clears your settings or permissions; `defaults delete ai.sophiie.whispur whispur.onboarding.completed` makes the next launch behave like a first run.
+
 ## Usage
 
 - Hold shortcut: Press and hold your configured shortcut to record, then release to transcribe and paste.

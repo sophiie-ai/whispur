@@ -1,4 +1,5 @@
 import Cocoa
+import Combine
 import Foundation
 import os
 
@@ -115,6 +116,10 @@ final class HotkeyManager {
     nonisolated(unsafe) var doublePressWindow: TimeInterval = 0.4
 
     @Published private(set) var isAccessibilityGranted = false
+    /// The CGEvent tap is listening (Accessibility granted and honoured).
+    @Published private(set) var isEventTapInstalled = false
+    /// Accessibility is granted but the tap kept failing: a relaunch is the fix.
+    @Published private(set) var needsRestartForAccessibility = false
     @Published private(set) var isMonitoring = false
     @Published private(set) var eventCount = 0
     @Published private(set) var lastEventDescription = ""
@@ -160,6 +165,10 @@ final class HotkeyManager {
     /// so they let us still fire cancel even when the tap path misses.
     private var globalEscMonitor: Any?
     private var accessibilityTimer: Timer?
+    /// Fast retry after a failed tap install, and the failures so far.
+    private var tapRetryTimer: Timer?
+    private var tapInstallFailures = 0
+    private var firstTapInstallFailure: Date?
     /// Set by `start`, so a recheck never installs a listener in an instance
     /// that was never started (renders and tests).
     private var started = false
@@ -196,6 +205,8 @@ final class HotkeyManager {
         started = false
         accessibilityTimer?.invalidate()
         accessibilityTimer = nil
+        tapRetryTimer?.invalidate()
+        tapRetryTimer = nil
         teardownEventTap()
         teardownLocalMonitors()
         teardownGlobalEscMonitor()
@@ -259,19 +270,93 @@ final class HotkeyManager {
 
     private func checkAccessibilityAndInstall() {
         let trusted = AXIsProcessTrusted()
-        isAccessibilityGranted = trusted
 
         if trusted && eventTap == nil {
-            installEventTap()
-            teardownLocalMonitors()
-        } else if !trusted && eventTap == nil && localFlagsMonitor == nil {
-            installLocalMonitors()
+            if installEventTap() {
+                teardownLocalMonitors()
+                resetTapFailures()
+            } else {
+                // Keep the fallback monitors: without them a failed tap
+                // leaves no shortcut at all.
+                if localFlagsMonitor == nil { installLocalMonitors() }
+                tapInstallFailures += 1
+                if firstTapInstallFailure == nil { firstTapInstallFailure = Date() }
+            }
+        } else if !trusted {
+            resetTapFailures()
+            if eventTap == nil && localFlagsMonitor == nil { installLocalMonitors() }
+        }
+
+        let tapInstalled = eventTap != nil
+        let restart = AccessibilityRestartPolicy.needsRestart(
+            trusted: trusted,
+            tapInstalled: tapInstalled,
+            failedAttempts: tapInstallFailures,
+            firstFailure: firstTapInstallFailure,
+            now: Date()
+        )
+        // Tap state first, so anyone reacting to the grant sees whether the
+        // tap took in the same pass.
+        if isEventTapInstalled != tapInstalled { isEventTapInstalled = tapInstalled }
+        if needsRestartForAccessibility != restart { needsRestartForAccessibility = restart }
+        if isAccessibilityGranted != trusted { isAccessibilityGranted = trusted }
+
+        if AccessibilityRestartPolicy.shouldRetrySoon(trusted: trusted, tapInstalled: tapInstalled, needsRestart: restart) {
+            scheduleTapRetry()
         }
     }
 
+    private func resetTapFailures() {
+        tapInstallFailures = 0
+        firstTapInstallFailure = nil
+        tapRetryTimer?.invalidate()
+        tapRetryTimer = nil
+    }
+
+    /// A failed install right after a grant often succeeds a moment later;
+    /// retry quickly until the restart policy gives up on it.
+    private func scheduleTapRetry() {
+        guard tapRetryTimer == nil else { return }
+        tapRetryTimer = Timer.scheduledTimer(withTimeInterval: AccessibilityRestartPolicy.retryInterval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.tapRetryTimer = nil
+                self.recheckAccessibility()
+            }
+        }
+    }
+
+    /// The combined Accessibility state, deduplicated and delivered after
+    /// each check has finished updating.
+    var accessibilityStatusPublisher: AnyPublisher<AccessibilityStatus, Never> {
+        Publishers.CombineLatest3($isAccessibilityGranted, $isEventTapInstalled, $needsRestartForAccessibility)
+            .map { AccessibilityStatus.resolve(trusted: $0, tapInstalled: $1, needsRestart: $2) }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .eraseToAnyPublisher()
+    }
+
+    var accessibilityStatus: AccessibilityStatus {
+        AccessibilityStatus.resolve(
+            trusted: isAccessibilityGranted,
+            tapInstalled: isEventTapInstalled,
+            needsRestart: needsRestartForAccessibility
+        )
+    }
+
+    #if DEBUG
+    /// A fixed Accessibility state for renders in tests.
+    func setAccessibilityForRendering(_ status: AccessibilityStatus) {
+        isAccessibilityGranted = status.isGranted
+        isEventTapInstalled = status == .on
+        needsRestartForAccessibility = status == .needsRestart
+    }
+    #endif
+
     // MARK: - CGEventTap (primary)
 
-    private func installEventTap() {
+    @discardableResult
+    private func installEventTap() -> Bool {
         let eventMask: CGEventMask = (
             (1 << CGEventType.flagsChanged.rawValue) |
             (1 << CGEventType.keyDown.rawValue) |
@@ -293,7 +378,7 @@ final class HotkeyManager {
             userInfo: unmanagedSelf.toOpaque()
         ) else {
             logger.error("CGEvent.tapCreate failed — Accessibility granted but tap creation failed")
-            return
+            return false
         }
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
@@ -305,6 +390,7 @@ final class HotkeyManager {
         self.isMonitoring = true
 
         logger.info("CGEventTap installed — monitoring for \(self.holdBinding?.displayName ?? "no hold shortcut")")
+        return true
     }
 
     private func teardownEventTap() {
@@ -316,6 +402,7 @@ final class HotkeyManager {
         }
         eventTap = nil
         runLoopSource = nil
+        isEventTapInstalled = false
     }
 
     // MARK: - NSEvent Monitors (fallback when CGEventTap unavailable)

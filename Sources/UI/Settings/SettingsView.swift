@@ -75,6 +75,13 @@ struct SettingsView: View {
         .ignoresSafeArea(.container, edges: .top)
         .foregroundStyle(SophiieTheme.Palette.ink)
         .tint(SophiieTheme.Palette.accent)
+        // The setup status reads the hotkey manager's Accessibility state, which
+        // AppState doesn't republish; redraw when it changes.
+        .onReceive(
+            appState.hotkeyManager.$isAccessibilityGranted.removeDuplicates()
+                .combineLatest(appState.hotkeyManager.$needsRestartForAccessibility.removeDuplicates())
+                .dropFirst()
+        ) { _ in appState.objectWillChange.send() }
         .onAppear {
             credentials.reload()
             credentials.onChange = { [weak appState] in appState?.objectWillChange.send() }
@@ -88,7 +95,8 @@ struct SettingsView: View {
     }
 
     private var accessibilityGranted: Bool {
-        permissionsOverride?.accessibility ?? appState.hotkeyManager.isAccessibilityGranted
+        permissionsOverride?.accessibility
+            ?? (appState.hotkeyManager.isAccessibilityGranted && !appState.hotkeyManager.needsRestartForAccessibility)
     }
 
     private var readiness: SettingsReadiness {

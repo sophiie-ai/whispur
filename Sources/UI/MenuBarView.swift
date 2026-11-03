@@ -213,6 +213,14 @@ struct MenuBarView: View {
 
                 Spacer()
 
+                Button("Run Setup") {
+                    WindowUtilities.dismissMenuBarPopover()
+                    NotificationCenter.default.post(name: .whispurRunSetupAgain, object: nil)
+                }
+                .buttonStyle(.sophiieSecondary)
+                .controlSize(.small)
+                .help("Opens the welcome window from the start. Your settings stay as they are.")
+
                 Button("Open") {
                     openSettings(tab: .getStarted)
                 }

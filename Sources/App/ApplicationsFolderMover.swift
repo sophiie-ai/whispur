@@ -251,24 +251,8 @@ enum ApplicationsFolderMover {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Waits for this process to exit, optionally ejects the DMG, then opens
-    /// the installed copy.
     private static func relaunch(at destination: URL, thenEject volume: String?) {
-        let pid = ProcessInfo.processInfo.processIdentifier
-        var script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.1; done; "
-        if volume != nil { script += "/usr/bin/hdiutil detach -quiet \"$2\"; " }
-        script += "/usr/bin/open \"$1\""
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", script, "whispur-relaunch", destination.path, volume ?? ""]
-        do {
-            try process.run()
-        } catch {
-            logger.error("Relaunch helper failed: \(error.localizedDescription, privacy: .public)")
-            NSWorkspace.shared.open(destination)
-        }
-        NSApp.terminate(nil)
+        AppRelauncher.relaunch(at: destination, thenEject: volume)
     }
 
     private static func isReadOnlyVolume(_ url: URL) -> Bool {

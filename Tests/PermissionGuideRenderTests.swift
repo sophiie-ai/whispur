@@ -62,6 +62,26 @@ final class PermissionGuideRenderTests: XCTestCase {
             try render(OnboardingWindow(appState: appState, initialStep: .accessibility) {}, scheme: scheme, size: onboardingSize,
                        to: dir.appendingPathComponent("onboarding-accessibility-waiting-\(suffix).png"))
             appState.permissionGuide.setActivePermissionForRendering(nil)
+
+            // Accessibility granted but not yet honoured, then needing a
+            // restart; and the ready screen once everything works.
+            let savedMicrophone = appState.microphoneAccessGranted
+            let savedAccessibility = appState.hotkeyManager.accessibilityStatus
+            appState.setMicrophoneAccessForRendering(true)
+            let states: [(AccessibilityStatus, OnboardingStep, String)] = [
+                (.finishing, .accessibility, "accessibility-finishing"),
+                (.needsRestart, .accessibility, "accessibility-restart"),
+                (.needsRestart, .tryIt, "try-it-restart"),
+                (.needsRestart, .ready, "ready-restart"),
+                (.on, .ready, "ready-all-set"),
+            ]
+            for (status, step, name) in states {
+                appState.hotkeyManager.setAccessibilityForRendering(status)
+                try render(OnboardingWindow(appState: appState, initialStep: step) {}, scheme: scheme, size: onboardingSize,
+                           to: dir.appendingPathComponent("onboarding-\(name)-\(suffix).png"))
+            }
+            appState.hotkeyManager.setAccessibilityForRendering(savedAccessibility)
+            appState.setMicrophoneAccessForRendering(savedMicrophone)
         }
     }
 
@@ -70,6 +90,7 @@ final class PermissionGuideRenderTests: XCTestCase {
         let rect = CGRect(origin: .zero, size: size)
         let host = NSHostingView(rootView: view
             .environment(\.colorScheme, scheme)
+            .environment(\.onboardingStillFrames, true)
             .frame(width: size.width, height: size.height))
         host.frame = rect
         host.appearance = appearance
