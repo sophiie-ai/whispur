@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.30.0](https://github.com/sophiie-ai/whispur/compare/v0.29.0...v0.30.0) (2026-11-03)
+
+
+### Features
+
+* **onboarding:** add a before-and-after story and start the speech model download up front ([#119](https://github.com/sophiie-ai/whispur/issues/119)) ([827b3c5](https://github.com/sophiie-ai/whispur/commit/827b3c50e0e591b53514a9eda10207f740a85836))
+* **onboarding:** preview the menu bar, restart when Accessibility needs it, and replay setup ([#118](https://github.com/sophiie-ai/whispur/issues/118)) ([fd2c60e](https://github.com/sophiie-ai/whispur/commit/fd2c60e69ae2ea690e00617030b7848f9143af50))
+
 ## [0.29.0](https://github.com/sophiie-ai/whispur/compare/v0.28.0...v0.29.0) (2026-11-02)
 
 
