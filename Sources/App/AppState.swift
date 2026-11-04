@@ -56,6 +56,9 @@ final class AppState: ObservableObject {
     @AppStorage("systemAudioReductionPercent") var systemAudioReductionPercent: Int = 100
     @AppStorage("showSetupGuide") var showSetupGuide: Bool = true
     @AppStorage("whispur.onboarding.completed") var onboardingCompleted: Bool = false
+    @AppStorage(NextSteps.baselineKey) private var nextStepsBaselineData: Data = Data()
+    /// The Dictation page's "Next steps" card was closed, or finished.
+    @AppStorage(NextSteps.dismissedKey) private(set) var nextStepsDismissed: Bool = false
     /// Settings master switch: while off, the dictation shortcuts do nothing.
     @AppStorage("dictationEnabled") private(set) var dictationEnabled: Bool = true
 
@@ -772,6 +775,39 @@ final class AppState: ObservableObject {
 
     func markOnboardingCompleted() {
         onboardingCompleted = true
+        // The first finish starts the "Next steps" card; running setup
+        // again keeps the original starting point.
+        if nextStepsBaseline == nil {
+            setNextStepsBaseline(NextSteps.Baseline(
+                dictationCount: stats.totalDictations,
+                offersCleanupKey: !isSelectedLLMConfigured
+            ))
+        }
+    }
+
+    var nextStepsBaseline: NextSteps.Baseline? {
+        try? JSONDecoder().decode(NextSteps.Baseline.self, from: nextStepsBaselineData)
+    }
+
+    func setNextStepsBaseline(_ baseline: NextSteps.Baseline?) {
+        objectWillChange.send()
+        nextStepsBaselineData = baseline.flatMap { try? JSONEncoder().encode($0) } ?? Data()
+    }
+
+    func setNextStepsDismissed(_ dismissed: Bool) {
+        objectWillChange.send()
+        nextStepsDismissed = dismissed
+    }
+
+    /// The one line to remember: how to start talking from anywhere.
+    var talkAnywhereHint: String {
+        if let hold = effectiveHoldShortcut {
+            return "Hold \(hold.menuTitle) anywhere, then talk."
+        }
+        if let toggle = toggleShortcut {
+            return "\(toggle.toggleStartPhrase) anywhere, then talk."
+        }
+        return "Click Whispur in the menu bar, then talk."
     }
 
     /// Pass nil to remove the hold-to-talk shortcut.

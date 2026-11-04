@@ -242,10 +242,10 @@ struct OnboardingWindow: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
         case .ready:
-            Button("Start Using Whispur") {
-                appState.markOnboardingCompleted()
-                dismiss()
-            }
+            // Lands on the Dictation page and its "Next steps" card, so
+            // Whispur stays open (and in the Dock) instead of vanishing
+            // into the menu bar.
+            Button("Start Using Whispur") { openSettings(tab: .dictation) }
             .buttonStyle(.sophiiePrimary)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
@@ -605,13 +605,7 @@ struct OnboardingWindow: View {
 
     /// The one line to remember, under the menu bar preview.
     private var readyCaption: String {
-        if let hold = appState.effectiveHoldShortcut {
-            return "Hold \(hold.menuTitle) anywhere, then talk."
-        }
-        if let toggle = appState.toggleShortcut {
-            return "\(toggle.toggleStartPhrase) anywhere, then talk."
-        }
-        return "Click Whispur in the menu bar, then talk."
+        appState.talkAnywhereHint
     }
 
     private func readyMessage(missing: OnboardingStep?, speechReady: Bool) -> String {

@@ -119,7 +119,26 @@ final class SettingsRenderTests: XCTestCase {
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
             try render(needsSetup, scheme: scheme, to: dir.appendingPathComponent("dictation-needs-setup-\(suffix).png"))
+            // Just after onboarding: the Next steps card, all but the dictation done.
+            try withNextSteps(NextSteps.Baseline(dictationCount: appState.stats.totalDictations, offersCleanupKey: true), appState: appState) {
+                let fresh = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: ready, defaults: defaults)
+                try render(fresh, scheme: scheme, to: dir.appendingPathComponent("dictation-next-steps-\(suffix).png"))
+            }
         }
+    }
+
+    /// Runs `body` with a Next steps baseline, then puts the real one back.
+    private func withNextSteps(_ baseline: NextSteps.Baseline, appState: AppState, _ body: () throws -> Void) rethrows {
+        let keys = [NextSteps.baselineKey, NextSteps.dismissedKey]
+        let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, saved) {
+                if let value { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+        }
+        appState.setNextStepsBaseline(baseline)
+        appState.setNextStepsDismissed(false)
+        try body()
     }
 
     // MARK: - Fixtures
