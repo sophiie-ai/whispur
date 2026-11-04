@@ -40,7 +40,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "gpt-6-luna"
         case .anthropic: "claude-haiku-5-5"
         case .groq: "openai/gpt-oss-20b"
-        case .cerebras: "gpt-oss-120b"
+        case .cerebras: "qwen-3.8-27b"
         case .bedrock: "anthropic.claude-haiku-5-5"
         }
     }

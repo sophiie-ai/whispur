@@ -13,7 +13,7 @@ final class CleanupTransportTests: XCTestCase {
         XCTAssertEqual(LLMProviderID.bedrock.defaultModel, "anthropic.claude-haiku-5-5")
         XCTAssertEqual(LLMProviderID.openai.defaultModel, "gpt-6-luna")
         XCTAssertEqual(LLMProviderID.groq.defaultModel, "openai/gpt-oss-20b")
-        XCTAssertEqual(LLMProviderID.cerebras.defaultModel, "gpt-oss-120b")
+        XCTAssertEqual(LLMProviderID.cerebras.defaultModel, "qwen-3.8-27b")
     }
 
     // MARK: - Anthropic / Bedrock responses
