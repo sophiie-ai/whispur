@@ -161,6 +161,7 @@ struct SettingsView: View {
                 styles: appState.styles,
                 isReady: setupState.isComplete,
                 cleanupEnabled: appState.cleanupEnabled,
+                cleanupKeyReady: credentials.status(for: appState.selectedLLM.setupDescriptor.keys).isReady,
                 openTab: open
             )
         case .dictionary:

@@ -151,6 +151,10 @@ final class DictationPipeline: ObservableObject {
     private var microphoneRequestTask: Task<Void, Never>?
     private var processingTask: Task<Void, Never>?
     private var resetTask: Task<Void, Never>?
+    /// The last cleanup warm-up, so `warmCleanupConnection` can skip one the
+    /// connection doesn't need yet.
+    private var lastCleanupWarmup: (origin: URL, at: Date)?
+    static let cleanupWarmupReuseWindow: TimeInterval = 30
 
     /// A recorder started at shortcut key-down, before the press is known
     /// to be a hold (see `beginEarlyCapture`). Nil once a start adopts it or
@@ -268,6 +272,7 @@ final class DictationPipeline: ObservableObject {
             return
         }
         noteRecordingApp()
+        warmCleanupConnection()
 
         cancelResetTask()
         activeTriggerMode = triggerMode
@@ -700,15 +705,10 @@ final class DictationPipeline: ObservableObject {
 
         do {
 
-            // Warm the LLM connection in parallel with STT. By the time the
-            // transcript lands, the TLS handshake to the cleanup endpoint is
-            // already done, which saves ~200–500 ms on cold paths.
-            if cleanupEnabled,
-               let client = httpClient,
-               let llmProvider = makeLLMProvider(),
-               let origin = llmProvider.endpointOrigin {
-                client.warmConnection(to: origin)
-            }
+            // The connection was warmed when recording started. A long
+            // recording can outlive an idle connection, so warm again here
+            // if that warm-up is stale (see `warmCleanupConnection`).
+            warmCleanupConnection()
 
             let rawTranscript = try await ProviderRequestContext.$dictationID.withValue(dictationID) {
                 try await StreamingFallback.transcript(
@@ -879,6 +879,34 @@ final class DictationPipeline: ObservableObject {
         guard smartSpacingEnabled else { return text }
         if let bundleID = frontmostBundleID(), SmartSpacing.excludedBundleIDs.contains(bundleID) { return text }
         return SmartSpacing.adjusted(text, before: await readBeforeCursor())
+    }
+
+    /// Opens the TCP/TLS connection to the cleanup endpoint before the
+    /// cleanup request needs it. Called when recording starts, so the
+    /// handshake (~200–500 ms cold) runs while the user is still talking
+    /// instead of racing the request after a fast on-device transcript.
+    ///
+    /// Called again when processing starts, but it only fires if the last
+    /// warm-up to this origin is older than `cleanupWarmupReuseWindow`.
+    /// Neither URLSession nor the providers' front doors promise how long
+    /// an idle connection survives, and load balancers commonly close idle
+    /// ones after a minute (AWS ALB's default is 60 s), so a recording longer
+    /// than the window may have lost the connection warmed at its start. The
+    /// same window keeps rapid start/cancel presses from sending a burst of
+    /// warm-up requests.
+    func warmCleanupConnection() {
+        guard cleanupEnabled,
+              let client = httpClient,
+              let origin = makeLLMProvider()?.endpointOrigin
+        else { return }
+        let now = Date()
+        if let last = lastCleanupWarmup,
+           last.origin == origin,
+           now.timeIntervalSince(last.at) < Self.cleanupWarmupReuseWindow {
+            return
+        }
+        lastCleanupWarmup = (origin, now)
+        client.warmConnection(to: origin)
     }
 
     private func makeLLMProvider() -> (any LLMProvider)? {
@@ -1119,6 +1147,12 @@ final class DictationPipeline: ObservableObject {
         self.phase = phase
         if let samples { audioSamples = samples }
         if let liveTranscript { self.liveTranscript = liveTranscript }
+    }
+
+    /// Sets the last dictation shown in the menu bar. Only for renders in
+    /// tests.
+    func setLastResultForRendering(_ result: PipelineResult?) {
+        lastResult = result
     }
     #endif
 

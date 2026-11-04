@@ -31,6 +31,7 @@ extension KeychainKey {
         case .openaiAPIKey: "Paste your OpenAI key (sk-...)"
         case .anthropicAPIKey: "Paste your Anthropic key (sk-ant-...)"
         case .groqAPIKey: "Paste your Groq key (gsk_...)"
+        case .cerebrasAPIKey: "Paste your Cerebras key"
         case .deepgramAPIKey: "Paste your Deepgram key"
         case .elevenlabsAPIKey: "Paste your ElevenLabs key"
         case .mistralAPIKey: "Paste your Mistral key"
@@ -391,6 +392,7 @@ extension LLMProviderID {
         case .openai: "Chat completions through the OpenAI API, or any compatible gateway."
         case .anthropic: "Claude cleans up punctuation, filler, and phrasing."
         case .groq: "Low-latency hosted gpt-oss. Shares its key with Groq Whisper."
+        case .cerebras: "Very fast hosted gpt-oss-120b on Cerebras hardware. Cleanup only."
         case .bedrock: "Claude on AWS Bedrock with a Bedrock API key and region."
         }
     }

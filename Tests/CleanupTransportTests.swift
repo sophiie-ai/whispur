@@ -13,6 +13,7 @@ final class CleanupTransportTests: XCTestCase {
         XCTAssertEqual(LLMProviderID.bedrock.defaultModel, "anthropic.claude-haiku-5-5")
         XCTAssertEqual(LLMProviderID.openai.defaultModel, "gpt-6-luna")
         XCTAssertEqual(LLMProviderID.groq.defaultModel, "openai/gpt-oss-20b")
+        XCTAssertEqual(LLMProviderID.cerebras.defaultModel, "gpt-oss-120b")
     }
 
     // MARK: - Anthropic / Bedrock responses
@@ -148,6 +149,23 @@ final class CleanupTransportTests: XCTestCase {
         let llama = OpenAIChatFormat.body(model: "llama-3.1-8b-instant", providerID: .groq, request: request)
         XCTAssertNil(llama["include_reasoning"])
         XCTAssertEqual(llama["max_tokens"] as? Int, 1500)
+    }
+
+    func testCerebrasGptOSSHidesReasoningAndQwenTurnsItOff() {
+        let body = OpenAIChatFormat.body(model: "gpt-oss-120b", providerID: .cerebras, request: request)
+        XCTAssertEqual(body["reasoning_effort"] as? String, "low")
+        XCTAssertEqual(body["reasoning_format"] as? String, "hidden")
+        XCTAssertEqual(body["temperature"] as? Double, 0)
+        XCTAssertEqual(body["max_completion_tokens"] as? Int, 1500)
+        XCTAssertNil(body["include_reasoning"])
+        XCTAssertNil(body["max_tokens"])
+
+        let qwen = OpenAIChatFormat.body(model: "qwen-3.8-27b", providerID: .cerebras, request: request)
+        XCTAssertEqual(qwen["reasoning_effort"] as? String, "none")
+        XCTAssertEqual(qwen["temperature"] as? Double, 0)
+        XCTAssertNil(qwen["reasoning_format"])
+
+        XCTAssertEqual(OpenAIChatFormat.parameterStyle(model: "qwen-3.8-27b", providerID: .groq), .classic)
     }
 
     // MARK: - OpenAI / Groq responses

@@ -88,6 +88,9 @@ final class ProviderRegistry {
         case .groq:
             guard let key = keychain.get(.groqAPIKey) else { return nil }
             return GroqLLM(apiKey: key, httpClient: httpClient, model: Self.modelOverride(for: id))
+        case .cerebras:
+            guard let key = keychain.get(.cerebrasAPIKey) else { return nil }
+            return CerebrasLLM(apiKey: key, httpClient: httpClient, model: Self.modelOverride(for: id))
         case .bedrock:
             guard let key = keychain.get(.awsBedrockAPIKey),
                   let region = keychain.get(.awsRegion)?.trimmingCharacters(in: .whitespacesAndNewlines),
