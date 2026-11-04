@@ -187,6 +187,20 @@ jobs:
             --repo ${{ github.repository }} \
             --clobber
 
+      # release-please creates the release as a draft (release-please-config.json),
+      # so the releases/latest/download link keeps serving the previous DMG until
+      # this one is attached. Publish before the appcast commit: Sparkle's
+      # versioned download URL only resolves once the release is public. If any
+      # step above fails, the release stays a draft and nothing is advertised.
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ inputs.tag_name }}" \
+            --repo ${{ github.repository }} \
+            --draft=false \
+            --latest
+
       - name: Update appcast.xml
         env:
           BUILD_NUMBER: ${{ steps.buildnum.outputs.build_number }}
