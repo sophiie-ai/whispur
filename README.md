@@ -107,6 +107,8 @@ Audio stays local by default when you use the built-in Apple speech provider, an
 
 Whispur stores API keys in the macOS Keychain.
 
+The Insights page is worked out on this Mac from counts only: words per day, how often you use words that aren't everyday words, dictations per weekday and hour, dictations per app, and how often you fix a word. No transcripts are kept for it, and nothing is sent anywhere. Clear Insights resets those counts.
+
 ## Development
 
 ```bash

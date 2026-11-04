@@ -369,6 +369,9 @@ final class AppState: ObservableObject {
         learning.onLearnTerm = { [weak self] fromTerm, toTerm in
             self?.learnTerm(toTerm, from: fromTerm)
         }
+        learning.onCorrection = { [weak self] word in
+            self?.stats.recordCorrection(word)
+        }
         learningSuggestions.onAccept = { [weak self] suggestion in
             self?.learnTerm(suggestion.to, from: suggestion.from)
         }
@@ -948,7 +951,7 @@ final class AppState: ObservableObject {
                 guard self.lastCountedResultID != result.id else { return }
                 self.lastCountedResultID = result.id
                 let words = result.cleanedText.whitespaceWordCount
-                self.stats.record(wordCount: words, at: result.timestamp)
+                self.stats.record(wordCount: words, text: result.cleanedText, appBundleID: result.appBundleID, at: result.timestamp)
             }
     }
 

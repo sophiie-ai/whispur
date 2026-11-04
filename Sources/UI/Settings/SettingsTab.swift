@@ -3,6 +3,7 @@ import Foundation
 /// Pages of the Settings window, in sidebar order.
 enum SettingsTab: String, CaseIterable, Identifiable {
     case dictation
+    case insights
     case dictionary
     case styles
     case getStarted
@@ -37,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var group: Group {
         switch self {
-        case .dictation, .dictionary, .styles: return .main
+        case .dictation, .insights, .dictionary, .styles: return .main
         case .getStarted, .providers, .preferences: return .setup
         case .activity, .requests: return .diagnostics
         }
@@ -46,6 +47,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dictation: return "Dictation"
+        case .insights: return "Insights"
         case .dictionary: return "Dictionary"
         case .styles: return "Styles"
         case .getStarted: return "Get started"
@@ -59,6 +61,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .dictation: return "waveform"
+        case .insights: return "chart.bar.xaxis"
         case .dictionary: return "book.closed"
         case .styles: return "textformat"
         case .getStarted: return "sparkles"
@@ -74,6 +77,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .dictation:
             return "Your shortcuts, recent dictations, and personalization."
+        case .insights:
+            return "How much you dictate, and the words, times and apps you use most."
         case .dictionary:
             return "Words Whispur should always spell your way."
         case .styles:
