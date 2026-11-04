@@ -174,6 +174,17 @@ enum ApplicationsFolderMover {
         #endif
     }
 
+    /// Where the running copy lives, answered from the live system.
+    static func currentLocation(bundle: Bundle = .main) -> AppInstallLocation {
+        let bundleURL = bundle.bundleURL
+        return AppInstallLocation.classify(
+            bundlePath: bundleURL.path,
+            homeDirectory: NSHomeDirectory(),
+            isTranslocated: Translocation.isTranslocated(bundleURL),
+            isOnReadOnlyVolume: isReadOnlyVolume(bundleURL)
+        )
+    }
+
     static func isOptedOut(defaults: UserDefaults, environment: [String: String]) -> Bool {
         if defaults.bool(forKey: optOutDefaultsKey) { return true }
         if let value = environment[optOutEnvironmentKey]?.lowercased(), ["1", "true", "yes"].contains(value) {

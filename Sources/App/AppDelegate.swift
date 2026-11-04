@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the modal alert can't put onboarding up behind it.
         if ApplicationsFolderMover.offerMoveIfNeeded() { return }
         didFinishLaunching = true
+        LaunchAtLogin.shared.applyDefaultIfNeeded(location: ApplicationsFolderMover.currentLocation())
         replayRequested = OnboardingLaunch.isReplayRequested(arguments: ProcessInfo.processInfo.arguments)
         runSetupObserver = NotificationCenter.default.addObserver(
             forName: .whispurRunSetupAgain,
