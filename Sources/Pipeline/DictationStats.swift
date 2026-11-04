@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -26,6 +27,11 @@ final class DictationStats: ObservableObject {
     /// count; `seedDictationCountIfMissing` fills it once from history.
     @Published private(set) var totalDictations: Int = 0
     private var hasDictationCount = false
+    /// Top words, peak time, top app and corrections for the Insights page.
+    /// Counted from the version that added it; older stats files start empty.
+    @Published private(set) var insights = DictationInsights()
+
+    private let isCommonWord: (String) -> Bool
 
     private let fileURL: URL
     private let calendar: Calendar
@@ -34,8 +40,10 @@ final class DictationStats: ObservableObject {
     /// - Parameter fileURL: Where the stats live. Defaults to
     ///   `Application Support/Whispur/stats.json`; tests and renders pass a
     ///   temporary file.
-    init(calendar: Calendar = .current, fileURL: URL? = nil) {
+    /// - Parameter isCommonWord: Which words the Insights top word skips.
+    init(calendar: Calendar = .current, fileURL: URL? = nil, isCommonWord: @escaping (String) -> Bool = DictationStats.isEverydayWord) {
         self.calendar = calendar
+        self.isCommonWord = isCommonWord
 
         if let fileURL {
             self.fileURL = fileURL
@@ -56,10 +64,26 @@ final class DictationStats: ObservableObject {
         load()
     }
 
+    /// Words the Insights top word skips: ordinary dictionary words. Words
+    /// the user taught the Mac's spelling checker ("Sophiie", "kubectl") are
+    /// exactly the ones worth showing, so they count even though
+    /// `CommonWords` treats them as common.
+    static func isEverydayWord(_ word: String) -> Bool {
+        let checker = NSSpellChecker.shared
+        guard !checker.hasLearnedWord(word), !checker.hasLearnedWord(word.lowercased()) else { return false }
+        return CommonWords.isCommon(word)
+    }
+
     // MARK: - Recording
 
-    func record(wordCount: Int, at date: Date = Date()) {
+    /// - Parameters:
+    ///   - text: The pasted text. Only its uncommon words are counted, for
+    ///     the Insights top word; the text itself is never stored.
+    ///   - appBundleID: The app dictated into.
+    func record(wordCount: Int, text: String? = nil, appBundleID: String? = nil, at date: Date = Date()) {
         guard wordCount > 0 else { return }
+
+        insights.record(text: text ?? "", appBundleID: appBundleID, at: date, calendar: calendar, isCommon: isCommonWord)
 
         let key = dayKey(for: date)
         dailyWords[key, default: 0] += wordCount
@@ -79,6 +103,19 @@ final class DictationStats: ObservableObject {
         guard !hasDictationCount else { return }
         totalDictations = max(totalDictations, count)
         hasDictationCount = true
+        save()
+    }
+
+    /// Counts a word the user fixed after Whispur wrote it.
+    func recordCorrection(_ word: String) {
+        insights.recordCorrection(word)
+        save()
+    }
+
+    /// Forgets the Insights counts. Word totals, the streak and the
+    /// dictation count stay.
+    func clearInsights() {
+        insights = DictationInsights()
         save()
     }
 
@@ -125,7 +162,12 @@ final class DictationStats: ObservableObject {
     /// Returns the words dictated on each of the last 7 days, oldest first.
     /// Used to draw a sparkline / streak strip in the menu bar.
     var lastSevenDays: [StatsDay] {
-        (0 ..< 7).reversed().compactMap { offset in
+        lastDays(7)
+    }
+
+    /// Words dictated on each of the last `count` days, oldest first.
+    func lastDays(_ count: Int) -> [StatsDay] {
+        (0 ..< count).reversed().compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: Date()) else { return nil }
             let key = dayKey(for: date)
             let symbol = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
@@ -158,6 +200,26 @@ final class DictationStats: ObservableObject {
         var dailyWords: [String: Int]
         var firstRecordedAt: Date?
         var totalDictations: Int?
+        var insights: DictationInsights?
+
+        init(totalWords: Int, dailyWords: [String: Int], firstRecordedAt: Date?, totalDictations: Int?, insights: DictationInsights?) {
+            self.totalWords = totalWords
+            self.dailyWords = dailyWords
+            self.firstRecordedAt = firstRecordedAt
+            self.totalDictations = totalDictations
+            self.insights = insights
+        }
+
+        /// A damaged `insights` value decodes as missing, so it can never
+        /// fail the load and let the next save overwrite the word counts.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            totalWords = try container.decode(Int.self, forKey: .totalWords)
+            dailyWords = try container.decode([String: Int].self, forKey: .dailyWords)
+            firstRecordedAt = try container.decodeIfPresent(Date.self, forKey: .firstRecordedAt)
+            totalDictations = try container.decodeIfPresent(Int.self, forKey: .totalDictations)
+            insights = try? container.decodeIfPresent(DictationInsights.self, forKey: .insights)
+        }
     }
 
     private func load() {
@@ -170,6 +232,7 @@ final class DictationStats: ObservableObject {
             firstRecordedAt = snapshot.firstRecordedAt
             totalDictations = snapshot.totalDictations ?? 0
             hasDictationCount = snapshot.totalDictations != nil
+            insights = snapshot.insights ?? DictationInsights()
         } catch {
             statsLogger.error("Failed to load stats: \(error.localizedDescription)")
         }
@@ -180,7 +243,8 @@ final class DictationStats: ObservableObject {
             totalWords: totalWords,
             dailyWords: dailyWords,
             firstRecordedAt: firstRecordedAt,
-            totalDictations: hasDictationCount ? totalDictations : nil
+            totalDictations: hasDictationCount ? totalDictations : nil,
+            insights: insights
         )
         do {
             let data = try JSONEncoder().encode(snapshot)

@@ -25,6 +25,10 @@ final class TranscriptLearning {
     /// term to the custom vocabulary (deduping is the caller's job).
     var onLearnTerm: ((_ from: String, _ to: String) -> Void)?
 
+    /// Called with each word the user fixed in a pasted dictation, whether
+    /// or not they add it to the vocabulary. Feeds the Insights count.
+    var onCorrection: ((_ from: String) -> Void)?
+
     /// True iff the feature is enabled. Callers read this before capturing.
     var isEnabled: Bool = false
 
@@ -114,6 +118,7 @@ final class TranscriptLearning {
         // Cap at 3 — more than that usually means the user rewrote the
         // sentence for style, not corrected STT.
         let capped = substitutions.prefix(3)
+        for sub in capped { onCorrection?(sub.from) }
 
         // Prefer the non-blocking toast when a suggestion center is wired
         // up. The old NSAlert path remains as a fallback so background

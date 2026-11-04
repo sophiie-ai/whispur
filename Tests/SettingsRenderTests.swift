@@ -116,6 +116,14 @@ final class SettingsRenderTests: XCTestCase {
                 .background(SophiieTheme.Palette.surface)
                 try render(row, scheme: scheme, size: CGSize(width: 700, height: 130), to: dir.appendingPathComponent("dictionary-row-adding-\(suffix).png"))
             }
+            // Insights before any dictation was counted.
+            let emptyStats = DictationStats(fileURL: scratch.appendingPathComponent("empty-stats-\(suffix).json"))
+            let emptyInsights = InsightsSettingsView(stats: emptyStats, learnsFromEdits: false)
+                .background(SophiieTheme.Palette.surfaceWarm)
+            try render(emptyInsights, scheme: scheme, size: CGSize(width: 768, height: 900), to: dir.appendingPathComponent("insights-empty-\(suffix).png"))
+            defaults.set(SettingsTab.insights.rawValue, forKey: SettingsView.selectedTabKey)
+            let insights = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: ready, defaults: defaults)
+            try render(insights, scheme: scheme, size: CGSize(width: 1000, height: 1000), to: dir.appendingPathComponent("insights-full-\(suffix).png"))
             defaults.set(SettingsTab.dictation.rawValue, forKey: SettingsView.selectedTabKey)
             let needsSetup = SettingsView(appState: appState, secretStore: secrets, permissionsOverride: missing, defaults: defaults)
             try render(needsSetup, scheme: scheme, to: dir.appendingPathComponent("dictation-needs-setup-\(suffix).png"))
@@ -198,6 +206,33 @@ final class SettingsRenderTests: XCTestCase {
         ("Whispur", nil),
     ]
 
+    static let sampleInsightTexts = [
+        "Ask Sophiie to send the Kubernetes rollout notes to the plumbing team.",
+        "Can Sophiie move the standup to ten tomorrow?",
+        "The Kubernetes cluster is fine, Sophiie just needs the new invoice template.",
+        "Thanks, ship it.",
+    ]
+    static let sampleInsightApps = ["com.apple.Safari", "com.apple.Safari", "com.apple.mail", "com.apple.Notes", "com.apple.Safari"]
+
+    /// Most days of the last month, mostly mid-morning, mostly in Safari.
+    static func seedInsights(_ stats: DictationStats, now: Date) {
+        let calendar = Calendar.current
+        var index = 0
+        for daysAgo in (0 ..< 30).reversed() where daysAgo % 4 != 3 {
+            guard let day = calendar.date(byAdding: .day, value: -daysAgo, to: now) else { continue }
+            for _ in 0 ..< (1 + daysAgo % 3) {
+                let hour = index % 3 == 0 ? 15 : 10
+                let at = calendar.date(bySettingHour: hour, minute: 5, second: 0, of: day) ?? day
+                let text = sampleInsightTexts[index % sampleInsightTexts.count]
+                stats.record(wordCount: text.whitespaceWordCount, text: text, appBundleID: sampleInsightApps[index % sampleInsightApps.count], at: at)
+                index += 1
+            }
+        }
+        for word in ["Sophie", "Sophie", "Sophie", "Wispur"] {
+            stats.recordCorrection(word)
+        }
+    }
+
     static func makeAppState(in scratch: URL, vocabularyDefaults: UserDefaults) throws -> AppState {
         let now = Date()
         // Seed the old plain list so the migration path runs, then add the
@@ -270,6 +305,10 @@ final class SettingsRenderTests: XCTestCase {
         let statsURL = scratch.appendingPathComponent("stats.json")
         let stats = #"{"totalWords":18240,"dailyWords":{},"totalDictations":1284}"#
         try Data(stats.utf8).write(to: statsURL)
+        // A fixed word list, so the render doesn't depend on what this Mac's
+        // spelling checker has learned.
+        let renderStats = DictationStats(fileURL: statsURL) { !["Sophiie", "Kubernetes", "standup"].contains($0) }
+        seedInsights(renderStats, now: now)
 
         let requestLog = ProviderRequestLog(fileURL: scratch.appendingPathComponent("provider-requests.json"))
         for (index, entry) in sampleRequests.enumerated() {
@@ -306,7 +345,7 @@ final class SettingsRenderTests: XCTestCase {
 
         return AppState(
             historyStore: renderHistory,
-            stats: DictationStats(fileURL: statsURL),
+            stats: renderStats,
             providerRequestLog: requestLog,
             vocabulary: vocabulary,
             styles: styles,

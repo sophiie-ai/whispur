@@ -164,6 +164,8 @@ struct SettingsView: View {
                 cleanupKeyReady: credentials.status(for: appState.selectedLLM.setupDescriptor.keys).isReady,
                 openTab: open
             )
+        case .insights:
+            InsightsSettingsView(stats: appState.stats, learnsFromEdits: appState.learnFromEdits)
         case .dictionary:
             DictionarySettingsView(appState: appState, vocabulary: appState.vocabulary)
         case .styles:
@@ -182,6 +184,7 @@ struct SettingsView: View {
                 vocabulary: { [weak appState] in appState?.vocabulary.plainTerms ?? [] },
                 addToVocabulary: { [weak appState] term, heardAs in
                     appState?.vocabulary.addAlias(heardAs, toTerm: term)
+                    appState?.stats.recordCorrection(heardAs)
                 }
             ) { [weak appState] id in
                 appState?.retryFailedDictation(id)
