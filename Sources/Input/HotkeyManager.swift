@@ -618,7 +618,7 @@ final class HotkeyManager {
         }
         let resetsDoublePress = stateLock.withLock { state -> Bool in
             _ = state.pressedKeyCodes.insert(keyCode)
-            return state.doublePress.isAwaitingSecondPress
+            return state.doublePress.isAwaitingSecondPress(at: ProcessInfo.processInfo.systemUptime)
         }
         if resetsDoublePress, toggleBinding?.isDoublePress == true {
             logger.info("Double press reset by a key press between taps: keyCode=\(keyCode)")
