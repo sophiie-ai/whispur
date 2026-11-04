@@ -41,8 +41,13 @@ final class DictationPipeline: ObservableObject {
     //   3. The cumulative time spent above that threshold must exceed
     //      `minVoicedSeconds`; a single spike can beat the threshold once
     //      but not for long enough to be speech.
-    private static let minRecordingSeconds: Double = 0.3
-    private static let minVoicedSeconds: Double = 0.3
+    //
+    // Voiced time is counted in whole tap buffers (~85-100 ms each), so
+    // 0.3 s needed three or four loud buffers and dropped short one-word
+    // dictations ("yes", "no", "okay"). Two buffers is still more than a
+    // click or a bump, which fills one.
+    nonisolated static let minRecordingSeconds: Double = 0.3
+    nonisolated static let minVoicedSeconds: Double = 0.15
     private static let noiseFloorMultiplier: Float = 3.0
     private static let absoluteFloorRMS: Float = 0.005
 
@@ -151,6 +156,22 @@ final class DictationPipeline: ObservableObject {
     private var lastCleanupWarmup: (origin: URL, at: Date)?
     static let cleanupWarmupReuseWindow: TimeInterval = 30
 
+    /// A recorder started at shortcut key-down, before the press is known
+    /// to be a hold (see `beginEarlyCapture`). Nil once a start adopts it or
+    /// it is discarded. The phase stays where it was while it runs: no
+    /// overlay, no sound.
+    private struct EarlyCaptureState {
+        let generation: Int
+        var engineStarted = false
+        var heardAudio = false
+    }
+    private var earlyCapture: EarlyCaptureState?
+    private var earlyCaptureWatchdog: Task<Void, Never>?
+    /// The longest an early capture runs without a start adopting it. The
+    /// shortcut decides within its 0.33 s arm window; this only makes sure a
+    /// lost resolution can't leave the microphone on.
+    static let earlyCaptureTimeout: Duration = .seconds(2)
+
     init(
         recorder: AudioRecorder,
         registry: ProviderRegistry,
@@ -246,12 +267,19 @@ final class DictationPipeline: ObservableObject {
     }
 
     func startRecording(triggerMode: RecordingTriggerMode = .hold) {
-        guard canStartRecording else { return }
+        guard canStartRecording else {
+            discardEarlyCapture()
+            return
+        }
         noteRecordingApp()
         warmCleanupConnection()
 
         cancelResetTask()
         activeTriggerMode = triggerMode
+        if let early = earlyCapture, early.generation == recordingGeneration {
+            adoptEarlyCapture(early)
+            return
+        }
         if lastKnownMicrophoneStatus == .authorized {
             // Show the overlay now, in this turn; the recorder warms up in
             // the background and flips it to `.recording` on first audio.
@@ -269,6 +297,103 @@ final class DictationPipeline: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             self.lastKnownMicrophoneStatus = status
             await self.requestMicrophoneAccessAndBeginRecording(status: status)
+        }
+    }
+
+    /// Starts the recorder quietly at shortcut key-down, while the shortcut
+    /// waits to tell a hold from a tap or a chord, so the words said during
+    /// that wait are captured. `startRecording` adopts it, keeping the audio
+    /// from key-down; `discardEarlyCapture` throws it away.
+    ///
+    /// Only with microphone access already granted: a permission prompt is
+    /// the normal start's job. A failure stays quiet; the normal start then
+    /// tries again and reports it.
+    func beginEarlyCapture() {
+        guard earlyCapture == nil, canStartRecording,
+              lastKnownMicrophoneStatus == .authorized,
+              microphoneRequestTask == nil
+        else { return }
+
+        recordingGeneration &+= 1
+        let generation = recordingGeneration
+        earlyCapture = EarlyCaptureState(generation: generation)
+        recorder.onAudioBuffer = nil
+        recorder.onRecordingReady = { [weak self] in
+            Task { @MainActor in self?.recorderHeardFirstAudio(generation: generation) }
+        }
+        earlyCaptureWatchdog = Task { [weak self] in
+            try? await Task.sleep(for: Self.earlyCaptureTimeout)
+            guard !Task.isCancelled, let self, self.earlyCapture?.generation == generation else { return }
+            logger.info("Early capture timed out without a start")
+            self.discardEarlyCapture()
+        }
+        StartLatencyTrace.mark("early capture requested")
+
+        // The start runs in a later turn; a discard can come first. The
+        // ticket, taken now, makes the recorder refuse a start whose capture
+        // was already discarded, instead of opening the microphone after the
+        // discard's stop found nothing to stop.
+        let ticket = recorder.startTicket()
+        Task { [weak self] in
+            await self?.startRecorder(generation: generation, holdingAudio: true, ticket: ticket)
+        }
+        // The permission can be revoked while Whispur runs. Recheck it beside
+        // the start instead of before it; if it is gone, the normal start
+        // takes over and shows the right message.
+        let assumedStatus = microphoneStatusForTesting
+        Task { [weak self] in
+            let status: AVAuthorizationStatus
+            if let assumedStatus { status = assumedStatus } else { status = await Self.readMicrophoneStatus() }
+            guard let self else { return }
+            self.lastKnownMicrophoneStatus = status
+            if status != .authorized, self.earlyCapture?.generation == generation {
+                self.discardEarlyCapture()
+            }
+        }
+    }
+
+    /// Test seam: the microphone permission `beginEarlyCapture` sees, both
+    /// up front and in its recheck, instead of the system's.
+    private var microphoneStatusForTesting: AVAuthorizationStatus?
+    func assumeMicrophoneStatusForTesting(_ status: AVAuthorizationStatus) {
+        microphoneStatusForTesting = status
+        lastKnownMicrophoneStatus = status
+    }
+
+    /// Stops and deletes an early capture no start adopted (the press was a
+    /// tap or a chord). Silent: no overlay, sound, history entry or file.
+    func discardEarlyCapture() {
+        guard let early = endEarlyCapture() else { return }
+        guard early.generation == recordingGeneration else { return }
+        recordingGeneration &+= 1
+        recorder.onRecordingReady = nil
+        recorder.onAudioBuffer = nil
+        recorder.discardRecording()
+        logger.info("Early capture discarded")
+    }
+
+    @discardableResult
+    private func endEarlyCapture() -> EarlyCaptureState? {
+        let early = earlyCapture
+        earlyCapture = nil
+        earlyCaptureWatchdog?.cancel()
+        earlyCaptureWatchdog = nil
+        return early
+    }
+
+    /// The shortcut became a recording: show it and keep the audio the
+    /// early capture has from key-down. Whatever the recorder has not done
+    /// yet, `startRecorder` finishes when it gets there.
+    private func adoptEarlyCapture(_ early: EarlyCaptureState) {
+        endEarlyCapture()
+        phase = .starting
+        StartLatencyTrace.mark("overlay requested (.starting, early capture)")
+        startStreamingIfEnabled()
+        if early.heardAudio {
+            recorderHeardFirstAudio(generation: early.generation)
+        }
+        if early.engineStarted {
+            finishStartingSession()
         }
     }
 
@@ -335,6 +460,7 @@ final class DictationPipeline: ObservableObject {
 
     func cancel() {
         recordingGeneration &+= 1
+        endEarlyCapture()
         microphoneRequestTask?.cancel()
         microphoneRequestTask = nil
 
@@ -422,31 +548,35 @@ final class DictationPipeline: ObservableObject {
     }
 
     private func beginRecording() async {
-        guard !recorder.isRecording else { return }
-
         // Move out of `.idle` before touching the recorder so stop events are
-        // never dropped even if the user stops immediately.
+        // never dropped even if the user stops immediately. A discarded
+        // early capture may still be stopping; the recorder serializes this
+        // start after it.
         phase = .starting
         recordingGeneration &+= 1
         let generation = recordingGeneration
 
         recorder.onRecordingReady = { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                guard case .starting = self.phase else { return }
-
-                self.phase = .recording
-                self.playSound(.tink)
-                StartLatencyTrace.finish("listening (first audio, start sound)")
-            }
+            Task { @MainActor in self?.recorderHeardFirstAudio(generation: generation) }
         }
 
         startStreamingIfEnabled()
+        await startRecorder(generation: generation, holdingAudio: false)
+    }
 
+    /// Starts the engine for `generation` and, once it runs, finishes the
+    /// session if a start owns it by then. An early capture nobody adopted
+    /// yet only notes that the engine runs.
+    private func startRecorder(generation: Int, holdingAudio: Bool, ticket: Int? = nil) async {
         do {
-            try await recorder.startRecording()
+            try await recorder.startRecording(holdingAudioUntilHandler: holdingAudio, ticket: ticket)
         } catch {
             guard generation == recordingGeneration else { return }
+            if earlyCapture?.generation == generation {
+                logger.info("Early capture failed to start: \(error.localizedDescription, privacy: .public)")
+                discardEarlyCapture()
+                return
+            }
             recorder.onAudioBuffer = nil
             streamingSession?.cancel()
             streamingSession = nil
@@ -457,8 +587,33 @@ final class DictationPipeline: ObservableObject {
 
         // A stop or cancel while the engine warmed up already stopped it
         // (the recorder serializes them after the start) and moved on.
-        guard generation == recordingGeneration, canStopRecording else { return }
+        guard generation == recordingGeneration else { return }
+        if earlyCapture?.generation == generation {
+            earlyCapture?.engineStarted = true
+            return
+        }
+        guard canStopRecording else { return }
+        finishStartingSession()
+    }
 
+    /// The first non-silent audio: the overlay goes live and the start
+    /// sound plays. An early capture only remembers it for its adoption.
+    private func recorderHeardFirstAudio(generation: Int) {
+        guard generation == recordingGeneration else { return }
+        if earlyCapture?.generation == generation {
+            earlyCapture?.heardAudio = true
+            return
+        }
+        guard case .starting = phase else { return }
+
+        phase = .recording
+        playSound(.tink)
+        StartLatencyTrace.finish("listening (first audio, start sound)")
+    }
+
+    /// The engine runs and a start owns it: duck system audio and feed the
+    /// waveform.
+    private func finishStartingSession() {
         if muteSystemAudioWhileRecording {
             systemAudioMuter.mute(reductionPercent: systemAudioReductionPercent)
         }
@@ -485,7 +640,10 @@ final class DictationPipeline: ObservableObject {
         guard streamingEnabled,
               selectedSTT.supportsStreaming,
               let provider = registry.makeStreamingProvider(for: selectedSTT)
-        else { return }
+        else {
+            recorder.dropHeldAudio()
+            return
+        }
 
         let session = provider.makeStreamingSession(language: sttLanguageSelection, vocabulary: customVocabulary)
         let converter = LivePCMConverter(targetSampleRate: provider.streamingSampleRate)
@@ -497,10 +655,12 @@ final class DictationPipeline: ObservableObject {
                 self.liveTranscript = text
             }
         }
+        // Set after an early capture, this first replays the audio it held
+        // from key-down, so the stream hears the first word too.
+        session.start()
         recorder.onAudioBuffer = { buffer in
             session.append(converter.convert(buffer))
         }
-        session.start()
         streamingSession = session
         logger.info("Streaming to \(self.selectedSTT.rawValue, privacy: .public)")
     }
@@ -534,7 +694,7 @@ final class DictationPipeline: ObservableObject {
         // See `minRecordingSeconds` / `noiseFloorMultiplier` comments above for
         // rationale. Providers hallucinate confidently on silent audio, so
         // gating aggressively here saves both a request and a bad paste.
-        if !recordingHasSpeech(metrics: metrics) {
+        if !Self.recordingHasSpeech(metrics: metrics) {
             stream?.cancel()
             try? FileManager.default.removeItem(at: recordedURL)
             dismissForNoSpeech()
@@ -927,7 +1087,7 @@ final class DictationPipeline: ObservableObject {
     /// observed across the recording (excluding the very first buffer, which
     /// can be a zero-fill during engine warm-up). In a silent room this is
     /// near zero; in a café it's the ambient hum, so the threshold adapts.
-    private func recordingHasSpeech(metrics: RecordingMetrics) -> Bool {
+    nonisolated static func recordingHasSpeech(metrics: RecordingMetrics) -> Bool {
         guard metrics.totalDurationSeconds >= Self.minRecordingSeconds else {
             logger.info("Skipping STT: recording too short (\(metrics.totalDurationSeconds)s)")
             return false
