@@ -976,6 +976,12 @@ final class DictationPipeline: ObservableObject {
         if let samples { audioSamples = samples }
         if let liveTranscript { self.liveTranscript = liveTranscript }
     }
+
+    /// Sets the last dictation shown in the menu bar. Only for renders in
+    /// tests.
+    func setLastResultForRendering(_ result: PipelineResult?) {
+        lastResult = result
+    }
     #endif
 
     private func resetAudioSamples() {
