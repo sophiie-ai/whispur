@@ -105,6 +105,12 @@ struct DoublePressDetector: Sendable {
         }
     }
 
+    /// A first clean tap was released and a second press may still follow.
+    var isAwaitingSecondPress: Bool {
+        if case .firstUp = phase { return true }
+        return false
+    }
+
     mutating func reset() {
         phase = .idle
         awaitingStartRelease = false
