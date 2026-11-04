@@ -28,7 +28,34 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
 
     /// Receives every captured buffer on the audio thread, for streaming.
     /// Set it before `startRecording` and clear it after `stopRecording`.
-    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
+    ///
+    /// A recording started with `holdingAudioUntilHandler` keeps the buffers
+    /// that arrive while this is nil; setting a handler replays them to it
+    /// first, in order, so a stream opened late still hears the first word.
+    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)? {
+        get { audioRoute.withLockUnchecked { $0.handler } }
+        set {
+            audioRoute.withLockUnchecked { route in
+                guard let newValue else {
+                    route.handler = nil
+                    return
+                }
+                for buffer in route.held { newValue(buffer) }
+                route.held.removeAll()
+                route.holding = false
+                route.handler = newValue
+            }
+        }
+    }
+
+    /// Drops audio kept for a late `onAudioBuffer` that is not coming (the
+    /// recording is not streamed).
+    func dropHeldAudio() {
+        audioRoute.withLockUnchecked { route in
+            route.held.removeAll()
+            route.holding = false
+        }
+    }
 
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
@@ -36,6 +63,18 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     private let fileQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-file", qos: .userInitiated)
     private let controlQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-control", qos: .userInteractive)
     private let recordingFlag = OSAllocatedUnfairLock(initialState: false)
+
+    /// Where tap buffers go besides the file. Locked because the handler is
+    /// set on the main thread and called on the audio thread, and a replay
+    /// must not let a newer buffer overtake the held ones.
+    private struct AudioRoute {
+        var handler: ((AVAudioPCMBuffer) -> Void)?
+        var holding = false
+        var held: [AVAudioPCMBuffer] = []
+    }
+    private let audioRoute = OSAllocatedUnfairLock(uncheckedState: AudioRoute())
+    /// Enough for the few seconds an early capture can wait for a stream.
+    private static let maxHeldBuffers = 128
 
     private var readyFired = false
     private var smoothedLevel: Float = 0
@@ -60,12 +99,14 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     }
 
     /// Starts the engine off the main thread and returns once it runs.
-    func startRecording() async throws {
+    /// `holdingAudioUntilHandler` keeps the audio for an `onAudioBuffer`
+    /// set after the start (see that property).
+    func startRecording(holdingAudioUntilHandler: Bool = false) async throws {
         audioLevel = 0
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             controlQueue.async { [self] in
                 do {
-                    try startEngine()
+                    try startEngine(holdingAudio: holdingAudioUntilHandler)
                     continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
@@ -75,7 +116,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     }
 
     /// Runs on `controlQueue`.
-    private func startEngine() throws {
+    private func startEngine(holdingAudio: Bool) throws {
         guard !isRecording else { return }
         let started = ProcessInfo.processInfo.systemUptime
         guard AVCaptureDevice.default(for: .audio) != nil else {
@@ -109,7 +150,13 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         metricSampleRate = inputFormat.sampleRate
         metricTotalFrames = 0
         bufferMetrics.removeAll(keepingCapacity: true)
+        audioRoute.withLockUnchecked { route in
+            route.held.removeAll()
+            route.holding = holdingAudio && route.handler == nil
+        }
 
+        // 4096 frames is ~85 ms at 48 kHz. Asking for less does not get
+        // first audio sooner: the tap's supported range starts at 100 ms.
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
             self?.handleIncomingBuffer(buffer)
         }
@@ -173,6 +220,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         readyFired = false
         smoothedLevel = 0
         lastLevelPublishTime = 0
+        dropHeldAudio()
 
         logger.info("Recording stopped")
         guard let url = tempFileURL else { return nil }
@@ -181,6 +229,17 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
 
     func cleanup() {
         controlQueue.sync { removeTempFile() }
+    }
+
+    /// Stops the recording and deletes its file without waiting, so a
+    /// discarded early capture never blocks the main thread on an engine
+    /// that is still starting. Serialized with every other start and stop.
+    func discardRecording() {
+        audioLevel = 0
+        controlQueue.async { [self] in
+            _ = stopEngine()
+            removeTempFile()
+        }
     }
 
     /// Runs on `controlQueue`.
@@ -243,7 +302,13 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             }
         }
 
-        onAudioBuffer?(buffer)
+        audioRoute.withLockUnchecked { route in
+            if let handler = route.handler {
+                handler(buffer)
+            } else if route.holding, route.held.count < Self.maxHeldBuffers {
+                route.held.append(buffer)
+            }
+        }
 
         let scaledLevel = min(rms * 12, 1)
         if scaledLevel > smoothedLevel {

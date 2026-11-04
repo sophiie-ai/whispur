@@ -92,8 +92,30 @@ struct AudioDevice: Identifiable, Hashable {
 
     /// Resolve a CoreAudio device UID back to its current AudioDeviceID.
     /// Returns nil if the device is not currently connected.
+    ///
+    /// One CoreAudio lookup rather than listing every device and reading
+    /// each one's streams, name and UID: this runs on every recording start.
     static func resolveDeviceID(forUID uid: String) -> AudioDeviceID? {
         guard !uid.isEmpty else { return nil }
-        return availableInputDevices().first(where: { $0.uid == uid })?.id
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var cfUID = uid as CFString
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafePointer(to: &cfUID) { uidPointer in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                uidPointer,
+                &size,
+                &deviceID
+            )
+        }
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
     }
 }

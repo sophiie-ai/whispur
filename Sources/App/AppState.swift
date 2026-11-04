@@ -637,11 +637,13 @@ final class AppState: ObservableObject {
         }
 
         guard hotkeyManager.isAccessibilityGranted else {
+            pipeline.discardEarlyCapture()
             pipeline.presentError("Accessibility access is required before Whispur can paste dictated text.")
             return
         }
 
         guard isSelectedSTTConfigured else {
+            pipeline.discardEarlyCapture()
             pipeline.presentError(unconfiguredSTTMessage())
             return
         }
@@ -887,7 +889,8 @@ final class AppState: ObservableObject {
 
                 let isBusy = !self.pipeline.canStartRecording && !self.pipeline.canStopRecording
 
-                switch self.shortcutSessionController.handle(event: event, isBusy: isBusy) {
+                let action = self.shortcutSessionController.handle(event: event, isBusy: isBusy)
+                switch action {
                 case .start(let mode):
                     self.startDictation(triggerMode: mode)
                 case .stop:
@@ -898,7 +901,30 @@ final class AppState: ObservableObject {
                 case .none:
                     break
                 }
+                // An early capture belongs to the start this event should have
+                // been. Anything else means it won't be adopted. A start
+                // already adopted it, so this is then a no-op.
+                if case .start = action {} else {
+                    self.pipeline.discardEarlyCapture()
+                }
                 self.syncHotkeySessionState()
+            }
+        }
+
+        // Same thread and order as `onEvent`, so a begin always reaches the
+        // pipeline before the hold that adopts it.
+        hotkeyManager.onEarlyCapture = { [weak self] signal in
+            guard let self else { return }
+            Task { @MainActor in
+                switch signal {
+                case .begin:
+                    // No provider check here: it reads the keychain, too slow
+                    // for every Fn press. An unconfigured start discards it.
+                    guard self.hotkeyManager.isAccessibilityGranted else { return }
+                    self.pipeline.beginEarlyCapture()
+                case .discard:
+                    self.pipeline.discardEarlyCapture()
+                }
             }
         }
     }

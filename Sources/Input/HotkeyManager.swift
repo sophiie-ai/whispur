@@ -25,6 +25,11 @@ final class HotkeyManager {
     }
 
     nonisolated(unsafe) var onEvent: ((Event) -> Void)?
+    /// Starts and discards the microphone capture that covers a bare
+    /// modifier's wait before it counts as a hold (see `EarlyCapture`).
+    /// Delivered on the same thread as `onEvent`, and before the events of
+    /// the same key event, so a begin always precedes the hold it feeds.
+    nonisolated(unsafe) var onEarlyCapture: ((EarlyCapture.Signal) -> Void)?
     /// The hold-to-talk shortcut. nil when the user removed it: no key
     /// starts a hold recording, and the hands-free shortcut still works.
     nonisolated(unsafe) var holdBinding: ShortcutBinding? = .fnKey
@@ -43,9 +48,11 @@ final class HotkeyManager {
         didSet {
             guard oldValue != tapOrHoldBinding else { return }
             cancelTapOrHoldTimer()
-            stateLock.withLock { state in
+            let signal = stateLock.withLock { state -> EarlyCapture.Signal? in
                 state.tapOrHold.reset()
+                return state.tapOrHoldCapture.waitEnded(startedRecording: false)
             }
+            emitEarlyCapture([signal])
         }
     }
     nonisolated(unsafe) var cancelWatchEnabled = false
@@ -72,7 +79,7 @@ final class HotkeyManager {
             guard oldValue != isEnabled, !isEnabled else { return }
             holdArmTimer?.cancel()
             holdArmTimer = nil
-            stateLock.withLock { state in
+            let signals = stateLock.withLock { state -> [EarlyCapture.Signal?] in
                 state.holdActive = false
                 state.holdArming = false
                 state.holdSuppressed = false
@@ -80,8 +87,10 @@ final class HotkeyManager {
                 state.doublePress.reset()
                 state.doublePressDown = false
                 state.tapOrHold.reset()
+                return Self.endEarlyCaptures(&state)
             }
             cancelTapOrHoldTimer()
+            emitEarlyCapture(signals)
         }
     }
 
@@ -108,7 +117,9 @@ final class HotkeyManager {
     /// chord (Fn+arrow, Fn+Delete): a chord key pressed inside it cancels
     /// the arm. 0.18 s caught those chords and was raised to 0.33 s for
     /// that reason. It is the only wait before the overlay shows; nothing
-    /// else on the start path waits on the recorder.
+    /// else on the start path waits on the recorder. The microphone does not
+    /// wait for it: an early capture starts at key-down (`onEarlyCapture`),
+    /// so the words said inside the window are kept.
     nonisolated(unsafe) var holdArmThreshold: TimeInterval = 0.33
 
     /// Maximum gap between the release of the first clean tap and the second
@@ -148,6 +159,9 @@ final class HotkeyManager {
         // Tap or hold. `tapOrHoldDown` tracks the binding's edge.
         var tapOrHold = TapOrHoldDetector(vetoWindow: 0.15, holdThreshold: 0.3)
         var tapOrHoldDown = false
+        // The captures covering the hold arm and the tap-or-hold veto window.
+        var holdCapture = EarlyCapture()
+        var tapOrHoldCapture = EarlyCapture()
     }
     private let stateLock = OSAllocatedUnfairLock<SharedState>(initialState: SharedState())
 
@@ -212,7 +226,7 @@ final class HotkeyManager {
         teardownGlobalEscMonitor()
         holdArmTimer?.cancel()
         holdArmTimer = nil
-        stateLock.withLock { state in
+        let signals = stateLock.withLock { state -> [EarlyCapture.Signal?] in
             state.pressedModifierKeyCodes.removeAll()
             state.pressedKeyCodes.removeAll()
             state.holdActive = false
@@ -224,8 +238,10 @@ final class HotkeyManager {
             state.toggleSessionActive = false
             state.tapOrHold.reset()
             state.tapOrHoldDown = false
+            return Self.endEarlyCaptures(&state)
         }
         cancelTapOrHoldTimer()
+        emitEarlyCapture(signals)
         isMonitoring = false
     }
 
@@ -610,18 +626,19 @@ final class HotkeyManager {
         // the modifier is held, treat it as a chord (e.g. Fn+Delete) and veto
         // both the pending arm and any re-arm until the modifier is released.
         if let holdBinding, holdBinding.keyCode == nil {
-            let cancelledArm = stateLock.withLock { state -> Bool in
-                guard Self.bindingIsActive(holdBinding, state: state) else { return false }
+            let (cancelledArm, signal) = stateLock.withLock { state -> (Bool, EarlyCapture.Signal?) in
+                guard Self.bindingIsActive(holdBinding, state: state) else { return (false, nil) }
                 let wasArming = state.holdArming
                 state.holdArming = false
                 state.holdSuppressed = true
-                return wasArming
+                return (wasArming, wasArming ? state.holdCapture.waitEnded(startedRecording: false) : nil)
             }
             if cancelledArm {
                 holdArmTimer?.cancel()
                 holdArmTimer = nil
                 logger.info("Hold arm cancelled — chord key pressed (keyCode=\(keyCode))")
             }
+            emitEarlyCapture([signal])
         }
         // Tap or hold: any key other than the binding's own is a chord.
         let tapOrHoldChord = tapOrHoldBinding.map { $0.keyCode != keyCode } ?? false
@@ -662,7 +679,7 @@ final class HotkeyManager {
 
         enum HoldAction { case none, arm, cancelArm }
 
-        let (transitions, holdAction) = stateLock.withLock { state -> ([Event], HoldAction) in
+        let (transitions, holdAction, captureSignal) = stateLock.withLock { state -> ([Event], HoldAction, EarlyCapture.Signal?) in
             var events: [Event] = []
             var action: HoldAction = .none
 
@@ -763,9 +780,16 @@ final class HotkeyManager {
                 events.append(.toggleDeactivated)
             }
 
-            return (events, action)
+            let signal: EarlyCapture.Signal?
+            switch action {
+            case .arm: signal = state.holdCapture.waitStarted()
+            case .cancelArm: signal = state.holdCapture.waitEnded(startedRecording: false)
+            case .none: signal = nil
+            }
+            return (events, action, signal)
         }
 
+        emitEarlyCapture([captureSignal])
         switch holdAction {
         case .arm:
             StartLatencyTrace.begin("hold key down")
@@ -801,8 +825,8 @@ final class HotkeyManager {
         let threshold = tapOrHoldThreshold
         let now = ProcessInfo.processInfo.systemUptime
 
-        let (actions, pressed, generation, arming) = stateLock.withLock {
-            state -> ([TapOrHoldDetector.Action], Bool, Int, Bool) in
+        let (actions, pressed, generation, arming, signal) = stateLock.withLock {
+            state -> ([TapOrHoldDetector.Action], Bool, Int, Bool, EarlyCapture.Signal?) in
             state.tapOrHold.vetoWindow = veto
             state.tapOrHold.holdThreshold = threshold
             var actions: [TapOrHoldDetector.Action] = []
@@ -822,9 +846,11 @@ final class HotkeyManager {
                 state.tapOrHoldDown = false
                 actions.append(releasesUnobserved ? state.tapOrHold.releaseUnobserved() : state.tapOrHold.release(at: now))
             }
-            return (actions, pressed, state.tapOrHold.generation, state.tapOrHold.isArming)
+            let signal = Self.settleTapOrHoldCapture(&state, actions: actions)
+            return (actions, pressed, state.tapOrHold.generation, state.tapOrHold.isArming, signal)
         }
 
+        emitEarlyCapture([signal])
         if !arming {
             cancelTapOrHoldTimer()
         } else if pressed {
@@ -841,12 +867,14 @@ final class HotkeyManager {
             self.tapOrHoldTimer = nil
             guard self.isEnabled, let binding = self.tapOrHoldBinding else { return }
             let now = ProcessInfo.processInfo.systemUptime
-            let action = self.stateLock.withLock { state -> TapOrHoldDetector.Action in
+            let (action, signal) = self.stateLock.withLock { state -> (TapOrHoldDetector.Action, EarlyCapture.Signal?) in
                 // A release already handled by an edge leaves nothing to do.
-                guard Self.bindingIsActive(binding, state: state) else { return .none }
-                return state.tapOrHold.vetoElapsed(generation: generation, at: now)
+                guard Self.bindingIsActive(binding, state: state) else { return (.none, nil) }
+                let action = state.tapOrHold.vetoElapsed(generation: generation, at: now)
+                return (action, Self.settleTapOrHoldCapture(&state, actions: [action]))
             }
             if action == .startHolding { StartLatencyTrace.mark("tap-or-hold armed") }
+            self.emitEarlyCapture([signal])
             self.emitTapOrHold([action])
         }
         tapOrHoldTimer = work
@@ -883,6 +911,38 @@ final class HotkeyManager {
         }
     }
 
+    // MARK: - Early capture
+
+    /// Opens the tap-or-hold capture when a press starts the veto wait and
+    /// resolves it when the wait ends: kept if the detector started a
+    /// recording, discarded if it ended any other way (chord, unobserved
+    /// release). A press that stops a locked recording never opens one.
+    private nonisolated static func settleTapOrHoldCapture(
+        _ state: inout SharedState,
+        actions: [TapOrHoldDetector.Action]
+    ) -> EarlyCapture.Signal? {
+        if case .arming = state.tapOrHold.phase {
+            return state.tapOrHoldCapture.waitStarted()
+        }
+        let started = actions.contains(.startHolding) || actions.contains(.startLocked)
+        return state.tapOrHoldCapture.waitEnded(startedRecording: started)
+    }
+
+    /// Discards both captures (shortcuts switched off or monitoring stopped).
+    private nonisolated static func endEarlyCaptures(_ state: inout SharedState) -> [EarlyCapture.Signal?] {
+        [
+            state.holdCapture.waitEnded(startedRecording: false),
+            state.tapOrHoldCapture.waitEnded(startedRecording: false),
+        ]
+    }
+
+    private nonisolated func emitEarlyCapture(_ signals: [EarlyCapture.Signal?]) {
+        for signal in signals.compactMap({ $0 }) {
+            logger.info("Early capture: \(String(describing: signal))")
+            onEarlyCapture?(signal)
+        }
+    }
+
     // MARK: - Hold arm
 
     /// Schedule a deferred activation for bare-modifier holds so brief taps
@@ -894,19 +954,20 @@ final class HotkeyManager {
             guard let self else { return }
             self.holdArmTimer = nil
 
-            let shouldFire = self.stateLock.withLock { state -> Bool in
-                guard self.isEnabled, state.holdArming else { return false }
+            let (shouldFire, signal) = self.stateLock.withLock { state -> (Bool, EarlyCapture.Signal?) in
+                guard self.isEnabled, state.holdArming else { return (false, nil) }
                 state.holdArming = false
                 // Re-check that the binding is still held when the timer fires.
                 guard let holdBinding = self.holdBinding,
                       Self.bindingIsActive(holdBinding, state: state) else {
-                    return false
+                    return (false, state.holdCapture.waitEnded(startedRecording: false))
                 }
                 state.holdActive = true
                 // A tap that became a hold can never be part of a double press.
                 state.doublePress.interrupt()
-                return true
+                return (true, state.holdCapture.waitEnded(startedRecording: true))
             }
+            self.emitEarlyCapture([signal])
 
             if shouldFire {
                 StartLatencyTrace.mark("hold armed")
