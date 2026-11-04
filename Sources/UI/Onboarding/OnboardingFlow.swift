@@ -137,6 +137,12 @@ enum OnboardingFlow {
         return nil
     }
 
+    /// Where "Start Using Whispur" lands: the Dictation page and its Next
+    /// steps when setup is complete, Get started when something is left.
+    static func settingsTabAfterSetup(allSet: Bool) -> SettingsTab {
+        allSet ? .dictation : .getStarted
+    }
+
     /// Where onboarding picks up after "Restart Whispur": past the
     /// accessibility step it restarted for, or the later step it was on.
     static func resumeStep(afterRestartFrom step: OnboardingStep) -> OnboardingStep {

@@ -60,6 +60,11 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertEqual(session.text, "Hi, I'm testing Whispur. Again.")
     }
 
+    func testStartUsingLandsOnDictationOnlyWhenAllSet() {
+        XCTAssertEqual(OnboardingFlow.settingsTabAfterSetup(allSet: true), .dictation)
+        XCTAssertEqual(OnboardingFlow.settingsTabAfterSetup(allSet: false), .getStarted)
+    }
+
     func testFirstMissingPermissionStep() {
         XCTAssertNil(OnboardingFlow.firstMissingPermissionStep(microphone: true, accessibility: true))
         XCTAssertEqual(OnboardingFlow.firstMissingPermissionStep(microphone: false, accessibility: true), .microphone)

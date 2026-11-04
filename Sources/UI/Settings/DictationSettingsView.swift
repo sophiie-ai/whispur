@@ -19,6 +19,8 @@ struct DictationSettingsView: View {
     let isReady: Bool
     /// The "Clean up with AI" switch, shown in the header pill.
     var cleanupEnabled: Bool = true
+    /// The cleanup provider has its key, for the "Next steps" card.
+    var cleanupKeyReady: Bool = true
     let openTab: (SettingsTab) -> Void
 
     /// "Ready", "Ready · Cleanup off", or "Needs setup". Cleanup is
@@ -42,6 +44,13 @@ struct DictationSettingsView: View {
                 .help("Opens a new issue on GitHub")
             }
 
+            NextStepsCard(
+                display: nextSteps,
+                talkHint: appState.talkAnywhereHint,
+                openTab: openTab,
+                onDismiss: { appState.setNextStepsDismissed(true) }
+            )
+
             SettingsCard(hero: true) {
                 SettingsRow(
                     icon: "waveform",
@@ -58,6 +67,20 @@ struct DictationSettingsView: View {
             personalizationSection
             shortcutsSection
         }
+    }
+
+    private var nextSteps: NextSteps.Display {
+        NextSteps.display(
+            baseline: appState.nextStepsBaseline,
+            dismissed: appState.nextStepsDismissed,
+            signals: NextSteps.Signals(
+                dictationCount: stats.totalDictations,
+                termCount: vocabulary.terms.count,
+                styles: styles.settings,
+                cleanupEnabled: cleanupEnabled,
+                cleanupKeyReady: cleanupKeyReady
+            )
+        )
     }
 
     // MARK: - History

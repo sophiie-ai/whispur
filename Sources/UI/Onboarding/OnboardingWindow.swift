@@ -242,9 +242,10 @@ struct OnboardingWindow: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
         case .ready:
+            // Opens Settings, so Whispur stays open (and in the Dock)
+            // instead of vanishing into the menu bar.
             Button("Start Using Whispur") {
-                appState.markOnboardingCompleted()
-                dismiss()
+                openSettings(tab: OnboardingFlow.settingsTabAfterSetup(allSet: readyIsAllSet))
             }
             .buttonStyle(.sophiiePrimary)
             .controlSize(.large)
@@ -562,6 +563,15 @@ struct OnboardingWindow: View {
         }
     }
 
+    /// Both permissions working and speech ready: the Ready screen's
+    /// "You're all set".
+    private var readyIsAllSet: Bool {
+        OnboardingFlow.firstMissingPermissionStep(
+            microphone: appState.microphoneAccessGranted,
+            accessibility: accessibility.isGranted
+        ) == nil && accessibility != .needsRestart && appState.isSelectedSTTConfigured
+    }
+
     private var readyScreen: some View {
         let missing = OnboardingFlow.firstMissingPermissionStep(
             microphone: appState.microphoneAccessGranted,
@@ -569,7 +579,7 @@ struct OnboardingWindow: View {
         )
         let needsRestart = missing == nil && accessibility == .needsRestart
         let speechReady = appState.isSelectedSTTConfigured
-        let allSet = missing == nil && !needsRestart && speechReady
+        let allSet = readyIsAllSet
         return OnboardingScreen(
             hero: {
                 if allSet {
@@ -605,13 +615,7 @@ struct OnboardingWindow: View {
 
     /// The one line to remember, under the menu bar preview.
     private var readyCaption: String {
-        if let hold = appState.effectiveHoldShortcut {
-            return "Hold \(hold.menuTitle) anywhere, then talk."
-        }
-        if let toggle = appState.toggleShortcut {
-            return "\(toggle.toggleStartPhrase) anywhere, then talk."
-        }
-        return "Click Whispur in the menu bar, then talk."
+        appState.talkAnywhereHint
     }
 
     private func readyMessage(missing: OnboardingStep?, speechReady: Bool) -> String {
