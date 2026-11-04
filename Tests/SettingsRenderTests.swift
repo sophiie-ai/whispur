@@ -131,7 +131,13 @@ final class SettingsRenderTests: XCTestCase {
     private func withNextSteps(_ baseline: NextSteps.Baseline, appState: AppState, _ body: () throws -> Void) rethrows {
         let keys = [NextSteps.baselineKey, NextSteps.dismissedKey]
         let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
+        let savedBaseline = appState.nextStepsBaseline
+        let savedDismissed = appState.nextStepsDismissed
         defer {
+            // Reset through AppState too: writing UserDefaults directly
+            // doesn't reach its @AppStorage before the next render.
+            appState.setNextStepsBaseline(savedBaseline)
+            appState.setNextStepsDismissed(savedDismissed)
             for (key, value) in zip(keys, saved) {
                 if let value { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
             }

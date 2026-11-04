@@ -242,10 +242,11 @@ struct OnboardingWindow: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
         case .ready:
-            // Lands on the Dictation page and its "Next steps" card, so
-            // Whispur stays open (and in the Dock) instead of vanishing
-            // into the menu bar.
-            Button("Start Using Whispur") { openSettings(tab: .dictation) }
+            // Opens Settings, so Whispur stays open (and in the Dock)
+            // instead of vanishing into the menu bar.
+            Button("Start Using Whispur") {
+                openSettings(tab: OnboardingFlow.settingsTabAfterSetup(allSet: readyIsAllSet))
+            }
             .buttonStyle(.sophiiePrimary)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
@@ -562,6 +563,15 @@ struct OnboardingWindow: View {
         }
     }
 
+    /// Both permissions working and speech ready: the Ready screen's
+    /// "You're all set".
+    private var readyIsAllSet: Bool {
+        OnboardingFlow.firstMissingPermissionStep(
+            microphone: appState.microphoneAccessGranted,
+            accessibility: accessibility.isGranted
+        ) == nil && accessibility != .needsRestart && appState.isSelectedSTTConfigured
+    }
+
     private var readyScreen: some View {
         let missing = OnboardingFlow.firstMissingPermissionStep(
             microphone: appState.microphoneAccessGranted,
@@ -569,7 +579,7 @@ struct OnboardingWindow: View {
         )
         let needsRestart = missing == nil && accessibility == .needsRestart
         let speechReady = appState.isSelectedSTTConfigured
-        let allSet = missing == nil && !needsRestart && speechReady
+        let allSet = readyIsAllSet
         return OnboardingScreen(
             hero: {
                 if allSet {
