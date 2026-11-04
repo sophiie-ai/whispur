@@ -92,7 +92,7 @@ protocol LLMProvider {
     func complete(request: LLMRequest) async throws -> LLMResponse
 
     /// Base host the provider talks to. The pipeline opens a TLS connection
-    /// to this endpoint during `.transcribing` so the cleanup call doesn't
+    /// to this endpoint when recording starts so the cleanup call doesn't
     /// pay for the handshake.
     var endpointOrigin: URL? { get }
 }
