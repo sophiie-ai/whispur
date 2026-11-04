@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.1](https://github.com/sophiie-ai/whispur/compare/v0.32.0...v0.32.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **input:** keep Fn twice working when the keyboard sends a Globe key event ([#134](https://github.com/sophiie-ai/whispur/issues/134)) ([8cc5454](https://github.com/sophiie-ai/whispur/commit/8cc5454d2cd2b4b0f96e5630c4205c7275348c56))
+
 ## [0.32.0](https://github.com/sophiie-ai/whispur/compare/v0.31.1...v0.32.0) (2026-11-04)
 
 
