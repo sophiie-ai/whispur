@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.31.0](https://github.com/sophiie-ai/whispur/compare/v0.30.0...v0.31.0) (2026-11-04)
+
+
+### Features
+
+* **insights:** add an Insights page with usage and voice highlights ([#128](https://github.com/sophiie-ai/whispur/issues/128)) ([010ce1a](https://github.com/sophiie-ai/whispur/commit/010ce1a012a7c7d831d1072f7ccba2351a07a958))
+* **onboarding:** keep Whispur open after setup with a next steps card ([#124](https://github.com/sophiie-ai/whispur/issues/124)) ([05c853a](https://github.com/sophiie-ai/whispur/commit/05c853a5abe0cef3d5105d8885eb7feba029842c))
+* **pipeline:** warm the cleanup connection when recording starts ([#123](https://github.com/sophiie-ai/whispur/issues/123)) ([83329be](https://github.com/sophiie-ai/whispur/commit/83329be335bb73cb2a3df53ec5053e396bd1d5ac))
+* **providers:** add Cerebras for transcript cleanup ([#126](https://github.com/sophiie-ai/whispur/issues/126)) ([69ba812](https://github.com/sophiie-ai/whispur/commit/69ba8125d1fb9817341e6273aa941a818e74adc4))
+* **ui:** match the menu bar panel to the main window's design ([#127](https://github.com/sophiie-ai/whispur/issues/127)) ([e587458](https://github.com/sophiie-ai/whispur/commit/e5874583836fe49bcd80199ea3734434edad75df))
+
+
+### Bug Fixes
+
+* **input:** capture audio from key-down so the first word isn't lost ([#125](https://github.com/sophiie-ai/whispur/issues/125)) ([2f68efc](https://github.com/sophiie-ai/whispur/commit/2f68efccda12c734f48e2b74ae27619167fefd5f))
+
 ## [0.30.0](https://github.com/sophiie-ai/whispur/compare/v0.29.0...v0.30.0) (2026-11-03)
 
 
