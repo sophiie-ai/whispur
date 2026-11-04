@@ -110,3 +110,111 @@ final class EarlyCaptureTests: XCTestCase {
         XCTAssertFalse(DictationPipeline.recordingHasSpeech(metrics: metrics(loudBuffers: 0)))
     }
 }
+
+/// A discarded early capture must never leave the microphone on, whatever
+/// order the deferred start and the discard reach the recorder in.
+@MainActor
+final class EarlyCaptureDiscardOrderTests: XCTestCase {
+    private var scratch: URL!
+
+    override func setUp() {
+        super.setUp()
+        scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EarlyCaptureDiscardOrderTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: scratch)
+        super.tearDown()
+    }
+
+    /// A recorder whose "engine" writes an empty file instead of opening
+    /// the microphone, counting the starts that got through.
+    private func makeRecorder() -> (AudioRecorder, () -> [URL]) {
+        let recorder = AudioRecorder()
+        var started: [URL] = []
+        let lock = NSLock()
+        let dir = scratch!
+        recorder.startEngineForTesting = {
+            let url = dir.appendingPathComponent(UUID().uuidString).appendingPathExtension("caf")
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+            lock.lock(); started.append(url); lock.unlock()
+            return url
+        }
+        return (recorder, { lock.lock(); defer { lock.unlock() }; return started })
+    }
+
+    private func makePipeline(recorder: AudioRecorder) -> DictationPipeline {
+        let client = ProviderHTTPClient(
+            session: URLSession(configuration: .ephemeral),
+            requestLog: ProviderRequestLog(fileURL: scratch.appendingPathComponent("requests.json"))
+        )
+        let pipeline = DictationPipeline(
+            recorder: recorder,
+            registry: ProviderRegistry(httpClient: client),
+            historyStore: PipelineHistoryStore(fileURL: scratch.appendingPathComponent("history.json")),
+            httpClient: client
+        )
+        pipeline.assumeMicrophoneStatusForTesting(.authorized)
+        return pipeline
+    }
+
+    /// Lets the deferred start task run, then waits for the recorder queue.
+    private func settle(_ recorder: AudioRecorder) async {
+        for _ in 0..<10 { await Task.yield() }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        recorder.waitForPendingWorkForTesting()
+    }
+
+    /// The tap or chord resolves before the deferred start runs: the
+    /// discard's stop reaches the recorder first.
+    func testDiscardBeforeTheDeferredStartKeepsTheMicrophoneOff() async {
+        let (recorder, started) = makeRecorder()
+        let pipeline = makePipeline(recorder: recorder)
+
+        pipeline.beginEarlyCapture()
+        pipeline.discardEarlyCapture()
+        await settle(recorder)
+
+        XCTAssertFalse(recorder.isRecording, "the late start must not open the microphone")
+        for url in started() {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "no recording file is left behind")
+        }
+    }
+
+    /// Same ordering through `cancel()`, which stops without a discard.
+    func testCancelBeforeTheDeferredStartKeepsTheMicrophoneOff() async {
+        let (recorder, started) = makeRecorder()
+        let pipeline = makePipeline(recorder: recorder)
+
+        pipeline.beginEarlyCapture()
+        pipeline.cancel()
+        await settle(recorder)
+
+        XCTAssertFalse(recorder.isRecording)
+        for url in started() {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
+    /// The usual order: the engine is already running when the press turns
+    /// out to be a tap. The discard stops it and deletes the file.
+    func testDiscardAfterTheStartStopsTheRecorder() async {
+        let (recorder, started) = makeRecorder()
+        let pipeline = makePipeline(recorder: recorder)
+
+        pipeline.beginEarlyCapture()
+        await settle(recorder)
+        XCTAssertTrue(recorder.isRecording)
+
+        pipeline.discardEarlyCapture()
+        recorder.waitForPendingWorkForTesting()
+
+        XCTAssertFalse(recorder.isRecording)
+        XCTAssertEqual(started().count, 1)
+        for url in started() {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+}

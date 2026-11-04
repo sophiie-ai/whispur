@@ -329,20 +329,35 @@ final class DictationPipeline: ObservableObject {
         }
         StartLatencyTrace.mark("early capture requested")
 
+        // The start runs in a later turn; a discard can come first. The
+        // ticket, taken now, makes the recorder refuse a start whose capture
+        // was already discarded, instead of opening the microphone after the
+        // discard's stop found nothing to stop.
+        let ticket = recorder.startTicket()
         Task { [weak self] in
-            await self?.startRecorder(generation: generation, holdingAudio: true)
+            await self?.startRecorder(generation: generation, holdingAudio: true, ticket: ticket)
         }
         // The permission can be revoked while Whispur runs. Recheck it beside
         // the start instead of before it; if it is gone, the normal start
         // takes over and shows the right message.
+        let assumedStatus = microphoneStatusForTesting
         Task { [weak self] in
-            let status = await Self.readMicrophoneStatus()
+            let status: AVAuthorizationStatus
+            if let assumedStatus { status = assumedStatus } else { status = await Self.readMicrophoneStatus() }
             guard let self else { return }
             self.lastKnownMicrophoneStatus = status
             if status != .authorized, self.earlyCapture?.generation == generation {
                 self.discardEarlyCapture()
             }
         }
+    }
+
+    /// Test seam: the microphone permission `beginEarlyCapture` sees, both
+    /// up front and in its recheck, instead of the system's.
+    private var microphoneStatusForTesting: AVAuthorizationStatus?
+    func assumeMicrophoneStatusForTesting(_ status: AVAuthorizationStatus) {
+        microphoneStatusForTesting = status
+        lastKnownMicrophoneStatus = status
     }
 
     /// Stops and deletes an early capture no start adopted (the press was a
@@ -445,6 +460,7 @@ final class DictationPipeline: ObservableObject {
 
     func cancel() {
         recordingGeneration &+= 1
+        endEarlyCapture()
         microphoneRequestTask?.cancel()
         microphoneRequestTask = nil
 
@@ -551,9 +567,9 @@ final class DictationPipeline: ObservableObject {
     /// Starts the engine for `generation` and, once it runs, finishes the
     /// session if a start owns it by then. An early capture nobody adopted
     /// yet only notes that the engine runs.
-    private func startRecorder(generation: Int, holdingAudio: Bool) async {
+    private func startRecorder(generation: Int, holdingAudio: Bool, ticket: Int? = nil) async {
         do {
-            try await recorder.startRecording(holdingAudioUntilHandler: holdingAudio)
+            try await recorder.startRecording(holdingAudioUntilHandler: holdingAudio, ticket: ticket)
         } catch {
             guard generation == recordingGeneration else { return }
             if earlyCapture?.generation == generation {

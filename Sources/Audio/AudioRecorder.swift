@@ -32,18 +32,29 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     /// A recording started with `holdingAudioUntilHandler` keeps the buffers
     /// that arrive while this is nil; setting a handler replays them to it
     /// first, in order, so a stream opened late still hears the first word.
+    ///
+    /// The replay runs outside the lock the audio tap takes, so incoming
+    /// audio never waits for the backlog: buffers that arrive meanwhile join
+    /// the held ones, and the handler goes live only once nothing is held.
     var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)? {
         get { audioRoute.withLockUnchecked { $0.handler } }
         set {
-            audioRoute.withLockUnchecked { route in
-                guard let newValue else {
-                    route.handler = nil
-                    return
+            guard let newValue else {
+                audioRoute.withLockUnchecked { $0.handler = nil }
+                return
+            }
+            while true {
+                let backlog: [AVAudioPCMBuffer] = audioRoute.withLockUnchecked { route in
+                    let held = route.held
+                    route.held.removeAll()
+                    if held.isEmpty {
+                        route.holding = false
+                        route.handler = newValue
+                    }
+                    return held
                 }
-                for buffer in route.held { newValue(buffer) }
-                route.held.removeAll()
-                route.holding = false
-                route.handler = newValue
+                if backlog.isEmpty { return }
+                for buffer in backlog { newValue(buffer) }
             }
         }
     }
@@ -63,6 +74,15 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     private let fileQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-file", qos: .userInitiated)
     private let controlQueue = DispatchQueue(label: "ai.sophiie.whispur.audio-control", qos: .userInteractive)
     private let recordingFlag = OSAllocatedUnfairLock(initialState: false)
+    /// Counts stop and discard requests when they are made, not when they
+    /// run on `controlQueue`. A start given a `startTicket` refuses to open
+    /// the microphone if any stop was requested since, so a stop that
+    /// reached the queue before its start still wins.
+    private let stopRequests = OSAllocatedUnfairLock(initialState: 0)
+
+    /// Test seam: replaces the `AVAudioEngine` start and returns the file it
+    /// "recorded" to, so start/stop ordering is testable without a microphone.
+    var startEngineForTesting: (() throws -> URL)?
 
     /// Where tap buffers go besides the file. Locked because the handler is
     /// set on the main thread and called on the audio thread, and a replay
@@ -98,14 +118,25 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
+    /// Take one when a start is decided, before it is scheduled; pass it to
+    /// `startRecording` so a stop requested in between cancels the start.
+    func startTicket() -> Int {
+        stopRequests.withLock { $0 }
+    }
+
     /// Starts the engine off the main thread and returns once it runs.
     /// `holdingAudioUntilHandler` keeps the audio for an `onAudioBuffer`
-    /// set after the start (see that property).
-    func startRecording(holdingAudioUntilHandler: Bool = false) async throws {
+    /// set after the start (see that property). With a `ticket`, throws
+    /// `AudioError.startCancelled` without touching the microphone if a stop
+    /// or discard was requested after the ticket was taken.
+    func startRecording(holdingAudioUntilHandler: Bool = false, ticket: Int? = nil) async throws {
         audioLevel = 0
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             controlQueue.async { [self] in
                 do {
+                    if let ticket, stopRequests.withLock({ $0 }) != ticket {
+                        throw AudioError.startCancelled
+                    }
                     try startEngine(holdingAudio: holdingAudioUntilHandler)
                     continuation.resume()
                 } catch {
@@ -118,6 +149,16 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     /// Runs on `controlQueue`.
     private func startEngine(holdingAudio: Bool) throws {
         guard !isRecording else { return }
+        if let startEngineForTesting {
+            removeTempFile()
+            tempFileURL = try startEngineForTesting()
+            audioRoute.withLockUnchecked { route in
+                route.held.removeAll()
+                route.holding = holdingAudio && route.handler == nil
+            }
+            recordingFlag.withLock { $0 = true }
+            return
+        }
         let started = ProcessInfo.processInfo.systemUptime
         guard AVCaptureDevice.default(for: .audio) != nil else {
             throw AudioError.noInputDevice
@@ -188,6 +229,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     /// Stops the engine and returns the recording. Waits for a start that
     /// is still in flight, so it never misses an engine that is warming up.
     func stopRecording() -> (url: URL, metrics: RecordingMetrics)? {
+        stopRequests.withLock { $0 &+= 1 }
         let result = controlQueue.sync { stopEngine() }
         audioLevel = 0
         return result
@@ -235,11 +277,17 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     /// discarded early capture never blocks the main thread on an engine
     /// that is still starting. Serialized with every other start and stop.
     func discardRecording() {
+        stopRequests.withLock { $0 &+= 1 }
         audioLevel = 0
         controlQueue.async { [self] in
             _ = stopEngine()
             removeTempFile()
         }
+    }
+
+    /// Waits for every queued start and stop. Tests only.
+    func waitForPendingWorkForTesting() {
+        controlQueue.sync {}
     }
 
     /// Runs on `controlQueue`.
@@ -302,13 +350,16 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             }
         }
 
-        audioRoute.withLockUnchecked { route in
-            if let handler = route.handler {
-                handler(buffer)
-            } else if route.holding, route.held.count < Self.maxHeldBuffers {
+        // Only the hand-off happens under the lock; the handler runs after.
+        // The tap is the only caller, so its buffers stay in order.
+        let handler: ((AVAudioPCMBuffer) -> Void)? = audioRoute.withLockUnchecked { route in
+            if let handler = route.handler { return handler }
+            if route.holding, route.held.count < Self.maxHeldBuffers {
                 route.held.append(buffer)
             }
+            return nil
         }
+        handler?(buffer)
 
         let scaledLevel = min(rms * 12, 1)
         if scaledLevel > smoothedLevel {
@@ -378,6 +429,7 @@ enum AudioError: LocalizedError {
     case noInputDevice
     case recordingFailed(String)
     case microphoneNotAuthorized
+    case startCancelled
 
     var errorDescription: String? {
         switch self {
@@ -387,6 +439,8 @@ enum AudioError: LocalizedError {
             return message
         case .microphoneNotAuthorized:
             return "Microphone access is not authorized."
+        case .startCancelled:
+            return "The recording was stopped before it started."
         }
     }
 }
