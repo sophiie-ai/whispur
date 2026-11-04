@@ -9,6 +9,7 @@ struct ProviderKeyCheck: Equatable {
         /// user's override when one is set and valid.
         case openAIModels(baseURLStorageKey: String)
         case groqModels
+        case cerebrasModels
         case anthropicModels
         case deepgramProjects
         case elevenLabsUser
@@ -45,6 +46,7 @@ struct ProviderKeyCheck: Equatable {
         case .openai: endpoint = .openAIModels(baseURLStorageKey: "openaiLLMBaseURL")
         case .anthropic: endpoint = .anthropicModels
         case .groq: endpoint = .groqModels
+        case .cerebras: endpoint = .cerebrasModels
         // Bedrock API keys are scoped to model invocation, so a read-only
         // control-plane call can reject a key that dictation accepts.
         case .bedrock: return nil
@@ -65,6 +67,8 @@ struct ProviderKeyCheck: Equatable {
             urlString = (baseURLOverride(storageKey) ?? Self.openAIDefaultBaseURL) + "/models"
         case .groqModels:
             urlString = "https://api.groq.com/openai/v1/models"
+        case .cerebrasModels:
+            urlString = "https://api.cerebras.ai/v1/models"
         case .anthropicModels:
             urlString = "https://api.anthropic.com/v1/models?limit=1"
         case .deepgramProjects:
@@ -83,7 +87,7 @@ struct ProviderKeyCheck: Equatable {
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         switch endpoint {
-        case .openAIModels, .groqModels, .mistralModels, .metaModels:
+        case .openAIModels, .groqModels, .cerebrasModels, .mistralModels, .metaModels:
             request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
         case .anthropicModels:
             request.setValue(secret, forHTTPHeaderField: "x-api-key")

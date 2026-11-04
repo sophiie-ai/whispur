@@ -6,6 +6,7 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
 
   python3 scripts/eval-cleanup.py --provider openai --prompt new
   python3 scripts/eval-cleanup.py --provider groq --prompt current --runs 1
+  python3 scripts/eval-cleanup.py --provider cerebras --runs 1
   python3 scripts/eval-cleanup.py --self-test
   python3 scripts/eval-cleanup.py --cases-file "$HOME/Library/Application Support/Whispur/MyEvalCases.jsonl"
   python3 scripts/eval-cleanup.py --provider openai --text-fixes --runs 1
@@ -24,7 +25,8 @@ against Evals/cleanup/cases.jsonl. Python 3 standard library only.
                   cleanupOutputContract, else the legacy shape (vocabulary
                   appended to the system prompt, bare wrapped transcript).
 
-Keys come from GROQ_API_KEY / OPENAI_API_KEY and are never printed. See
+Keys come from GROQ_API_KEY / OPENAI_API_KEY / CEREBRAS_API_KEY and are never
+printed. See
 Evals/cleanup/README.md for the scoring rules.
 """
 
@@ -63,6 +65,11 @@ PROVIDERS = {
         "model": "openai/gpt-oss-20b",
         "key_env": "GROQ_API_KEY",
     },
+    "cerebras": {
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "model": "gpt-oss-120b",
+        "key_env": "CEREBRAS_API_KEY",
+    },
     "openai": {
         "url": "https://api.openai.com/v1/chat/completions",
         "model": "gpt-6-luna",
@@ -81,7 +88,12 @@ def request_params(model: str, provider: str, max_tokens: int) -> dict:
         if provider == "groq":
             return {"max_completion_tokens": max_tokens, "reasoning_effort": "low",
                     "include_reasoning": False, "temperature": 0.0}
+        if provider == "cerebras":
+            return {"max_completion_tokens": max_tokens, "reasoning_effort": "low",
+                    "reasoning_format": "hidden", "temperature": 0.0}
         return {"max_tokens": max_tokens, "temperature": 0.0}
+    if provider == "cerebras" and name.startswith("qwen-3"):
+        return {"max_completion_tokens": max_tokens, "reasoning_effort": "none", "temperature": 0.0}
     if provider == "openai":
         if name.startswith(REASONING_OFF_MODELS):
             return {"max_completion_tokens": max_tokens, "reasoning_effort": "none", "temperature": 0.0}
