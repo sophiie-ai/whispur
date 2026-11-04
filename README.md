@@ -99,6 +99,7 @@ To walk through the welcome window again, choose `Run Setup Again` in `Settings`
 | Anthropic Claude | Available | High-quality cleanup |
 | OpenAI | Available | Fast cleanup path |
 | Groq | Available | OpenAI-compatible endpoint |
+| Cerebras | Available | OpenAI-compatible endpoint; defaults to `gpt-oss-120b` at low reasoning effort, with reasoning text hidden. `qwen-3.8-27b` runs with reasoning off |
 | AWS Bedrock | Available | Claude via Bedrock, authenticated with a Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK`) |
 
 ## Privacy
