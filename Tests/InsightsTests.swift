@@ -93,10 +93,26 @@ final class InsightsTests: XCTestCase {
         XCTAssertEqual(cleared.totalWords, 44, "Clearing insights keeps the word count")
     }
 
+    @MainActor
+    func testDamagedInsightsKeepUsageTotals() throws {
+        for damaged in [#"[]"#, #""x""#, #"42"#, #"{"dictations":"many","slots":[1,2]}"#] {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("stats-\(UUID().uuidString).json")
+            defer { try? FileManager.default.removeItem(at: url) }
+            let json = #"{"totalWords":40,"dailyWords":{"2026-11-01":40},"totalDictations":3,"insights":"# + damaged + "}"
+            try Data(json.utf8).write(to: url)
+
+            let stats = DictationStats(calendar: Self.utc, fileURL: url)
+            XCTAssertEqual(stats.totalWords, 40, "insights \(damaged) must not erase the word total")
+            XCTAssertEqual(stats.totalDictations, 3, "insights \(damaged)")
+            XCTAssertEqual(stats.insights, DictationInsights(), "insights \(damaged) decodes empty")
+        }
+    }
+
     func testCopy() {
         XCTAssertEqual(InsightsSettingsView.needMore(1), "Dictate 1 more time to see this. Counting started with this update.")
         XCTAssertEqual(InsightsSettingsView.duration(minutes: 125), "2 h 5 min")
         XCTAssertEqual(InsightsSettingsView.duration(minutes: 45), "45 min")
-        XCTAssertTrue(InsightsSettingsView.peakLabel(.init(weekday: 2, hour: 16, count: 1), calendar: Self.utc).hasPrefix("Mondays at 4"))
+        let label = InsightsSettingsView.peakLabel(.init(weekday: 2, hour: 16, count: 1), calendar: Self.utc, locale: Locale(identifier: "en_US_POSIX"))
+        XCTAssertTrue(label.hasPrefix("Mondays at 4"), label)
     }
 }

@@ -18,7 +18,7 @@ struct InsightsSettingsView: View {
     var body: some View {
         SettingsPage {
             PageHeader(SettingsTab.insights.title, subtitle: SettingsTab.insights.summary) {
-                if stats.insights.dictations > 0 {
+                if stats.insights.dictations > 0 || !stats.insights.corrections.isEmpty {
                     Button("Clear Insights") { confirmingClear = true }
                         .buttonStyle(.sophiieSecondary)
                 }
@@ -199,12 +199,12 @@ struct InsightsSettingsView: View {
     }
 
     /// "Tuesdays at 10 AM".
-    static func peakLabel(_ slot: DictationInsights.Slot, calendar: Calendar) -> String {
+    static func peakLabel(_ slot: DictationInsights.Slot, calendar: Calendar, locale: Locale = .current) -> String {
         let matching = DateComponents(hour: slot.hour, minute: 0, weekday: slot.weekday)
         guard let date = calendar.nextDate(after: Date(), matching: matching, matchingPolicy: .nextTime) else {
             return "\(slot.hour):00"
         }
-        let style = Date.FormatStyle(timeZone: calendar.timeZone)
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         return "\(date.formatted(style.weekday(.wide)))s at \(date.formatted(style.hour()))"
     }
 }

@@ -201,6 +201,25 @@ final class DictationStats: ObservableObject {
         var firstRecordedAt: Date?
         var totalDictations: Int?
         var insights: DictationInsights?
+
+        init(totalWords: Int, dailyWords: [String: Int], firstRecordedAt: Date?, totalDictations: Int?, insights: DictationInsights?) {
+            self.totalWords = totalWords
+            self.dailyWords = dailyWords
+            self.firstRecordedAt = firstRecordedAt
+            self.totalDictations = totalDictations
+            self.insights = insights
+        }
+
+        /// A damaged `insights` value decodes as missing, so it can never
+        /// fail the load and let the next save overwrite the word counts.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            totalWords = try container.decode(Int.self, forKey: .totalWords)
+            dailyWords = try container.decode([String: Int].self, forKey: .dailyWords)
+            firstRecordedAt = try container.decodeIfPresent(Date.self, forKey: .firstRecordedAt)
+            totalDictations = try container.decodeIfPresent(Int.self, forKey: .totalDictations)
+            insights = try? container.decodeIfPresent(DictationInsights.self, forKey: .insights)
+        }
     }
 
     private func load() {
