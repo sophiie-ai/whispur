@@ -67,7 +67,7 @@ PROVIDERS = {
     },
     "cerebras": {
         "url": "https://api.cerebras.ai/v1/chat/completions",
-        "model": "gpt-oss-120b",
+        "model": "qwen-3.8-27b",
         "key_env": "CEREBRAS_API_KEY",
     },
     "openai": {
