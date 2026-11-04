@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/sophiie-ai/whispur/compare/v0.31.1...v0.32.0) (2026-11-04)
+
+
+### Features
+
+* **cleanup:** default Cerebras cleanup to qwen-3.8-27b ([#132](https://github.com/sophiie-ai/whispur/issues/132)) ([7eb27ff](https://github.com/sophiie-ai/whispur/commit/7eb27ffe3c881a64d0c224f9318ef6616f83b673))
+
 ## [0.31.1](https://github.com/sophiie-ai/whispur/compare/v0.31.0...v0.31.1) (2026-11-04)
 
 
