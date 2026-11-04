@@ -3,6 +3,8 @@
     ".": {
       "release-type": "simple",
       "bump-minor-pre-major": true,
+      "draft": true,
+      "force-tag-creation": true,
       "extra-files": [
         {
           "type": "generic",
