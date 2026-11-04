@@ -6,16 +6,16 @@
     <description>Whispur update feed</description>
     <language>en</language>
     <item>
-      <title>Version 0.31.0</title>
-      <sparkle:version>3100</sparkle:version>
-      <sparkle:shortVersionString>0.31.0</sparkle:shortVersionString>
+      <title>Version 0.31.1</title>
+      <sparkle:version>3101</sparkle:version>
+      <sparkle:shortVersionString>0.31.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <pubDate>Wed, 04 Nov 2026 02:05:44 +0000</pubDate>
+      <pubDate>Wed, 04 Nov 2026 02:26:53 +0000</pubDate>
       <enclosure
-        url="https://github.com/sophiie-ai/whispur/releases/download/v0.31.0/Whispur.dmg"
-        length="8144668"
+        url="https://github.com/sophiie-ai/whispur/releases/download/v0.31.1/Whispur.dmg"
+        length="8144809"
         type="application/octet-stream"
-        sparkle:edSignature="pnv/ILoPgqSuVaQV3B4Y0RFHbcNIs+1Kim0GXT+ge3Ig9hi1EZ+6mYPRH2FnSnkDlS+ov9kBJxonlMTnESTUDA==" />
+        sparkle:edSignature="oBo2bQHGL1XHJLNs5zj8cX0am46G9H+S63gK6o+ACteTYzgSehnNmbDP62N1ZBTqTDQR/YkVqfdHi6CCgvCZDw==" />
     </item>
   </channel>
 </rss>
