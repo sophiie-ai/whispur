@@ -602,10 +602,26 @@ final class HotkeyManager {
             && modifiers.intersection([.command, .option, .shift, .control]) == [.command, .option]
     }
 
+    /// Key codes above the keyboard's typing range (0-127) are system key
+    /// events, not keys the user typed: recent Apple keyboards send one
+    /// (179) for the Fn/Globe key itself. They never make a chord, and never
+    /// end a double press between its two taps.
+    nonisolated static func isSystemKeyEvent(_ keyCode: UInt16) -> Bool {
+        keyCode > 127
+    }
+
     @discardableResult
     nonisolated func handleKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) -> Bool {
-        stateLock.withLock { state in
+        if Self.isSystemKeyEvent(keyCode) {
+            logger.info("System key event ignored by shortcuts: keyCode=\(keyCode)")
+            return false
+        }
+        let resetsDoublePress = stateLock.withLock { state -> Bool in
             _ = state.pressedKeyCodes.insert(keyCode)
+            return state.doublePress.isAwaitingSecondPress(at: ProcessInfo.processInfo.systemUptime)
+        }
+        if resetsDoublePress, toggleBinding?.isDoublePress == true {
+            logger.info("Double press reset by a key press between taps: keyCode=\(keyCode)")
         }
         if useRawWatchEnabled {
             if Self.isUseRawShortcut(keyCode: keyCode, modifiers: modifiers) {
@@ -652,6 +668,7 @@ final class HotkeyManager {
     }
 
     nonisolated func handleKeyUp(keyCode: UInt16) {
+        if Self.isSystemKeyEvent(keyCode) { return }
         stateLock.withLock { state in
             _ = state.pressedKeyCodes.remove(keyCode)
         }

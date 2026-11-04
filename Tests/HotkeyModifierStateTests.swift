@@ -275,4 +275,41 @@ final class HotkeyModifierStateTests: XCTestCase {
         keyboard.release(.fn)
         XCTAssertEqual(events(), ["toggleActivated", "toggleDeactivated"])
     }
+
+    // Recent Apple keyboards send a Globe key event (keyCode 179) with Fn.
+    // Arriving between the taps, it must not read as typing.
+    @MainActor
+    func testGlobeKeyEventBetweenTapsKeepsFnDoublePress() {
+        let (keyboard, events) = makeKeyboard(hold: .fnKey, toggle: .fnDoublePress, threshold: 0.33)
+        keyboard.press(.fn)
+        keyboard.release(.fn)
+        keyboard.manager.handleKeyDown(keyCode: 179)
+        keyboard.manager.handleKeyUp(keyCode: 179)
+        keyboard.press(.fn)
+        XCTAssertEqual(events(), ["toggleActivated", "toggleDeactivated"])
+    }
+
+    // A real key typed between the taps still means it was not a double press.
+    @MainActor
+    func testTypingBetweenTapsStillResetsFnDoublePress() {
+        let (keyboard, events) = makeKeyboard(hold: .fnKey, toggle: .fnDoublePress, threshold: 0.33)
+        keyboard.press(.fn)
+        keyboard.release(.fn)
+        keyboard.manager.handleKeyDown(keyCode: 0)
+        keyboard.manager.handleKeyUp(keyCode: 0)
+        keyboard.press(.fn)
+        XCTAssertEqual(events(), [])
+    }
+
+    // The Globe key event during a Fn hold's wait is not a chord.
+    @MainActor
+    func testGlobeKeyEventDuringArmWindowKeepsHold() {
+        let (keyboard, events) = makeKeyboard(threshold: 0.05)
+        keyboard.press(.fn)
+        keyboard.manager.handleKeyDown(keyCode: 179)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertEqual(events(), ["holdActivated"])
+        keyboard.release(.fn)
+        XCTAssertEqual(events(), ["holdActivated", "holdDeactivated"])
+    }
 }
