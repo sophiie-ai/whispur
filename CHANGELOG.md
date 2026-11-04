@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/sophiie-ai/whispur/compare/v0.31.0...v0.31.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **release:** keep each release a draft until its download is attached ([#130](https://github.com/sophiie-ai/whispur/issues/130)) ([efbcd6e](https://github.com/sophiie-ai/whispur/commit/efbcd6eb3670c2cefa92aaffa3766d62f74c4bda))
+
 ## [0.31.0](https://github.com/sophiie-ai/whispur/compare/v0.30.0...v0.31.0) (2026-11-04)
 
 
