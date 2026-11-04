@@ -5,6 +5,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
     case openai
     case anthropic
     case groq
+    case cerebras
     case bedrock
 
     var id: String { rawValue }
@@ -14,6 +15,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "OpenAI"
         case .anthropic: "Anthropic Claude"
         case .groq: "Groq"
+        case .cerebras: "Cerebras"
         case .bedrock: "AWS Bedrock"
         }
     }
@@ -23,6 +25,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: [.openaiAPIKey]
         case .anthropic: [.anthropicAPIKey]
         case .groq: [.groqAPIKey]
+        case .cerebras: [.cerebrasAPIKey]
         case .bedrock: [.awsBedrockAPIKey, .awsRegion]
         }
     }
@@ -37,6 +40,7 @@ enum LLMProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "gpt-6-luna"
         case .anthropic: "claude-haiku-5-5"
         case .groq: "openai/gpt-oss-20b"
+        case .cerebras: "gpt-oss-120b"
         case .bedrock: "anthropic.claude-haiku-5-5"
         }
     }

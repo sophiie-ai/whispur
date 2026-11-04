@@ -20,10 +20,12 @@ and `Tests/`).
 ```bash
 export GROQ_API_KEY=...      # or: "$(security find-generic-password -s ai.sophiie.whispur -a groq-api-key -w)"
 export OPENAI_API_KEY=...
+export CEREBRAS_API_KEY=...  # or: "$(security find-generic-password -s ai.sophiie.whispur -a cerebras-api-key -w)"
 
 python3 scripts/eval-cleanup.py --self-test                       # request building only, no API calls
 python3 scripts/eval-cleanup.py --provider openai --prompt new    # working-tree prompt, gpt-6-luna
 python3 scripts/eval-cleanup.py --provider groq --prompt current  # origin/main prompt, openai/gpt-oss-20b
+python3 scripts/eval-cleanup.py --provider cerebras --runs 1       # gpt-oss-120b on Cerebras
 python3 scripts/eval-cleanup.py --provider openai --cases sorry-late,code-npm --runs 3
 python3 scripts/eval-cleanup.py --provider openai --split tune    # tuning cases only
 python3 scripts/eval-cleanup.py --provider openai --cases-file ~/Library/Application\ Support/Whispur/MyEvalCases.jsonl
@@ -37,7 +39,7 @@ Options:
 |---|---|
 | `--prompt new` | `Prompts.defaultCleanup` from the working tree, with the current request shape: vocabulary in a `<vocabulary>` block in the user message, the transcript in `<dictation-to-clean>`, then the one-line output contract (`Prompts.cleanupOutputContract`). |
 | `--prompt current` | `Prompts.defaultCleanup` from `origin/main` (read with `git show`), with origin/main's request shape: the same user message as `new` when origin/main has `Prompts.cleanupOutputContract`, otherwise the legacy shape (vocabulary appended to the system prompt as a sentence, bare wrapped transcript). |
-| `--provider groq` / `openai` | Groq `openai/gpt-oss-20b` or OpenAI `gpt-6-luna`, with the same parameters the app sends (`OpenAIChatFormat.body`): Groq `reasoning_effort: low`, `include_reasoning: false`, `temperature: 0`; OpenAI `reasoning_effort: none`, `temperature: 0`; both `max_completion_tokens` from `LLMRequest.cleanupMaxTokens`. |
+| `--provider groq` / `openai` / `cerebras` | Groq `openai/gpt-oss-20b`, OpenAI `gpt-6-luna` or Cerebras `gpt-oss-120b`, with the same parameters the app sends (`OpenAIChatFormat.body`): Groq `reasoning_effort: low`, `include_reasoning: false`, `temperature: 0`; OpenAI `reasoning_effort: none`, `temperature: 0`; Cerebras `reasoning_effort: low`, `reasoning_format: hidden`, `temperature: 0` (`qwen-3.8-27b`: `reasoning_effort: none`); all `max_completion_tokens` from `LLMRequest.cleanupMaxTokens`. |
 | `--model ID` | Any other model on that provider (`openai/gpt-oss-120b`, `gpt-6.1-terra`, ...). Parameters follow `OpenAIChatFormat.parameterStyle`, so a model gets the request shape the app would send it. |
 | `--token-cap N` | Stop sending requests once the run has used N tokens (prompt + completion); the runs that finished are scored and saved. Use it to keep a Groq free-tier run inside a daily budget. |
 | `--text-fixes` | Run every input through the app's no-AI text fixes first (`Sources/Pipeline/TextFixes.swift`, compiled with `swiftc` into `/tmp/whispur-eval/text-fixes-cli` from `scripts/text-fixes-cli/main.swift`), with every fix on and straight quotes for `code` cases, as the app sends it to cleanup. An input left with nothing but fillers or annotations is scored as `EMPTY` with no request, as the app dismisses it. Without the flag the input is sent as written, like a build without text fixes. |

@@ -85,8 +85,8 @@ struct OpenAILLM: LLMProvider {
     }
 }
 
-/// Chat Completions request/response shape, shared by OpenAI, Groq and
-/// OpenAI-compatible gateways.
+/// Chat Completions request/response shape, shared by OpenAI, Groq,
+/// Cerebras and OpenAI-compatible gateways.
 enum OpenAIChatFormat {
     /// The parameter set a model accepts. Users can type any model ID (and
     /// point the OpenAI provider at any compatible gateway), so the request
@@ -104,6 +104,10 @@ enum OpenAIChatFormat {
         /// Groq-hosted gpt-oss: `reasoning_effort: "low"` (it has no
         /// `none`), reasoning dropped from the response, temperature allowed.
         case groqGptOSS
+        /// Cerebras-hosted gpt-oss: `reasoning_effort: "low"` (it has no
+        /// `none`), `reasoning_format: "hidden"` so no reasoning text comes
+        /// back, temperature allowed.
+        case cerebrasGptOSS
     }
 
     static func parameterStyle(model: String, providerID: LLMProviderID) -> ParameterStyle {
@@ -111,7 +115,15 @@ enum OpenAIChatFormat {
         let name = lowered.split(separator: "/").last.map(String.init) ?? lowered
 
         if name.hasPrefix("gpt-oss") {
-            return providerID == .groq ? .groqGptOSS : .classic
+            switch providerID {
+            case .groq: return .groqGptOSS
+            case .cerebras: return .cerebrasGptOSS
+            default: return .classic
+            }
+        }
+        // Cerebras Qwen reasons by default and documents `reasoning_effort: "none"`.
+        if providerID == .cerebras, name.hasPrefix("qwen-3") {
+            return .reasoningOff
         }
         guard providerID == .openai else { return .classic }
 
@@ -151,13 +163,18 @@ enum OpenAIChatFormat {
             payload["reasoning_effort"] = "low"
             payload["include_reasoning"] = false
             payload["temperature"] = request.temperature
+        case .cerebrasGptOSS:
+            payload["max_completion_tokens"] = request.maxTokens
+            payload["reasoning_effort"] = "low"
+            payload["reasoning_format"] = "hidden"
+            payload["temperature"] = request.temperature
         }
         return payload
     }
 
     static func settingsSummary(model: String, providerID: LLMProviderID, request: LLMRequest) -> String {
         let body = body(model: model, providerID: providerID, request: request)
-        let keys = ["max_tokens", "max_completion_tokens", "reasoning_effort", "include_reasoning", "temperature"]
+        let keys = ["max_tokens", "max_completion_tokens", "reasoning_effort", "reasoning_format", "include_reasoning", "temperature"]
         return keys.compactMap { key in body[key].map { "\(key): \($0)" } }.joined(separator: "\n")
     }
 
