@@ -10,6 +10,7 @@ struct PreferencesSettingsView: View {
     var body: some View {
         SettingsPage {
             PageHeader(SettingsTab.preferences.title, subtitle: SettingsTab.preferences.summary)
+            StartupSection()
             permissionsSection
             outputSection
             textFixesSection
@@ -253,6 +254,44 @@ struct DefaultPromptDisclosure: View {
             }
         }
         .padding(.vertical, 12)
+    }
+}
+
+/// "Open at login", backed by the macOS login item rather than a stored
+/// preference, so it matches System Settings → General → Login Items.
+private struct StartupSection: View {
+    @ObservedObject private var launchAtLogin = LaunchAtLogin.shared
+
+    var body: some View {
+        SettingsSection("Startup") {
+            SettingsCard {
+                SettingsRow(icon: "power", title: "Open at login", subtitle: subtitle) {
+                    HStack(spacing: 8) {
+                        if launchAtLogin.requiresApproval {
+                            Button("Open Login Items") { launchAtLogin.openLoginItemsSettings() }
+                                .buttonStyle(.sophiieSecondary)
+                                .controlSize(.small)
+                        }
+                        SettingsSwitch(label: "Open Whispur at login", isOn: isOnBinding)
+                    }
+                }
+            }
+        }
+        .onAppear { launchAtLogin.refresh() }
+    }
+
+    private var isOnBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLogin.isEnabled },
+            set: { launchAtLogin.setEnabled($0) }
+        )
+    }
+
+    private var subtitle: String {
+        if launchAtLogin.requiresApproval {
+            return "macOS is waiting for you to allow Whispur in System Settings \u{2192} Login Items."
+        }
+        return "Start Whispur when you log in, so your shortcut is ready right away."
     }
 }
 
