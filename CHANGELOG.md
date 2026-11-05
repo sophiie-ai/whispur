@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/sophiie-ai/whispur/compare/v0.32.1...v0.33.0) (2026-11-05)
+
+
+### Features
+
+* **settings:** open Whispur at login, on by default ([#136](https://github.com/sophiie-ai/whispur/issues/136)) ([68ac5e2](https://github.com/sophiie-ai/whispur/commit/68ac5e2eb8b12904b55f855c2dd07908287bee4b))
+
 ## [0.32.1](https://github.com/sophiie-ai/whispur/compare/v0.32.0...v0.32.1) (2026-11-04)
 
 
