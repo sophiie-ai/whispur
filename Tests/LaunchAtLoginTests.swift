@@ -42,8 +42,8 @@ final class LaunchAtLoginTests: XCTestCase {
 
     func testFirstLaunchFromApplicationsTurnsItOn() {
         let service = FakeLoginItemService(status: .notRegistered)
-        let controller = LaunchAtLogin(service: service)
-        controller.applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+        let controller = LaunchAtLogin(service: service, defaults: defaults)
+        controller.applyDefaultIfNeeded(location: .applicationsFolder)
         XCTAssertEqual(service.registerCalls, 1)
         XCTAssertTrue(controller.isEnabled)
         XCTAssertTrue(defaults.bool(forKey: LaunchAtLogin.defaultAppliedKey))
@@ -51,28 +51,28 @@ final class LaunchAtLoginTests: XCTestCase {
 
     func testTurningItOffSticksAcrossLaunches() {
         let service = FakeLoginItemService(status: .notRegistered)
-        let controller = LaunchAtLogin(service: service)
-        controller.applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+        let controller = LaunchAtLogin(service: service, defaults: defaults)
+        controller.applyDefaultIfNeeded(location: .applicationsFolder)
         controller.setEnabled(false)
         XCTAssertFalse(controller.isEnabled)
 
-        let nextLaunch = LaunchAtLogin(service: service)
-        nextLaunch.applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+        let nextLaunch = LaunchAtLogin(service: service, defaults: defaults)
+        nextLaunch.applyDefaultIfNeeded(location: .applicationsFolder)
         XCTAssertEqual(service.registerCalls, 1)
         XCTAssertFalse(nextLaunch.isEnabled)
     }
 
     func testCopiesOutsideApplicationsWaitForALaterLaunch() {
         let service = FakeLoginItemService(status: .notRegistered)
-        let controller = LaunchAtLogin(service: service)
+        let controller = LaunchAtLogin(service: service, defaults: defaults)
         let elsewhere: [AppInstallLocation] = [.developmentBuild, .diskImage(volumePath: "/Volumes/Whispur"), .translocated, .elsewhere]
         for location in elsewhere {
-            controller.applyDefaultIfNeeded(location: location, defaults: defaults)
+            controller.applyDefaultIfNeeded(location: location)
         }
         XCTAssertEqual(service.registerCalls, 0)
         XCTAssertFalse(defaults.bool(forKey: LaunchAtLogin.defaultAppliedKey))
 
-        controller.applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+        controller.applyDefaultIfNeeded(location: .applicationsFolder)
         XCTAssertEqual(service.registerCalls, 1)
     }
 
@@ -80,7 +80,7 @@ final class LaunchAtLoginTests: XCTestCase {
         for status in [SMAppService.Status.enabled, .requiresApproval, .notFound] {
             defaults.removePersistentDomain(forName: suite)
             let service = FakeLoginItemService(status: status)
-            LaunchAtLogin(service: service).applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+            LaunchAtLogin(service: service, defaults: defaults).applyDefaultIfNeeded(location: .applicationsFolder)
             XCTAssertEqual(service.registerCalls, 0, "status \(status.rawValue)")
         }
     }
@@ -88,13 +88,26 @@ final class LaunchAtLoginTests: XCTestCase {
     func testFailedRegistrationIsNotRetried() {
         let service = FakeLoginItemService(status: .notRegistered)
         service.registerError = NSError(domain: "test", code: 1)
-        LaunchAtLogin(service: service).applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
-        LaunchAtLogin(service: service).applyDefaultIfNeeded(location: .applicationsFolder, defaults: defaults)
+        LaunchAtLogin(service: service, defaults: defaults).applyDefaultIfNeeded(location: .applicationsFolder)
+        LaunchAtLogin(service: service, defaults: defaults).applyDefaultIfNeeded(location: .applicationsFolder)
         XCTAssertEqual(service.registerCalls, 1)
     }
 
+    func testChoiceMadeOutsideApplicationsSurvivesTheMove() {
+        let service = FakeLoginItemService(status: .notRegistered)
+        let fromDownloads = LaunchAtLogin(service: service, defaults: defaults)
+        fromDownloads.applyDefaultIfNeeded(location: .elsewhere)
+        fromDownloads.setEnabled(true)
+        fromDownloads.setEnabled(false)
+
+        let fromApplications = LaunchAtLogin(service: service, defaults: defaults)
+        fromApplications.applyDefaultIfNeeded(location: .applicationsFolder)
+        XCTAssertEqual(service.registerCalls, 1)
+        XCTAssertFalse(fromApplications.isEnabled)
+    }
+
     func testPendingApprovalCountsAsOn() {
-        let controller = LaunchAtLogin(service: FakeLoginItemService(status: .requiresApproval))
+        let controller = LaunchAtLogin(service: FakeLoginItemService(status: .requiresApproval), defaults: defaults)
         XCTAssertTrue(controller.isEnabled)
         XCTAssertTrue(controller.requiresApproval)
     }

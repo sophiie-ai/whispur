@@ -32,10 +32,12 @@ final class LaunchAtLogin: ObservableObject {
     @Published private(set) var status: SMAppService.Status
 
     private let service: LoginItemService
+    private let defaults: UserDefaults
     private var activeObserver: NSObjectProtocol?
 
-    init(service: LoginItemService = SMAppService.mainApp) {
+    init(service: LoginItemService = SMAppService.mainApp, defaults: UserDefaults = .standard) {
         self.service = service
+        self.defaults = defaults
         self.status = service.status
         activeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
@@ -66,7 +68,11 @@ final class LaunchAtLogin: ObservableObject {
         if current != status { status = current }
     }
 
+    /// A choice made with the switch, from any copy of the app, also
+    /// settles the default: a later first launch from Applications must not
+    /// undo it.
     func setEnabled(_ enabled: Bool) {
+        defaults.set(true, forKey: Self.defaultAppliedKey)
         do {
             if enabled {
                 try service.register()
@@ -100,7 +106,7 @@ final class LaunchAtLogin: ObservableObject {
 
     /// Runs the on-by-default registration at most once per Mac account.
     /// A launch outside Applications leaves it for a later launch.
-    func applyDefaultIfNeeded(location: AppInstallLocation, defaults: UserDefaults = .standard) {
+    func applyDefaultIfNeeded(location: AppInstallLocation) {
         guard location == .applicationsFolder, !defaults.bool(forKey: Self.defaultAppliedKey) else { return }
         // Marked before registering: a failed attempt is not retried, and
         // a user who already has it on (or off by approval) is left alone.
