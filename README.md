@@ -112,6 +112,8 @@ For each recent dictation, Whispur keeps diagnostics on this Mac in `~/Library/A
 
 Recordings are not kept, with two exceptions: a failed dictation, and one that looks wrong (see Activity log above). Their normalized recording stays in `~/Library/Application Support/Whispur/FailedAudio/`, readable only by your user, excluded from Time Machine and iCloud backups, and deleted after 24 hours.
 
+To debug a problem you can also turn on `Settings` → `Preferences` → `Keep my last few recordings on this Mac for debugging` (off by default). While it's on, Whispur keeps your last 5 recordings in `~/Library/Application Support/Whispur/DebugRecordings/` with the same protections, deletes each one after 24 hours, and never uploads them. Turning it off, or Clear History, deletes them right away.
+
 The Insights page is worked out on this Mac from counts only: words per day, how often you use words that aren't everyday words, dictations per weekday and hour, dictations per app, and how often you fix a word. No transcripts are kept for it, and nothing is sent anywhere. Clear Insights resets those counts.
 
 ## Development

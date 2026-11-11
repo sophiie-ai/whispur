@@ -21,6 +21,10 @@ final class AppState: ObservableObject {
     @AppStorage(AppState.spokenLanguagesKey) var sttLanguageSelectionStorage: String = ""
     /// Opt-in live streaming for providers that support it.
     @AppStorage("streamWhileTalking") var streamWhileTalking: Bool = false
+    /// Opt-in: keep the last few recordings on this Mac for debugging. Off
+    /// by default; turning it off deletes them (`setKeepDebugRecordings`).
+    @AppStorage(AppState.keepDebugRecordingsKey) private(set) var keepDebugRecordings: Bool = false
+    static let keepDebugRecordingsKey = "keepDebugRecordings"
     @AppStorage("selectedLLM") var selectedLLM: LLMProviderID = .anthropic
     /// "Clean up with AI". Off: paste exactly what the speech engine heard
     /// (spoken edit commands and text fixes still apply) and make no cleanup
@@ -488,8 +492,19 @@ final class AppState: ObservableObject {
         Task { await retrier.retry(id) }
     }
 
+    /// Turns the debug-recordings ring on or off. Off deletes every kept
+    /// recording right away.
+    func setKeepDebugRecordings(_ enabled: Bool) {
+        keepDebugRecordings = enabled
+        pipeline.keepDebugRecordings = enabled
+        if !enabled { historyStore.debugRecordings.deleteAll() }
+    }
+
     /// Failed recordings are kept for 24 hours: purge at launch, then hourly.
+    /// Debug recordings left from a run where the setting was turned off
+    /// are deleted at launch too.
     private func startFailedAudioPurge() {
+        if !keepDebugRecordings { historyStore.debugRecordings.deleteAll() }
         failedAudioPurgeTask?.cancel()
         failedAudioPurgeTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -1043,6 +1058,7 @@ final class AppState: ObservableObject {
         pipeline.muteSystemAudioWhileRecording = muteSystemAudioWhileRecording
         pipeline.systemAudioReductionPercent = systemAudioReductionPercent
         pipeline.streamingEnabled = streamWhileTalking
+        pipeline.keepDebugRecordings = keepDebugRecordings
 
         // `customSystemPrompt` is the single user-editable override. When
         // empty, the pipeline falls back to the built-in cleanup prompt.

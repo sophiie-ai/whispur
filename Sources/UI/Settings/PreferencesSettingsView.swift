@@ -15,6 +15,7 @@ struct PreferencesSettingsView: View {
             outputSection
             textFixesSection
             indicatorSection
+            DebugRecordingsSection(appState: appState, recordings: appState.historyStore.debugRecordings)
             aboutSection
         }
     }
@@ -336,5 +337,46 @@ extension EnvironmentValues {
     var listInputDevices: @Sendable () -> [AudioDevice] {
         get { self[ListInputDevicesKey.self] }
         set { self[ListInputDevicesKey.self] = newValue }
+    }
+}
+
+/// The opt-in switch for keeping recent recordings to debug with, and where
+/// to find them.
+struct DebugRecordingsSection: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var recordings: DebugRecordingStore
+
+    static let subtitle = "Keeps your last \(DebugRecordingStore.defaultCapacity) recordings on this Mac only. They are never uploaded or backed up, and each one is deleted after 24 hours. Turning this off deletes them right away."
+
+    var body: some View {
+        SettingsSection("Diagnostics", footer: footer) {
+            SettingsCard {
+                SettingsRow(
+                    icon: "waveform.badge.magnifyingglass",
+                    title: "Keep my last few recordings on this Mac for debugging",
+                    subtitle: Self.subtitle
+                ) {
+                    SettingsSwitch(
+                        label: "Keep my last few recordings on this Mac for debugging",
+                        isOn: Binding(
+                            get: { appState.keepDebugRecordings },
+                            set: { appState.setKeepDebugRecordings($0) }
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var footer: String {
+        let kept: String
+        switch recordings.count {
+        case 0: kept = "No recordings kept."
+        case 1: kept = "1 recording kept."
+        default: kept = "\(recordings.count) recordings kept."
+        }
+        return appState.keepDebugRecordings || recordings.count > 0
+            ? "\(kept) They are in \((recordings.files.directory.path as NSString).abbreviatingWithTildeInPath)."
+            : "Off: Whispur keeps a recording only when a dictation fails or looks wrong, for 24 hours."
     }
 }

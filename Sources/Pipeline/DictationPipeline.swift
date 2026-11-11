@@ -112,6 +112,9 @@ final class DictationPipeline: ObservableObject {
     /// Opt-in: stream audio to providers that support it while the user
     /// talks. The recording is still written and is the fallback.
     var streamingEnabled: Bool = false
+    /// Opt-in: copy each normalized recording into the debug ring
+    /// (`DebugRecordingStore`).
+    var keepDebugRecordings: Bool = false
 
     /// How long to wait after release for a streamed transcript before
     /// falling back to a batch request with the same recording.
@@ -1004,23 +1007,37 @@ final class DictationPipeline: ObservableObject {
     /// `finishNormalizedAudio`. Holds the stores, not the pipeline: this
     /// outlives the dictation.
     private func finishAfterNormalizing(_ normalization: Task<NormalizedAudio, Error>, dictationID: UUID) {
-        Task { [historyStore] in
+        Task { [historyStore, keepDebugRecordings] in
             let normalized = try? await normalization.value
-            Self.finishNormalizedAudio(normalized, dictationID: dictationID, history: historyStore)
+            Self.finishNormalizedAudio(
+                normalized,
+                dictationID: dictationID,
+                history: historyStore,
+                keepDebugCopy: keepDebugRecordings
+            )
         }
     }
 
     /// Runs once a dictation is over and its normalization has finished:
-    /// notes the normalized length in diagnostics, keeps the WAV when the
-    /// dictation looked anomalous, and otherwise deletes it (a failure has
-    /// already moved it into the failed-audio folder).
-    private static func finishNormalizedAudio(_ normalized: NormalizedAudio?, dictationID: UUID, history: PipelineHistoryStore) {
+    /// notes the normalized length in diagnostics, copies the WAV into the
+    /// debug ring when that is on, keeps it when the dictation looked
+    /// anomalous, and otherwise deletes it (a failure has already moved it
+    /// into the failed-audio folder).
+    private static func finishNormalizedAudio(
+        _ normalized: NormalizedAudio?,
+        dictationID: UUID,
+        history: PipelineHistoryStore,
+        keepDebugCopy: Bool
+    ) {
         guard let normalized else { return }
         history.diagnostics.update(dictationID) { record in
             record.audio?.normalizedSeconds = normalized.durationSeconds
             record.audio?.normalizedSampleCount = normalized.sampleCount
         }
         if FileManager.default.fileExists(atPath: normalized.url.path) {
+            if keepDebugCopy {
+                history.debugRecordings.keepCopy(of: normalized.url, id: dictationID)
+            }
             history.keepAnomalyAudio(dictationID, wavURL: normalized.url)
         }
         try? FileManager.default.removeItem(at: normalized.url)
