@@ -129,9 +129,10 @@ final class FailedDictationHistoryTests: XCTestCase {
         XCTAssertNil(history.item(first.id))
         XCTAssertFalse(history.failedAudio.exists(try XCTUnwrap(first.failure?.audioFileName)))
 
+        // Failed entries are pinned past maxItems (3 here), up to 10 more.
         let oldest = try fail()
-        for _ in 0 ..< 3 { _ = try fail() }
-        XCTAssertNil(history.item(oldest.id), "Trimmed past maxItems")
+        for _ in 0 ..< 3 + 10 { _ = try fail() }
+        XCTAssertNil(history.item(oldest.id), "Trimmed past maxItems and the pinned bound")
         XCTAssertFalse(history.failedAudio.exists(try XCTUnwrap(oldest.failure?.audioFileName)))
 
         let names = history.items.compactMap(\.failure?.audioFileName)

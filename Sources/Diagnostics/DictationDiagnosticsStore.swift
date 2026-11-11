@@ -8,18 +8,21 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "Diagnost
 ///
 /// Records hold measurements only (see `DictationDiagnostics`), so they are
 /// kept for every outcome, including the cancelled and no-speech dictations
-/// history never lists.
+/// history never lists. Failed and anomalous records older than the newest
+/// `maxItems` are kept too, up to `maxPinnedItems` of them.
 @MainActor
 final class DictationDiagnosticsStore: ObservableObject {
     @Published private(set) var items: [DictationDiagnostics] = []
 
     private let maxItems: Int
+    private let maxPinnedItems: Int
     let fileURL: URL
 
     /// - Parameter fileURL: Defaults to the app-support folder; tests pass a
     ///   temporary file.
-    init(maxItems: Int = 50, fileURL: URL? = nil) {
+    init(maxItems: Int = 50, maxPinnedItems: Int = 10, fileURL: URL? = nil) {
         self.maxItems = maxItems
+        self.maxPinnedItems = maxPinnedItems
         if let fileURL {
             self.fileURL = fileURL
         } else {
@@ -35,9 +38,7 @@ final class DictationDiagnosticsStore: ObservableObject {
     func record(_ diagnostics: DictationDiagnostics) {
         items.removeAll { $0.id == diagnostics.id }
         items.insert(diagnostics, at: 0)
-        if items.count > maxItems {
-            items = Array(items.prefix(maxItems))
-        }
+        items = PinnedTrim.trim(items, maxItems: maxItems, maxPinnedItems: maxPinnedItems, isPinned: \.isPinned).kept
         save()
     }
 

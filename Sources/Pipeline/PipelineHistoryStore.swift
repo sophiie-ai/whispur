@@ -4,12 +4,14 @@ import os
 
 private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "History")
 
-/// Stores the last N pipeline results for the Run Log.
+/// Stores the last N pipeline results for the Run Log. Failed and anomalous
+/// entries older than those are kept too, up to `maxPinnedItems`.
 @MainActor
 final class PipelineHistoryStore: ObservableObject {
     @Published private(set) var items: [PipelineResult] = []
 
     private let maxItems: Int
+    private let maxPinnedItems: Int
     private let fileURL: URL
     /// Where failed dictations keep their recordings. Removing an entry
     /// removes its recording.
@@ -25,11 +27,13 @@ final class PipelineHistoryStore: ObservableObject {
     ///   live beside it.
     init(
         maxItems: Int = 25,
+        maxPinnedItems: Int = 10,
         fileURL: URL? = nil,
         failedAudio: FailedAudioStore? = nil,
         diagnostics: DictationDiagnosticsStore? = nil
     ) {
         self.maxItems = maxItems
+        self.maxPinnedItems = maxPinnedItems
         self.failedAudio = failedAudio ?? FailedAudioStore(
             directory: fileURL.map { $0.deletingLastPathComponent().appendingPathComponent("FailedAudio", isDirectory: true) }
         )
@@ -55,11 +59,17 @@ final class PipelineHistoryStore: ObservableObject {
 
     func add(_ result: PipelineResult) {
         items.insert(result, at: 0)
-        if items.count > maxItems {
-            items.suffix(from: maxItems).forEach(deleteAudio(of:))
-            items = Array(items.prefix(maxItems))
-        }
+        let trimmed = PinnedTrim.trim(items, maxItems: maxItems, maxPinnedItems: maxPinnedItems, isPinned: \.isPinned)
+        trimmed.dropped.forEach(deleteAudio(of:))
+        items = trimmed.kept
         save()
+    }
+
+    /// Whether a dictation is failed or anomalous, in history or in its
+    /// diagnostics. The request log keeps such dictations' requests.
+    func isPinned(_ id: UUID) -> Bool {
+        if item(id)?.isPinned == true { return true }
+        return diagnostics.item(id)?.isPinned == true
     }
 
     func clear() {
@@ -77,6 +87,34 @@ final class PipelineHistoryStore: ObservableObject {
     func canRetry(_ item: PipelineResult) -> Bool {
         guard item.isFailed, let name = item.failure?.audioFileName else { return false }
         return failedAudio.exists(name)
+    }
+
+    /// The kept recording of a failed or anomalous entry, while it exists.
+    func keptAudioURL(for item: PipelineResult) -> URL? {
+        let name = item.isFailed ? item.failure?.audioFileName : item.anomaly?.audioFileName
+        guard let name, failedAudio.exists(name) else { return nil }
+        return failedAudio.url(for: name)
+    }
+
+    /// Marks a dictation that produced text but looked wrong.
+    func markAnomalous(_ id: UUID, reasons: [DictationAnomaly.Reason]) {
+        guard !reasons.isEmpty else { return }
+        update(id) { item in
+            item.anomaly = DictationAnomalyMark(reasons: reasons, audioFileName: item.anomaly?.audioFileName)
+        }
+    }
+
+    /// Moves an anomalous dictation's normalized recording into the
+    /// failed-audio folder (same protections and 24-hour expiry). Does
+    /// nothing unless the entry is marked anomalous.
+    func keepAnomalyAudio(_ id: UUID, wavURL: URL, now: Date = Date()) {
+        guard item(id)?.anomaly != nil else { return }
+        do {
+            let name = try failedAudio.keep(wavURL, id: id, now: now)
+            update(id) { $0.anomaly?.audioFileName = name }
+        } catch {
+            logger.error("Could not keep the recording of anomalous dictation \(id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Records a dictation that produced no text. Moves `wavURL` (when there
@@ -169,6 +207,10 @@ final class PipelineHistoryStore: ObservableObject {
                 items[index].failure?.audioFileName = nil
                 changed = true
             }
+            if let name = items[index].anomaly?.audioFileName, removed.contains(name) {
+                items[index].anomaly?.audioFileName = nil
+                changed = true
+            }
         }
         if changed { save() }
     }
@@ -181,6 +223,7 @@ final class PipelineHistoryStore: ObservableObject {
 
     private func deleteAudio(of item: PipelineResult) {
         if let name = item.failure?.audioFileName { failedAudio.delete(name) }
+        if let name = item.anomaly?.audioFileName { failedAudio.delete(name) }
     }
 
     // MARK: - Persistence
