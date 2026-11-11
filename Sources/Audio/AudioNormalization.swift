@@ -18,6 +18,14 @@ enum AudioNormalization {
         return outputURL
     }
 
+    /// Normalizes `inputURL` and reads back how many samples the WAV holds,
+    /// for diagnostics.
+    static func normalizeMeasured(_ inputURL: URL) throws -> NormalizedAudio {
+        let url = try normalize(inputURL)
+        let sampleCount = (try? AVAudioFile(forReading: url).length) ?? 0
+        return NormalizedAudio(url: url, sampleCount: sampleCount)
+    }
+
     static func writePreferredAudioCopy(from sourceURL: URL, to outputURL: URL) throws {
         let inputFile = try AVAudioFile(forReading: sourceURL)
         let inputFormat = inputFile.processingFormat
@@ -150,6 +158,17 @@ enum AudioNormalization {
                 throw AudioNormalizationError.preparationFailed("Audio conversion returned an unknown status.")
             }
         }
+    }
+}
+
+/// A normalized recording and its length.
+struct NormalizedAudio: Sendable {
+    let url: URL
+    /// Samples in the 16 kHz mono WAV.
+    let sampleCount: Int64
+
+    var durationSeconds: Double {
+        Double(sampleCount) / AudioNormalization.targetSampleRate
     }
 }
 

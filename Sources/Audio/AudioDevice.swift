@@ -90,6 +90,20 @@ struct AudioDevice: Identifiable, Hashable {
         }
     }
 
+    /// A device's display name, or nil when CoreAudio has none for it.
+    static func name(of deviceID: AudioDeviceID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceNameCFString,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var name: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr else { return nil }
+        let value = name as String
+        return value.isEmpty ? nil : value
+    }
+
     /// Resolve a CoreAudio device UID back to its current AudioDeviceID.
     /// Returns nil if the device is not currently connected.
     ///

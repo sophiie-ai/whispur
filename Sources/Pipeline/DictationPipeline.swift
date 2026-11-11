@@ -166,6 +166,9 @@ final class DictationPipeline: ObservableObject {
         var heardAudio = false
     }
     private var earlyCapture: EarlyCaptureState?
+    /// The current recording was adopted from an early capture, for
+    /// diagnostics.
+    private var recordingUsedEarlyCapture = false
     private var earlyCaptureWatchdog: Task<Void, Never>?
     /// The longest an early capture runs without a start adopting it. The
     /// shortcut decides within its 0.33 s arm window; this only makes sure a
@@ -324,7 +327,7 @@ final class DictationPipeline: ObservableObject {
         earlyCaptureWatchdog = Task { [weak self] in
             try? await Task.sleep(for: Self.earlyCaptureTimeout)
             guard !Task.isCancelled, let self, self.earlyCapture?.generation == generation else { return }
-            logger.info("Early capture timed out without a start")
+            logger.notice("Early capture timed out without a start")
             self.discardEarlyCapture()
         }
         StartLatencyTrace.mark("early capture requested")
@@ -386,6 +389,7 @@ final class DictationPipeline: ObservableObject {
     /// yet, `startRecorder` finishes when it gets there.
     private func adoptEarlyCapture(_ early: EarlyCaptureState) {
         endEarlyCapture()
+        recordingUsedEarlyCapture = true
         phase = .starting
         StartLatencyTrace.mark("overlay requested (.starting, early capture)")
         startStreamingIfEnabled()
@@ -439,10 +443,11 @@ final class DictationPipeline: ObservableObject {
             if wasStarting {
                 // Released before the recorder was even asked to start:
                 // nothing was said, so just put the overlay away.
+                recordDiagnostics(DictationDiagnostics(outcome: .cancelled, stage: .recording))
                 activeTriggerMode = .hold
                 phase = .idle
             } else {
-                presentError("No audio was captured.")
+                presentError("No audio was captured.", stage: .recording)
             }
             return
         }
@@ -453,12 +458,21 @@ final class DictationPipeline: ObservableObject {
 
         resetAudioSamples()
         processingTask?.cancel()
+        let usedEarlyCapture = recordingUsedEarlyCapture
         processingTask = Task { [weak self] in
-            await self?.processRecording(at: stopped.url, metrics: stopped.metrics, stream: stream)
+            await self?.processRecording(
+                at: stopped.url,
+                metrics: stopped.metrics,
+                stream: stream,
+                usedEarlyCapture: usedEarlyCapture
+            )
         }
     }
 
     func cancel() {
+        // A recording in progress (not one already processing, which records
+        // its own cancel) gets a diagnostics record.
+        let wasRecording = phase == .starting || phase == .recording
         recordingGeneration &+= 1
         endEarlyCapture()
         microphoneRequestTask?.cancel()
@@ -473,8 +487,15 @@ final class DictationPipeline: ObservableObject {
         audioLevelCancellable = nil
 
         recorder.onRecordingReady = nil
-        _ = recorder.stopRecording()
+        let stopped = recorder.stopRecording()
         recorder.onAudioBuffer = nil
+        if wasRecording {
+            recordDiagnostics(DictationDiagnostics(
+                outcome: .cancelled,
+                stage: .recording,
+                audio: stopped.map { DictationDiagnostics.Audio(metrics: $0.metrics, usedEarlyCapture: recordingUsedEarlyCapture) }
+            ))
+        }
         streamingSession?.cancel()
         streamingSession = nil
         recorder.cleanup()
@@ -493,8 +514,19 @@ final class DictationPipeline: ObservableObject {
         systemAudioMuter.restore()
     }
 
-    func presentError(_ message: String) {
-        logger.error("Pipeline error: \(message, privacy: .public)")
+    /// Shows an error that ended a dictation before its recording was
+    /// processed (permissions, setup, the recorder), and keeps a diagnostics
+    /// record of it.
+    func presentError(_ message: String, stage: DictationDiagnostics.Stage = .other) {
+        let diagnostics = DictationDiagnostics(outcome: .failed, stage: stage, errorMessage: message)
+        recordDiagnostics(diagnostics)
+        showError(message, dictationID: diagnostics.id)
+    }
+
+    /// Puts the overlay in its error state. Callers keep the diagnostics
+    /// record themselves.
+    private func showError(_ message: String, dictationID: UUID) {
+        logger.error("Pipeline error in dictation \(dictationID.uuidString, privacy: .public): \(message, privacy: .public)")
         phase = .error(message)
         scheduleResetToIdle()
     }
@@ -536,14 +568,14 @@ final class DictationPipeline: ObservableObject {
             case .some(true):
                 await beginRecording()
             case .some(false):
-                presentError("Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone.")
+                presentError("Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone.", stage: .recording)
             case .none:
-                presentError("Microphone permission request timed out. Try again or grant access in System Settings > Privacy & Security > Microphone.")
+                presentError("Microphone permission request timed out. Try again or grant access in System Settings > Privacy & Security > Microphone.", stage: .recording)
             }
         case .restricted, .denied:
-            presentError("Microphone access is unavailable. Enable it in System Settings > Privacy & Security > Microphone.")
+            presentError("Microphone access is unavailable. Enable it in System Settings > Privacy & Security > Microphone.", stage: .recording)
         @unknown default:
-            presentError("Whispur could not determine microphone permissions.")
+            presentError("Whispur could not determine microphone permissions.", stage: .recording)
         }
     }
 
@@ -555,6 +587,7 @@ final class DictationPipeline: ObservableObject {
         phase = .starting
         recordingGeneration &+= 1
         let generation = recordingGeneration
+        recordingUsedEarlyCapture = false
 
         recorder.onRecordingReady = { [weak self] in
             Task { @MainActor in self?.recorderHeardFirstAudio(generation: generation) }
@@ -573,14 +606,14 @@ final class DictationPipeline: ObservableObject {
         } catch {
             guard generation == recordingGeneration else { return }
             if earlyCapture?.generation == generation {
-                logger.info("Early capture failed to start: \(error.localizedDescription, privacy: .public)")
+                logger.notice("Early capture failed to start: \(error.localizedDescription, privacy: .public)")
                 discardEarlyCapture()
                 return
             }
             recorder.onAudioBuffer = nil
             streamingSession?.cancel()
             streamingSession = nil
-            presentError(error.localizedDescription)
+            presentError(error.localizedDescription, stage: .recording)
             return
         }
         StartLatencyTrace.mark("audio engine started")
@@ -681,7 +714,13 @@ final class DictationPipeline: ObservableObject {
         )
     }
 
-    private func processRecording(at recordedURL: URL, metrics: RecordingMetrics, stream: STTStreamingSession?) async {
+    private func processRecording(
+        at recordedURL: URL,
+        metrics: RecordingMetrics,
+        stream: STTStreamingSession?,
+        usedEarlyCapture: Bool = false,
+        dictationID: UUID = UUID()
+    ) async {
         defer {
             processingTask = nil
         }
@@ -690,6 +729,15 @@ final class DictationPipeline: ObservableObject {
             recorder.cleanup()
         }
 
+        // Every way out of here keeps a diagnostics record. It starts as
+        // "ended without an outcome" and each path below says how it ended.
+        var diagnostics = DictationDiagnostics.unfinished(
+            id: dictationID,
+            audio: DictationDiagnostics.Audio(metrics: metrics, usedEarlyCapture: usedEarlyCapture)
+        )
+        diagnostics.stage = .recording
+        defer { recordDiagnostics(diagnostics) }
+
         // Skip STT entirely if the recording doesn't contain enough speech.
         // See `minRecordingSeconds` / `noiseFloorMultiplier` comments above for
         // rationale. Providers hallucinate confidently on silent audio, so
@@ -697,6 +745,8 @@ final class DictationPipeline: ObservableObject {
         if !Self.recordingHasSpeech(metrics: metrics) {
             stream?.cancel()
             try? FileManager.default.removeItem(at: recordedURL)
+            diagnostics.outcome = .noSpeech
+            diagnostics.errorMessage = nil
             dismissForNoSpeech()
             return
         }
@@ -706,18 +756,19 @@ final class DictationPipeline: ObservableObject {
         // for a retry if the dictation fails. Removed at the end unless a
         // failure moved it into the failed-audio folder.
         phase = stream == nil ? .normalizingAudio : .transcribing
+        diagnostics.stage = stream == nil ? .normalization : .transcription
         let normalization = Task.detached(priority: .userInitiated) {
-            try AudioNormalization.normalize(recordedURL)
+            try AudioNormalization.normalizeMeasured(recordedURL)
         }
         defer {
-            Task.detached {
-                if let wavURL = try? await normalization.value {
-                    try? FileManager.default.removeItem(at: wavURL)
-                }
+            // Holds the stores, not the pipeline: this outlives the dictation.
+            Task { [historyStore] in
+                let normalized = try? await normalization.value
+                Self.finishNormalizedAudio(normalized, dictationID: dictationID, history: historyStore)
             }
         }
-        let dictationID = UUID()
         lastRoute = nil
+        let transcriptionStarted = ContinuousClock.now
 
         do {
 
@@ -740,32 +791,50 @@ final class DictationPipeline: ObservableObject {
                     return "The streamed transcript used \(scripts) letters, which none of your languages use."
                 },
                 retryRejected: { [self] rejected in
-                    try await batchTranscript(wavURL: try await normalization.value, initial: rejected)
+                    try await batchTranscript(wavURL: try await normalization.value.url, initial: rejected)
                 },
                 batch: { [self] in
-                    try await batchTranscript(wavURL: try await normalization.value, initial: nil)
+                    try await batchTranscript(wavURL: try await normalization.value.url, initial: nil)
                 }
                 )
             }
+            diagnostics.transcription = transcriptionDiagnostics(
+                stream: stream,
+                since: transcriptionStarted,
+                rawTranscript: rawTranscript,
+                recordingSeconds: metrics.totalDurationSeconds
+            )
+            diagnostics.stage = .transcription
             guard let normalizedRawTranscript = TranscriptDecision.normalizedRawTranscript(rawTranscript) else {
+                diagnostics.outcome = .noSpeech
+                diagnostics.errorMessage = nil
                 dismissForNoSpeech()
                 return
             }
 
-            guard let decided = await decideText(
-                forRaw: normalizedRawTranscript,
-                styleChoice: cleanupChoice(),
-                appBundleID: recordingAppBundleID,
-                updatesPhase: true
-            ) else {
+            diagnostics.stage = .cleanup
+            let styleChoice = cleanupChoice()
+            let decided = await ProviderRequestContext.$dictationID.withValue(dictationID) {
+                await decideText(
+                    forRaw: normalizedRawTranscript,
+                    styleChoice: styleChoice,
+                    appBundleID: recordingAppBundleID,
+                    updatesPhase: true
+                )
+            }
+            guard let decided else {
+                diagnostics.outcome = .noSpeech
+                diagnostics.errorMessage = nil
                 dismissForNoSpeech()
                 return
             }
             let finalTranscript = decided.text
+            diagnostics.cleanup = cleanupDiagnostics(decided)
 
             guard !Task.isCancelled else { throw CancellationError() }
 
             phase = .pasting
+            diagnostics.stage = .paste
             let delivered = deliverInsteadOfPasting?(finalTranscript) == true
             let pasteText = delivered ? finalTranscript : await smartSpaced(finalTranscript)
             if !delivered {
@@ -779,6 +848,7 @@ final class DictationPipeline: ObservableObject {
             if !delivered { onPasteCompleted?(finalTranscript) }
 
             let result = PipelineResult(
+                id: dictationID,
                 rawTranscript: normalizedRawTranscript,
                 cleanedText: finalTranscript,
                 sttProvider: lastRoute?.provider ?? selectedSTT,
@@ -796,35 +866,122 @@ final class DictationPipeline: ObservableObject {
             historyStore.add(result)
             if !delivered { onDictationPasted?(result) }
 
+            diagnostics.outcome = .success
+            diagnostics.errorMessage = nil
             phase = .done(finalTranscript)
             scheduleResetToIdle(after: .milliseconds(1200))
-
-            logger.info("Pipeline finished successfully")
         } catch is CancellationError {
-            logger.info("Pipeline processing cancelled")
+            diagnostics.outcome = .cancelled
+            diagnostics.errorMessage = nil
+            // A batch request starts only once normalization is done.
+            if diagnostics.stage == .normalization, lastRoute != nil { diagnostics.stage = .transcription }
             phase = .idle
         } catch {
             // URLSession throws URLError.cancelled when its Task is cancelled
             // mid-request; treat it as a clean cancel rather than surfacing
             // a misleading "cancelled" error banner.
             if !DictationFailureClassifier.isFailure(error, taskCancelled: Task.isCancelled) {
-                logger.info("Pipeline processing cancelled")
+                diagnostics.outcome = .cancelled
+                diagnostics.errorMessage = nil
+                if diagnostics.stage == .normalization, lastRoute != nil { diagnostics.stage = .transcription }
                 phase = .idle
             } else {
+                let normalized = try? await normalization.value
+                diagnostics.outcome = .failed
+                diagnostics.errorMessage = error.localizedDescription
+                // A batch transcription waits for normalization; when that
+                // failed, the error is normalization's.
+                if normalized == nil, diagnostics.stage == .normalization || diagnostics.stage == .transcription {
+                    diagnostics.stage = .normalization
+                } else if diagnostics.stage == .normalization {
+                    diagnostics.stage = .transcription
+                }
+                if diagnostics.transcription == nil, diagnostics.stage == .transcription {
+                    diagnostics.transcription = transcriptionDiagnostics(
+                        stream: stream,
+                        since: transcriptionStarted,
+                        rawTranscript: nil,
+                        recordingSeconds: metrics.totalDurationSeconds
+                    )
+                }
                 // Keep the recording so the user can retry from Activity.
                 historyStore.recordFailure(
                     id: dictationID,
                     error: error.localizedDescription,
-                    wavURL: try? await normalization.value,
+                    wavURL: normalized?.url,
                     sttProvider: lastRoute?.provider ?? selectedSTT,
                     sttFallbackFrom: lastRoute?.fallbackFrom,
                     llmProvider: selectedLLM,
                     appBundleID: recordingAppBundleID,
                     style: cleanupChoice()?.style
                 )
-                presentError(error.localizedDescription)
+                showError(error.localizedDescription, dictationID: dictationID)
             }
         }
+    }
+
+    /// Transcription signals for diagnostics. `rawTranscript` is nil when
+    /// transcription failed.
+    private func transcriptionDiagnostics(
+        stream: STTStreamingSession?,
+        since started: ContinuousClock.Instant,
+        rawTranscript: String?,
+        recordingSeconds: Double
+    ) -> DictationDiagnostics.Transcription {
+        let provider = lastRoute?.provider ?? selectedSTT
+        let raw = rawTranscript?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return DictationDiagnostics.Transcription(
+            provider: provider,
+            model: DictationDiagnostics.sttModel(for: provider),
+            fallbackFrom: lastRoute?.fallbackFrom,
+            streamed: stream != nil,
+            streamFellBack: stream != nil && lastRoute != nil,
+            latencyMS: Int(started.duration(to: .now) / .milliseconds(1)),
+            rawCharacterCount: raw?.count,
+            rawWordCount: raw.map(DictationDiagnostics.wordCount),
+            charactersPerSecond: raw.flatMap {
+                DictationDiagnostics.charactersPerSecond(characters: $0.count, seconds: recordingSeconds)
+            }
+        )
+    }
+
+    /// Cleanup signals for diagnostics.
+    private func cleanupDiagnostics(_ decided: DecidedText) -> DictationDiagnostics.Cleanup {
+        DictationDiagnostics.Cleanup(
+            provider: decided.cleanupOff ? nil : selectedLLM,
+            model: decided.llmModel,
+            latencyMS: decided.cleanupLatencyMS,
+            cleanedCharacterCount: decided.text.count,
+            editDivergence: decided.editDivergence,
+            rawFallbackReason: decided.rawFallbackReason?.rawValue,
+            cleanupOff: decided.cleanupOff,
+            error: decided.cleanupError
+        )
+    }
+
+    /// Saves a dictation's diagnostics and logs a one-line summary at a
+    /// level macOS keeps.
+    private func recordDiagnostics(_ diagnostics: DictationDiagnostics) {
+        historyStore.diagnostics.record(diagnostics)
+        let id = diagnostics.id.uuidString
+        switch diagnostics.outcome {
+        case .failed:
+            logger.error("Dictation \(id, privacy: .public): \(diagnostics.summary, privacy: .public). \(diagnostics.errorMessage ?? "", privacy: .public)")
+        case .success, .cancelled, .noSpeech:
+            logger.notice("Dictation \(id, privacy: .public): \(diagnostics.summary, privacy: .public)")
+        }
+    }
+
+    /// Runs once a dictation is over and its normalization has finished:
+    /// notes the normalized length in diagnostics, then deletes the WAV
+    /// unless a failure already moved it into the failed-audio folder.
+    private static func finishNormalizedAudio(_ normalized: NormalizedAudio?, dictationID: UUID, history: PipelineHistoryStore) {
+        guard let normalized else { return }
+        history.diagnostics.update(dictationID) { record in
+            record.audio?.normalizedSeconds = normalized.durationSeconds
+            record.audio?.normalizedSampleCount = normalized.sampleCount
+        }
+        try? FileManager.default.removeItem(at: normalized.url)
     }
 
     /// The text a dictation pastes, from its normalized raw transcript.
@@ -840,6 +997,13 @@ final class DictationPipeline: ObservableObject {
         /// Cleanup is switched off: the text is the transcript with only the
         /// spoken edit commands and text fixes applied, and no model saw it.
         let cleanupOff: Bool
+        /// How long the cleanup request took, when one ran.
+        var cleanupLatencyMS: Int? = nil
+        /// The cleanup request's error, when it failed.
+        var cleanupError: String? = nil
+        /// Share of words cleanup changed (`DictationDiagnostics.editDivergence`),
+        /// when its text is what gets pasted.
+        var editDivergence: Double? = nil
     }
 
     /// Applies the spoken edit commands and the text fixes, then cleanup
@@ -874,7 +1038,12 @@ final class DictationPipeline: ObservableObject {
                 llmModel: cleanup.llmModel,
                 style: cleanup.style,
                 rawFallbackReason: rawFallbackReason,
-                cleanupOff: false
+                cleanupOff: false,
+                cleanupLatencyMS: cleanup.latencyMS,
+                cleanupError: cleanup.error,
+                editDivergence: rawFallbackReason == nil
+                    ? DictationDiagnostics.editDivergence(raw: spoken, cleaned: text)
+                    : nil
             )
         }
     }
@@ -936,15 +1105,17 @@ final class DictationPipeline: ObservableObject {
         _ raw: String,
         styleChoice: CleanupStyleChoice?,
         updatesPhase: Bool
-    ) async -> (text: String?, llmModel: String?, style: WritingStyle?) {
+    ) async -> CleanupAttempt {
         // Skip LLM cleanup for very short transcripts: an LLM tends to
         // answer "thanks" instead of cleaning it. They are pasted raw.
         guard cleanupEnabled,
               TranscriptDecision.shouldRunCleanup(for: raw),
               let llmProvider = makeLLMProvider()
-        else { return (nil, nil, nil) }
+        else { return CleanupAttempt() }
         if updatesPhase { phase = .cleaningTranscript }
 
+        let started = ContinuousClock.now
+        func elapsedMS() -> Int { Int(started.duration(to: .now) / .milliseconds(1)) }
         do {
             let response = try await llmProvider.complete(
                 request: LLMRequest(
@@ -960,11 +1131,22 @@ final class DictationPipeline: ObservableObject {
                 )
             )
             let text = VoiceCommands.restoreLineBreaks(in: response.text, from: raw)
-            return (text, response.model, styleChoice?.style)
+            return CleanupAttempt(text: text, llmModel: response.model, style: styleChoice?.style, latencyMS: elapsedMS())
         } catch {
-            logger.warning("LLM cleanup failed, using raw transcript: \(error.localizedDescription, privacy: .public)")
-            return (nil, nil, nil)
+            let dictation = ProviderRequestContext.dictationID?.uuidString ?? "none"
+            logger.warning("LLM cleanup failed in dictation \(dictation, privacy: .public), using raw transcript: \(error.localizedDescription, privacy: .public)")
+            return CleanupAttempt(latencyMS: elapsedMS(), error: error.localizedDescription)
         }
+    }
+
+    /// What one cleanup attempt returned. `text` is nil when cleanup didn't
+    /// run or failed.
+    private struct CleanupAttempt {
+        var text: String?
+        var llmModel: String?
+        var style: WritingStyle?
+        var latencyMS: Int?
+        var error: String?
     }
 
     /// A retried dictation's text.
@@ -1089,31 +1271,37 @@ final class DictationPipeline: ObservableObject {
     /// near zero; in a café it's the ambient hum, so the threshold adapts.
     nonisolated static func recordingHasSpeech(metrics: RecordingMetrics) -> Bool {
         guard metrics.totalDurationSeconds >= Self.minRecordingSeconds else {
-            logger.info("Skipping STT: recording too short (\(metrics.totalDurationSeconds)s)")
+            logger.notice("Skipping STT: recording too short (\(metrics.totalDurationSeconds, privacy: .public)s)")
             return false
         }
 
         let series = metrics.buffers.dropFirst()
         guard !series.isEmpty, metrics.sampleRate > 0 else {
-            logger.info("Skipping STT: no buffer metrics available")
+            logger.notice("Skipping STT: no buffer metrics available")
             return false
         }
 
-        let noiseFloor = series.map(\.rms).min() ?? 0
-        let threshold = max(noiseFloor * Self.noiseFloorMultiplier, Self.absoluteFloorRMS)
-
+        let threshold = Float(speechThreshold(metrics: metrics))
         let voicedFrames = series.reduce(Int64(0)) { acc, buffer in
             buffer.rms > threshold ? acc + Int64(buffer.frameCount) : acc
         }
         let voicedSeconds = Double(voicedFrames) / metrics.sampleRate
 
         if voicedSeconds < Self.minVoicedSeconds {
-            logger.info(
-                "Skipping STT: voiced=\(voicedSeconds)s threshold=\(threshold) noiseFloor=\(noiseFloor)"
+            logger.notice(
+                "Skipping STT: voiced=\(voicedSeconds, privacy: .public)s threshold=\(threshold, privacy: .public)"
             )
             return false
         }
         return true
+    }
+
+    /// The per-buffer RMS a buffer must beat to count as voiced: three times
+    /// the recording's noise floor (its quietest buffer after the first),
+    /// and never below `absoluteFloorRMS`.
+    nonisolated static func speechThreshold(metrics: RecordingMetrics) -> Double {
+        let noiseFloor = metrics.buffers.dropFirst().map(\.rms).min() ?? 0
+        return Double(max(noiseFloor * Self.noiseFloorMultiplier, Self.absoluteFloorRMS))
     }
 
     /// Close the overlay immediately and play a soft chime when the
@@ -1169,6 +1357,17 @@ final class DictationPipeline: ObservableObject {
     /// tests.
     func setLastResultForRendering(_ result: PipelineResult?) {
         lastResult = result
+    }
+
+    /// Runs a finished recording through the pipeline as `stopAndProcess`
+    /// would, without a microphone. Tests only.
+    func processRecordingForTesting(
+        at url: URL,
+        metrics: RecordingMetrics,
+        usedEarlyCapture: Bool = false,
+        dictationID: UUID = UUID()
+    ) async {
+        await processRecording(at: url, metrics: metrics, stream: nil, usedEarlyCapture: usedEarlyCapture, dictationID: dictationID)
     }
     #endif
 

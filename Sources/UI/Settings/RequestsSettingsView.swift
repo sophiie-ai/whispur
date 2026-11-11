@@ -83,7 +83,12 @@ struct RequestsSettingsView: View {
             )
             .frame(minWidth: 260, idealWidth: 360)
 
-            RequestsInspectorPane(entry: selectedEntry, failedDictation: failedDictation(for: selectedEntry), isRetrying: failedDictation(for: selectedEntry).map { retrier.isRunning($0.id) } ?? false) { id in
+            RequestsInspectorPane(
+                entry: selectedEntry,
+                failedDictation: failedDictation(for: selectedEntry),
+                diagnostics: selectedEntry?.dictationID.flatMap { history.diagnostics.item($0) },
+                isRetrying: failedDictation(for: selectedEntry).map { retrier.isRunning($0.id) } ?? false
+            ) { id in
                 appState.retryFailedDictation(id)
             }
                 .frame(minWidth: 300)
@@ -232,6 +237,8 @@ private struct RequestsInspectorPane: View {
     /// Set when the request belonged to a dictation that failed and still
     /// has its recording.
     var failedDictation: PipelineResult?
+    /// The diagnostics of the dictation the request belonged to.
+    var diagnostics: DictationDiagnostics?
     var isRetrying = false
     var onRetry: (UUID) -> Void = { _ in }
 
@@ -261,6 +268,15 @@ private struct RequestsInspectorPane: View {
                                     .buttonStyle(.sophiiePrimary)
                                     .help("Transcribe the kept recording again and copy the text")
                             }
+                        }
+                    }
+
+                    if let diagnostics {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Dictation")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(SophiieTheme.Palette.muted)
+                            DictationDiagnosticsLine(diagnostics: diagnostics)
                         }
                     }
 

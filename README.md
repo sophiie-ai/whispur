@@ -67,7 +67,7 @@ To walk through the welcome window again, choose `Run Setup Again` in `Settings`
 - Toggle shortcut: By default, press Command + Fn to start hands-free recording and press it again to stop and process. You can also pick Fn twice (press Fn twice to start, once to stop); set "Press 🌐 key to" to Do Nothing in System Settings > Keyboard so macOS doesn't open the Emoji & Symbols panel.
 - Live words: With "Stream audio while you talk" on (ElevenLabs Scribe and Meta Muse), the recording overlay shows the words heard so far: the last two lines under the standard overlay, or one line beside the compact pill's waveform.
 - Use raw: When cleanup changed your words, a small "Cleaned up · Use raw ⌥⌘Z" toast shows for 4 seconds after the paste. Press ⌥⌘Z (or click it) to swap the pasted text for exactly what you said. It works only in the app you dictated into and only until you type something else; turn it off in `Settings` → `Preferences`.
-- Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts. A failed dictation keeps its recording for 24 hours so you can retry it; the retried text is copied to the clipboard.
+- Activity log: Open `Settings` → `Activity` to inspect raw and cleaned transcripts. A failed dictation keeps its recording for 24 hours so you can retry it; the retried text is copied to the clipboard. Each dictation also shows a one-line diagnostics summary (recording length and levels, which providers ran and how long they took, transcript lengths, how much cleanup changed); `Copy diagnostics` copies it as JSON for a bug report.
 - Mark as wrong: In `Settings` → `Activity`, expand a dictation and choose `Mark as wrong` (or right-click it). Fix what it should have said, tag it if you like, and Whispur appends one line to `~/Library/Application Support/Whispur/MyEvalCases.jsonl`. The file stays on your Mac; `Reveal file` in Activity opens it in Finder. Each line uses the same fields as `Evals/cleanup/cases.jsonl` with `"split": "mine"`, so you can score the cleanup prompt against your own dictations with the eval runner's `--cases-file` flag:
 
   ```bash
@@ -107,6 +107,8 @@ To walk through the welcome window again, choose `Run Setup Again` in `Settings`
 Audio stays local by default when you use the built-in Apple speech provider, and with Parakeet, which runs on this Mac once its model is downloaded. If you switch to a cloud STT or LLM provider, the audio or transcript needed for that provider is sent only to the services you configure.
 
 Whispur stores API keys in the macOS Keychain.
+
+For each recent dictation, Whispur keeps diagnostics on this Mac in `~/Library/Application Support/Whispur/dictation-diagnostics.json`: numbers such as recording length, input levels, timings, transcript lengths and the providers used, plus the error when one happened. They never contain audio or transcript text. Clear History in Activity deletes them.
 
 The Insights page is worked out on this Mac from counts only: words per day, how often you use words that aren't everyday words, dictations per weekday and hour, dictations per app, and how often you fix a word. No transcripts are kept for it, and nothing is sent anywhere. Clear Insights resets those counts.
 

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import os
 
@@ -13,14 +14,27 @@ final class PipelineHistoryStore: ObservableObject {
     /// Where failed dictations keep their recordings. Removing an entry
     /// removes its recording.
     let failedAudio: FailedAudioStore
+    /// Per-dictation measurements, keyed by the same id as the entries.
+    /// Clearing or deleting history clears them too.
+    let diagnostics: DictationDiagnosticsStore
+    private var diagnosticsCancellable: AnyCancellable?
 
     /// - Parameter fileURL: Where the history lives. Defaults to
     ///   `Application Support/Whispur/history.json`; tests and renders pass
-    ///   a temporary file.
-    init(maxItems: Int = 25, fileURL: URL? = nil, failedAudio: FailedAudioStore? = nil) {
+    ///   a temporary file, and the failed recordings and diagnostics then
+    ///   live beside it.
+    init(
+        maxItems: Int = 25,
+        fileURL: URL? = nil,
+        failedAudio: FailedAudioStore? = nil,
+        diagnostics: DictationDiagnosticsStore? = nil
+    ) {
         self.maxItems = maxItems
         self.failedAudio = failedAudio ?? FailedAudioStore(
             directory: fileURL.map { $0.deletingLastPathComponent().appendingPathComponent("FailedAudio", isDirectory: true) }
+        )
+        self.diagnostics = diagnostics ?? DictationDiagnosticsStore(
+            fileURL: fileURL.map { $0.deletingLastPathComponent().appendingPathComponent("dictation-diagnostics.json") }
         )
 
         if let fileURL {
@@ -33,6 +47,10 @@ final class PipelineHistoryStore: ObservableObject {
         }
 
         load()
+        // Views that show history also show its diagnostics.
+        diagnosticsCancellable = self.diagnostics.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     func add(_ result: PipelineResult) {
@@ -47,6 +65,7 @@ final class PipelineHistoryStore: ObservableObject {
     func clear() {
         items.forEach(deleteAudio(of:))
         items = []
+        diagnostics.clear()
         save()
     }
 
@@ -136,6 +155,7 @@ final class PipelineHistoryStore: ObservableObject {
         guard let item = item(id) else { return }
         deleteAudio(of: item)
         items.removeAll { $0.id == id }
+        diagnostics.delete(id)
         save()
     }
 
