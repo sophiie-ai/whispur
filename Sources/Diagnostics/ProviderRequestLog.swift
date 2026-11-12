@@ -40,18 +40,27 @@ extension ProviderRequestLogEntry {
     var isOnDevice: Bool { httpMethod == ProviderHTTPClient.onDeviceMethod }
 }
 
+/// The last `maxItems` provider requests, plus older requests of failed or
+/// anomalous dictations (`isPinnedDictation`), up to `maxPinnedItems`.
 @MainActor
 final class ProviderRequestLog: ObservableObject {
     @Published private(set) var items: [ProviderRequestLogEntry] = []
 
     private let maxItems: Int
+    private let maxPinnedItems: Int
     private let fileURL: URL
+    /// Whether a dictation's requests outlive the cap. Set by the app to ask
+    /// history; nothing is pinned until then.
+    var isPinnedDictation: (UUID) -> Bool = { _ in false }
 
     /// - Parameter fileURL: Where the log lives. Defaults to
     ///   `Application Support/Whispur/provider-requests.json`; renders pass a
     ///   temporary file.
-    init(maxItems: Int = 25, fileURL: URL? = nil) {
+    /// - Parameter maxPinnedItems: About 10 pinned dictations' worth of
+    ///   requests (a dictation makes one to a few).
+    init(maxItems: Int = 25, maxPinnedItems: Int = 40, fileURL: URL? = nil) {
         self.maxItems = maxItems
+        self.maxPinnedItems = maxPinnedItems
 
         if let fileURL {
             self.fileURL = fileURL
@@ -67,9 +76,9 @@ final class ProviderRequestLog: ObservableObject {
 
     func record(_ entry: ProviderRequestLogEntry) {
         items.insert(entry, at: 0)
-        if items.count > maxItems {
-            items = Array(items.prefix(maxItems))
-        }
+        items = PinnedTrim.trim(items, maxItems: maxItems, maxPinnedItems: maxPinnedItems) { [isPinnedDictation] entry in
+            entry.dictationID.map(isPinnedDictation) ?? false
+        }.kept
         save()
     }
 

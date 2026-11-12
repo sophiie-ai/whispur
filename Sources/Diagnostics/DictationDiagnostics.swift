@@ -96,7 +96,16 @@ struct DictationDiagnostics: Codable, Identifiable, Equatable {
     var audio: Audio?
     var transcription: Transcription?
     var cleanup: Cleanup?
+    /// Why the dictation looked wrong (`DictationAnomaly`). Nil when it
+    /// looked normal.
+    var anomalies: [DictationAnomaly.Reason]?
     var appVersion: String?
+
+    /// Failed or anomalous: kept past the store's cap, with the history
+    /// entry and provider requests of the same dictation.
+    var isPinned: Bool {
+        outcome == .failed || !(anomalies ?? []).isEmpty
+    }
 
     init(
         id: UUID = UUID(),

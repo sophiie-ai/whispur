@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Activity: the saved dictations, newest first, each expandable to the
@@ -40,7 +41,7 @@ struct ActivitySettingsView: View {
                     )
                 }
             } else {
-                SettingsSection("Recent dictations", footer: "Whispur keeps your most recent dictations on this Mac. When one fails, its recording is kept for 24 hours so you can retry it, then deleted. Successful recordings are never kept.") {
+                SettingsSection("Recent dictations", footer: "Whispur keeps your most recent dictations on this Mac. When one fails or looks wrong, its recording is kept on this Mac for 24 hours so you can replay or retry it, then deleted. Other recordings are never kept.") {
                     SettingsCard {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(historyStore.items.enumerated()), id: \.element.id) { index, item in
@@ -49,6 +50,7 @@ struct ActivitySettingsView: View {
                                     FailedActivityEntry(
                                         item: item,
                                         diagnostics: historyStore.diagnostics.item(item.id),
+                                        audioURL: historyStore.keptAudioURL(for: item),
                                         canRetry: historyStore.canRetry(item),
                                         isRetrying: retrier.isRunning(item.id),
                                         onRetry: { onRetry(item.id) },
@@ -58,6 +60,9 @@ struct ActivitySettingsView: View {
                                     ActivityEntry(
                                         item: item,
                                         diagnostics: historyStore.diagnostics.item(item.id),
+                                        keptAudioURL: historyStore.keptAudioURL(for: item),
+                                        isRetrying: retrier.isRunning(item.id),
+                                        onRetry: { onRetry(item.id) },
                                         isMarkedWrong: evalCases.isMarked(item.id),
                                         startsExpanded: item.id == initiallyExpanded,
                                         onMarkWrong: { markingItem = item },
@@ -130,6 +135,10 @@ struct ActivitySettingsView: View {
 private struct ActivityEntry: View {
     let item: PipelineResult
     let diagnostics: DictationDiagnostics?
+    /// The recording of an anomalous dictation, while it is kept.
+    let keptAudioURL: URL?
+    let isRetrying: Bool
+    let onRetry: () -> Void
     let isMarkedWrong: Bool
     let onMarkWrong: () -> Void
     let onAddToVocabulary: (() -> Void)?
@@ -139,6 +148,9 @@ private struct ActivityEntry: View {
     init(
         item: PipelineResult,
         diagnostics: DictationDiagnostics?,
+        keptAudioURL: URL? = nil,
+        isRetrying: Bool = false,
+        onRetry: @escaping () -> Void = {},
         isMarkedWrong: Bool,
         startsExpanded: Bool,
         onMarkWrong: @escaping () -> Void,
@@ -146,6 +158,9 @@ private struct ActivityEntry: View {
     ) {
         self.item = item
         self.diagnostics = diagnostics
+        self.keptAudioURL = keptAudioURL
+        self.isRetrying = isRetrying
+        self.onRetry = onRetry
         self.isMarkedWrong = isMarkedWrong
         self.onMarkWrong = onMarkWrong
         self.onAddToVocabulary = onAddToVocabulary
@@ -160,15 +175,21 @@ private struct ActivityEntry: View {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         // After "Use raw" the app holds the raw transcript.
-                        Text(item.usedRawAt == nil ? item.cleanedText : item.rawTranscript)
+                        Text(headline)
                             .font(.system(size: 13))
-                            .foregroundStyle(SophiieTheme.Palette.ink)
+                            .foregroundStyle(item.isNoSpeech ? SophiieTheme.Palette.muted : SophiieTheme.Palette.ink)
                             .lineLimit(isExpanded ? nil : 2)
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(item.timestamp.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(SophiieTheme.Palette.muted)
+                        HStack(spacing: 8) {
+                            Text(item.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(SophiieTheme.Palette.muted)
+                            if let anomaly = item.anomaly {
+                                PreferenceBadge(title: "Looks wrong", tone: .warning)
+                                    .help(anomaly.summary)
+                            }
+                        }
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -181,55 +202,63 @@ private struct ActivityEntry: View {
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .contextMenu {
-                Button("Mark as Wrong…", action: onMarkWrong)
-                if let onAddToVocabulary {
-                    Button("Add to Vocabulary…", action: onAddToVocabulary)
+                if !item.isNoSpeech {
+                    Button("Mark as Wrong…", action: onMarkWrong)
+                    if let onAddToVocabulary {
+                        Button("Add to Vocabulary…", action: onAddToVocabulary)
+                    }
                 }
             }
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
-                    transcriptBlock(item.isCleanupOff ? "Pasted" : "Cleaned", item.cleanedText)
-                    transcriptBlock("Raw", item.rawTranscript)
-                    HStack(spacing: 8) {
-                        PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
-                        if let from = item.sttFallbackFrom {
-                            PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
-                                .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
-                        }
-                        if item.isCleanupOff {
-                            PreferenceBadge(title: "Cleanup off", tone: .neutral)
-                                .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits and text fixes applied.")
-                        } else {
-                            PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
-                            if let llmModel = item.llmModel {
-                                PreferenceBadge(title: llmModel, tone: .neutral)
+                    // A no-speech entry has no text to show or mark.
+                    if !item.isNoSpeech {
+                        transcriptBlock(item.isCleanupOff ? "Pasted" : "Cleaned", item.cleanedText)
+                        transcriptBlock("Raw", item.rawTranscript)
+                        HStack(spacing: 8) {
+                            PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
+                            if let from = item.sttFallbackFrom {
+                                PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
+                                    .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
+                            }
+                            if item.isCleanupOff {
+                                PreferenceBadge(title: "Cleanup off", tone: .neutral)
+                                    .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits and text fixes applied.")
+                            } else {
+                                PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
+                                if let llmModel = item.llmModel {
+                                    PreferenceBadge(title: llmModel, tone: .neutral)
+                                }
+                            }
+                            if let style = item.style {
+                                PreferenceBadge(title: "\(style.title) style", tone: .neutral)
+                            }
+                            if item.failure?.retriedAt != nil {
+                                PreferenceBadge(title: "Retried", tone: .good)
+                            }
+                            if item.usedRawAt != nil {
+                                PreferenceBadge(title: "Used raw", tone: .neutral)
+                            }
+                            Spacer(minLength: 8)
+                            if let onAddToVocabulary {
+                                TextAction(title: "Add word", systemImage: "character.book.closed", action: onAddToVocabulary)
+                                    .fixedSize()
+                                    .help("Add to vocabulary: teach Whispur a word it misheard in this dictation")
+                            }
+                            if isMarkedWrong {
+                                Label("Marked as wrong", systemImage: "checkmark")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(SophiieTheme.Palette.muted)
+                            } else {
+                                TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
+                                    .fixedSize()
+                                    .help("Save this dictation as a private test case for the cleanup prompt")
                             }
                         }
-                        if let style = item.style {
-                            PreferenceBadge(title: "\(style.title) style", tone: .neutral)
-                        }
-                        if item.failure?.retriedAt != nil {
-                            PreferenceBadge(title: "Retried", tone: .good)
-                        }
-                        if item.usedRawAt != nil {
-                            PreferenceBadge(title: "Used raw", tone: .neutral)
-                        }
-                        Spacer(minLength: 8)
-                        if let onAddToVocabulary {
-                            TextAction(title: "Add word", systemImage: "character.book.closed", action: onAddToVocabulary)
-                                .fixedSize()
-                                .help("Add to vocabulary: teach Whispur a word it misheard in this dictation")
-                        }
-                        if isMarkedWrong {
-                            Label("Marked as wrong", systemImage: "checkmark")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(SophiieTheme.Palette.muted)
-                        } else {
-                            TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
-                                .fixedSize()
-                                .help("Save this dictation as a private test case for the cleanup prompt")
-                        }
+                    }
+                    if let anomaly = item.anomaly {
+                        anomalyRow(anomaly)
                     }
                     if let diagnostics {
                         DictationDiagnosticsLine(diagnostics: diagnostics)
@@ -239,6 +268,43 @@ private struct ActivityEntry: View {
             }
         }
         .padding(.vertical, 12)
+    }
+
+    /// The pasted text (the raw transcript after "Use raw"), or the reason
+    /// for a no-speech entry, which pasted nothing.
+    private var headline: String {
+        if item.isNoSpeech, let anomaly = item.anomaly { return anomaly.summary }
+        return item.usedRawAt == nil ? item.cleanedText : item.rawTranscript
+    }
+
+    /// Why the dictation looks wrong, and Play / Transcribe again while its
+    /// recording is kept.
+    private func anomalyRow(_ anomaly: DictationAnomalyMark) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(SophiieTheme.Palette.muted)
+                .accessibilityHidden(true)
+            Text(keptAudioURL == nil
+                ? "\(anomaly.summary). Recording no longer kept."
+                : "\(anomaly.summary). The recording stays on this Mac for 24 hours.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(SophiieTheme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let keptAudioURL {
+                TextAction(title: "Play", systemImage: "play.fill") { KeptRecordingPlayer.play(keptAudioURL) }
+                    .fixedSize()
+                    .help("Play the kept recording")
+                if isRetrying {
+                    ProgressView().controlSize(.small).accessibilityLabel("Transcribing again")
+                } else {
+                    TextAction(title: "Transcribe again", systemImage: "arrow.clockwise", action: onRetry)
+                        .fixedSize()
+                        .help("Transcribe the kept recording again and copy the text")
+                }
+            }
+        }
     }
 
     private func transcriptBlock(_ title: String, _ text: String) -> some View {
@@ -262,6 +328,8 @@ private struct ActivityEntry: View {
 struct FailedActivityEntry: View {
     let item: PipelineResult
     var diagnostics: DictationDiagnostics?
+    /// The kept recording, for Play.
+    var audioURL: URL?
     let canRetry: Bool
     let isRetrying: Bool
     let onRetry: () -> Void
@@ -300,6 +368,11 @@ struct FailedActivityEntry: View {
                         .font(.system(size: 12))
                         .foregroundStyle(SophiieTheme.Palette.muted)
                 } else {
+                    if let audioURL {
+                        Button("Play") { KeptRecordingPlayer.play(audioURL) }
+                            .buttonStyle(.sophiieSecondary)
+                            .help("Play the kept recording")
+                    }
                     if canRetry {
                         Button("Retry", action: onRetry)
                             .buttonStyle(.sophiiePrimary)
@@ -325,6 +398,18 @@ struct FailedActivityEntry: View {
             parts.append("Retry copies the text to the clipboard")
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Plays a kept recording (failed or anomalous dictation), one at a time.
+@MainActor
+enum KeptRecordingPlayer {
+    private static var sound: NSSound?
+
+    static func play(_ url: URL) {
+        sound?.stop()
+        sound = NSSound(contentsOf: url, byReference: true)
+        sound?.play()
     }
 }
 

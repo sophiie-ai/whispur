@@ -3,8 +3,9 @@ import os
 
 private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "FailedAudio")
 
-/// Keeps the recording of a FAILED dictation so it can be retried, and
-/// nothing else: successful dictations never land here.
+/// Keeps the recording of a FAILED dictation so it can be retried, or of an
+/// ANOMALOUS one (`DictationAnomaly`) so it can be replayed and transcribed
+/// again, and nothing else: normal successful dictations never land here.
 ///
 /// Files live in `Application Support/Whispur/FailedAudio/` (owner-only,
 /// excluded from Time Machine and iCloud backups, file protection on) and

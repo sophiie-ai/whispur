@@ -176,6 +176,10 @@ final class AppState: ObservableObject {
         self.registry = registry
         self.recorder = recorder
         self.historyStore = historyStore
+        // Requests of failed and anomalous dictations outlive the log's cap.
+        providerRequestLog.isPinnedDictation = { [weak historyStore] id in
+            historyStore?.isPinned(id) ?? false
+        }
         self.retrier = FailedDictationRetrier(history: historyStore) { [weak pipeline] audioURL, item in
             guard let pipeline else { throw CancellationError() }
             return try await pipeline.retryTranscription(audioURL: audioURL, appBundleID: item.appBundleID, dictationID: item.id)
@@ -474,7 +478,7 @@ final class AppState: ObservableObject {
     }
 
     var hasCompletedFirstDictation: Bool {
-        historyStore.items.contains { !$0.isFailed }
+        historyStore.items.contains(where: \.producedText)
     }
 
     /// Retries a failed dictation with the current settings and copies the

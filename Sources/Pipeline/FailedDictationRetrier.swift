@@ -8,6 +8,9 @@ private let logger = Logger(subsystem: "ai.sophiie.whispur", category: "Retry")
 /// cleanup run again on the kept recording, and the text goes to the
 /// clipboard rather than being pasted, since the app it was meant for is
 /// probably no longer in front.
+///
+/// An anomalous dictation (`DictationAnomaly`) can be transcribed again the
+/// same way; its entry keeps the text that was pasted.
 @MainActor
 final class FailedDictationRetrier: ObservableObject {
     /// Entries with a retry in flight.
@@ -45,16 +48,18 @@ final class FailedDictationRetrier: ObservableObject {
     /// Retries one failed entry. On success the entry takes the new text,
     /// its recording is deleted and the text is copied. On failure the
     /// recording stays and the entry shows the new error.
+    ///
+    /// For an anomalous entry the new text is only copied: the entry and
+    /// its recording stay as they are.
     func retry(_ id: UUID) async {
         guard !running.contains(id),
               let item = history.item(id),
-              item.isFailed
+              item.isFailed || item.anomaly != nil
         else { return }
-        guard let name = item.failure?.audioFileName,
-              history.failedAudio.exists(name),
-              let audioURL = history.failedAudio.url(for: name)
-        else {
-            history.markRetryFailed(id, error: DictationPipeline.RetryError.noRecording.localizedDescription)
+        guard let audioURL = history.keptAudioURL(for: item) else {
+            if item.isFailed {
+                history.markRetryFailed(id, error: DictationPipeline.RetryError.noRecording.localizedDescription)
+            }
             return
         }
 
@@ -62,21 +67,27 @@ final class FailedDictationRetrier: ObservableObject {
         defer { running.remove(id) }
         do {
             let result = try await process(audioURL, item)
-            history.markRetried(
-                id,
-                rawTranscript: result.rawTranscript,
-                text: result.text,
-                llmModel: result.llmModel,
-                style: result.style,
-                cleanupOff: result.cleanupOff
-            )
+            if item.isFailed {
+                history.markRetried(
+                    id,
+                    rawTranscript: result.rawTranscript,
+                    text: result.text,
+                    llmModel: result.llmModel,
+                    style: result.style,
+                    cleanupOff: result.cleanupOff
+                )
+            }
             copy(result.text)
             showToast("Copied to clipboard")
-            logger.info("Retried a failed dictation")
+            logger.notice("Transcribed dictation \(id.uuidString, privacy: .public) again")
         } catch {
             if error is CancellationError { return }
-            history.markRetryFailed(id, error: error.localizedDescription)
-            logger.warning("Retry failed: \(error.localizedDescription, privacy: .public)")
+            if item.isFailed {
+                history.markRetryFailed(id, error: error.localizedDescription)
+            } else {
+                showToast("Couldn't transcribe it again: \(error.localizedDescription)")
+            }
+            logger.error("Retry of dictation \(id.uuidString, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
