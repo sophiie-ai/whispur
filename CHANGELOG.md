@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.34.0](https://github.com/sophiie-ai/whispur/compare/v0.33.0...v0.34.0) (2026-11-12)
+
+
+### Features
+
+* **diagnostics:** keep audio only for dictations that look wrong and pin failures ([#139](https://github.com/sophiie-ai/whispur/issues/139)) ([cd77573](https://github.com/sophiie-ai/whispur/commit/cd77573ca109b6c03aca3cd78a9dc360e73158e0))
+* **diagnostics:** record what happened in every dictation without keeping audio ([#138](https://github.com/sophiie-ai/whispur/issues/138)) ([b2fba83](https://github.com/sophiie-ai/whispur/commit/b2fba831108adbf141509f7e35ca334756bceb44))
+* **settings:** opt-in recent recordings for debugging ([#140](https://github.com/sophiie-ai/whispur/issues/140)) ([cccf0ee](https://github.com/sophiie-ai/whispur/commit/cccf0eeb0470e355a2a7fb62184d11a967cfc7be))
+
 ## [0.33.0](https://github.com/sophiie-ai/whispur/compare/v0.32.1...v0.33.0) (2026-11-05)
 
 
