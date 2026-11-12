@@ -104,6 +104,34 @@ final class PipelineHistoryStore: ObservableObject {
         }
     }
 
+    /// Adds an entry for a long dictation that ended with no speech, so it
+    /// shows in Activity (pinned, "Looks wrong") and can keep its recording.
+    @discardableResult
+    func recordNoSpeech(
+        id: UUID,
+        audioSeconds: Double,
+        sttProvider: STTProviderID,
+        sttFallbackFrom: STTProviderID? = nil,
+        llmProvider: LLMProviderID,
+        appBundleID: String?,
+        at timestamp: Date = Date()
+    ) -> PipelineResult {
+        var result = PipelineResult(
+            id: id,
+            rawTranscript: "",
+            cleanedText: "",
+            sttProvider: sttProvider,
+            llmProvider: llmProvider,
+            llmModel: nil,
+            timestamp: timestamp,
+            appBundleID: appBundleID,
+            sttFallbackFrom: sttFallbackFrom
+        )
+        result.anomaly = DictationAnomalyMark(reasons: [.noSpeech], audioFileName: nil, audioSeconds: audioSeconds)
+        add(result)
+        return result
+    }
+
     /// Moves an anomalous dictation's normalized recording into the
     /// failed-audio folder (same protections and 24-hour expiry). Does
     /// nothing unless the entry is marked anomalous.

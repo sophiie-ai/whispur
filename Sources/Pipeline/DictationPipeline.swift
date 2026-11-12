@@ -744,9 +744,23 @@ final class DictationPipeline: ObservableObject {
         // gating aggressively here saves both a request and a bad paste.
         if !Self.recordingHasSpeech(metrics: metrics) {
             stream?.cancel()
-            try? FileManager.default.removeItem(at: recordedURL)
             diagnostics.outcome = .noSpeech
             diagnostics.errorMessage = nil
+            if metrics.totalDurationSeconds >= DictationAnomaly.minSecondsForRate {
+                // Long audio with no speech is anomalous: normalize a copy
+                // in the background so the finish step can keep it. The
+                // copy (a clone on APFS) outlives the recorder's cleanup.
+                let copy = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(recordedURL.pathExtension)
+                if (try? FileManager.default.copyItem(at: recordedURL, to: copy)) != nil {
+                    finishAfterNormalizing(Task.detached(priority: .utility) {
+                        defer { try? FileManager.default.removeItem(at: copy) }
+                        return try AudioNormalization.normalizeMeasured(copy)
+                    }, dictationID: dictationID)
+                }
+            }
+            try? FileManager.default.removeItem(at: recordedURL)
             dismissForNoSpeech()
             return
         }
@@ -760,13 +774,7 @@ final class DictationPipeline: ObservableObject {
         let normalization = Task.detached(priority: .userInitiated) {
             try AudioNormalization.normalizeMeasured(recordedURL)
         }
-        defer {
-            // Holds the stores, not the pipeline: this outlives the dictation.
-            Task { [historyStore] in
-                let normalized = try? await normalization.value
-                Self.finishNormalizedAudio(normalized, dictationID: dictationID, history: historyStore)
-            }
-        }
+        defer { finishAfterNormalizing(normalization, dictationID: dictationID) }
         lastRoute = nil
         let transcriptionStarted = ContinuousClock.now
 
@@ -969,6 +977,15 @@ final class DictationPipeline: ObservableObject {
         historyStore.diagnostics.record(diagnostics)
         if diagnostics.outcome == .success {
             historyStore.markAnomalous(diagnostics.id, reasons: reasons)
+        } else if diagnostics.outcome == .noSpeech, reasons.contains(.noSpeech) {
+            historyStore.recordNoSpeech(
+                id: diagnostics.id,
+                audioSeconds: diagnostics.audio?.recordingSeconds ?? 0,
+                sttProvider: diagnostics.transcription?.provider ?? lastRoute?.provider ?? selectedSTT,
+                sttFallbackFrom: diagnostics.transcription?.fallbackFrom,
+                llmProvider: selectedLLM,
+                appBundleID: recordingAppBundleID
+            )
         }
         let id = diagnostics.id.uuidString
         switch diagnostics.outcome {
@@ -977,9 +994,19 @@ final class DictationPipeline: ObservableObject {
         case .success, .cancelled, .noSpeech:
             logger.notice("Dictation \(id, privacy: .public): \(diagnostics.summary, privacy: .public)")
         }
-        if diagnostics.outcome == .success, !reasons.isEmpty {
+        if diagnostics.outcome == .success || diagnostics.outcome == .noSpeech, !reasons.isEmpty {
             let labels = reasons.map(\.rawValue).joined(separator: ", ")
             logger.notice("Dictation \(id, privacy: .public) looks anomalous (\(labels, privacy: .public)); keeping its recording for 24 hours")
+        }
+    }
+
+    /// Waits for `normalization` in the background, then runs
+    /// `finishNormalizedAudio`. Holds the stores, not the pipeline: this
+    /// outlives the dictation.
+    private func finishAfterNormalizing(_ normalization: Task<NormalizedAudio, Error>, dictationID: UUID) {
+        Task { [historyStore] in
+            let normalized = try? await normalization.value
+            Self.finishNormalizedAudio(normalized, dictationID: dictationID, history: historyStore)
         }
     }
 
@@ -1466,6 +1493,13 @@ struct PipelineResult: Identifiable, Codable {
 
     /// Failed or anomalous: kept past history's cap (see `PinnedTrim`).
     var isPinned: Bool { failure != nil || anomaly != nil }
+
+    /// A long dictation that ended with no speech: listed so its recording
+    /// can be replayed, but nothing was pasted.
+    var isNoSpeech: Bool { anomaly?.reasons.contains(.noSpeech) == true }
+
+    /// A dictation that pasted text (not failed, not a no-speech entry).
+    var producedText: Bool { !isFailed && !isNoSpeech }
 
     init(
         id: UUID = UUID(),

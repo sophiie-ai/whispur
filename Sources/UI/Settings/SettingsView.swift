@@ -118,7 +118,7 @@ struct SettingsView: View {
             microphoneGranted: microphoneGranted,
             accessibilityGranted: accessibilityGranted,
             speechReady: credentials.readinessStatus(for: appState.selectedSTT.setupDescriptor, localModel: parakeetModel).isReady,
-            hasDictated: historyStore.items.contains { !$0.isFailed },
+            hasDictated: historyStore.items.contains(where: \.producedText),
             hasShortcut: appState.hasAnyShortcut
         )
     }

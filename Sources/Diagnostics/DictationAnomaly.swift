@@ -18,6 +18,9 @@ enum DictationAnomaly {
         /// The selected speech provider didn't produce the transcript (its
         /// model wasn't downloaded, or a stream fell back to a batch request).
         case sttFellBack
+        /// Long audio ended with no speech: the speech gate found none, the
+        /// transcript was empty, or nothing was left after spoken edits.
+        case noSpeech
 
         var label: String {
             switch self {
@@ -25,12 +28,14 @@ enum DictationAnomaly {
             case .lowCharacterRate: "Few words for the audio length"
             case .cleanupDiverged: "Cleanup changed most of the words"
             case .sttFellBack: "Speech provider fell back"
+            case .noSpeech: "No speech"
             }
         }
     }
 
-    /// Audio shorter than this is never judged on its character rate: a
-    /// short pause before a short phrase is normal.
+    /// Audio shorter than this is never judged on its character rate, and a
+    /// no-speech result from it is never anomalous: a short pause before a
+    /// short phrase, or an accidental tap, is normal.
     static let minSecondsForRate: Double = 10
     /// Characters per second below which long audio counts as anomalous.
     /// Speech runs at roughly 12-15 characters per second, so 3 means most
@@ -45,11 +50,15 @@ enum DictationAnomaly {
     static let minWordsForDivergence = 8
 
     /// Why `diagnostics` looks wrong, or empty when it looks normal.
-    /// No-speech and cancelled dictations are never anomalous.
+    /// Cancelled dictations are never anomalous; no-speech ones are when the
+    /// audio was at least `minSecondsForRate` long.
     static func reasons(for diagnostics: DictationDiagnostics) -> [Reason] {
         switch diagnostics.outcome {
-        case .cancelled, .noSpeech:
+        case .cancelled:
             return []
+        case .noSpeech:
+            guard let seconds = diagnostics.audio?.recordingSeconds, seconds >= minSecondsForRate else { return [] }
+            return [.noSpeech]
         case .failed:
             return [.failed]
         case .success:
@@ -81,8 +90,15 @@ struct DictationAnomalyMark: Codable, Equatable {
     var reasons: [DictationAnomaly.Reason]
     /// File name in `FailedAudioStore`, or nil once deleted or expired.
     var audioFileName: String?
+    /// Length of the recording, for the no-speech reason's wording.
+    var audioSeconds: Double?
 
     var summary: String {
-        reasons.map(\.label).joined(separator: " · ")
+        reasons.map { reason in
+            if reason == .noSpeech, let audioSeconds {
+                return "No speech in \(Int(audioSeconds.rounded())) s of audio"
+            }
+            return reason.label
+        }.joined(separator: " · ")
     }
 }

@@ -127,6 +127,7 @@ struct DictationSettingsView: View {
     /// nothing), with line breaks folded into spaces.
     static func previewText(_ item: PipelineResult) -> String {
         if item.isFailed { return "Failed: \(item.failure?.error ?? "")" }
+        if item.isNoSpeech, let anomaly = item.anomaly { return anomaly.summary }
         let cleaned = item.cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = cleaned.isEmpty ? item.rawTranscript : cleaned
         return text

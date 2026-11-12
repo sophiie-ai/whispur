@@ -175,9 +175,9 @@ private struct ActivityEntry: View {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         // After "Use raw" the app holds the raw transcript.
-                        Text(item.usedRawAt == nil ? item.cleanedText : item.rawTranscript)
+                        Text(headline)
                             .font(.system(size: 13))
-                            .foregroundStyle(SophiieTheme.Palette.ink)
+                            .foregroundStyle(item.isNoSpeech ? SophiieTheme.Palette.muted : SophiieTheme.Palette.ink)
                             .lineLimit(isExpanded ? nil : 2)
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -202,54 +202,59 @@ private struct ActivityEntry: View {
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .contextMenu {
-                Button("Mark as Wrong…", action: onMarkWrong)
-                if let onAddToVocabulary {
-                    Button("Add to Vocabulary…", action: onAddToVocabulary)
+                if !item.isNoSpeech {
+                    Button("Mark as Wrong…", action: onMarkWrong)
+                    if let onAddToVocabulary {
+                        Button("Add to Vocabulary…", action: onAddToVocabulary)
+                    }
                 }
             }
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
-                    transcriptBlock(item.isCleanupOff ? "Pasted" : "Cleaned", item.cleanedText)
-                    transcriptBlock("Raw", item.rawTranscript)
-                    HStack(spacing: 8) {
-                        PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
-                        if let from = item.sttFallbackFrom {
-                            PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
-                                .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
-                        }
-                        if item.isCleanupOff {
-                            PreferenceBadge(title: "Cleanup off", tone: .neutral)
-                                .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits and text fixes applied.")
-                        } else {
-                            PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
-                            if let llmModel = item.llmModel {
-                                PreferenceBadge(title: llmModel, tone: .neutral)
+                    // A no-speech entry has no text to show or mark.
+                    if !item.isNoSpeech {
+                        transcriptBlock(item.isCleanupOff ? "Pasted" : "Cleaned", item.cleanedText)
+                        transcriptBlock("Raw", item.rawTranscript)
+                        HStack(spacing: 8) {
+                            PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
+                            if let from = item.sttFallbackFrom {
+                                PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
+                                    .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
                             }
-                        }
-                        if let style = item.style {
-                            PreferenceBadge(title: "\(style.title) style", tone: .neutral)
-                        }
-                        if item.failure?.retriedAt != nil {
-                            PreferenceBadge(title: "Retried", tone: .good)
-                        }
-                        if item.usedRawAt != nil {
-                            PreferenceBadge(title: "Used raw", tone: .neutral)
-                        }
-                        Spacer(minLength: 8)
-                        if let onAddToVocabulary {
-                            TextAction(title: "Add word", systemImage: "character.book.closed", action: onAddToVocabulary)
-                                .fixedSize()
-                                .help("Add to vocabulary: teach Whispur a word it misheard in this dictation")
-                        }
-                        if isMarkedWrong {
-                            Label("Marked as wrong", systemImage: "checkmark")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(SophiieTheme.Palette.muted)
-                        } else {
-                            TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
-                                .fixedSize()
-                                .help("Save this dictation as a private test case for the cleanup prompt")
+                            if item.isCleanupOff {
+                                PreferenceBadge(title: "Cleanup off", tone: .neutral)
+                                    .help("Clean up with AI was off: Whispur pasted what the speech engine heard, with spoken edits and text fixes applied.")
+                            } else {
+                                PreferenceBadge(title: item.llmProvider.displayName, tone: .neutral)
+                                if let llmModel = item.llmModel {
+                                    PreferenceBadge(title: llmModel, tone: .neutral)
+                                }
+                            }
+                            if let style = item.style {
+                                PreferenceBadge(title: "\(style.title) style", tone: .neutral)
+                            }
+                            if item.failure?.retriedAt != nil {
+                                PreferenceBadge(title: "Retried", tone: .good)
+                            }
+                            if item.usedRawAt != nil {
+                                PreferenceBadge(title: "Used raw", tone: .neutral)
+                            }
+                            Spacer(minLength: 8)
+                            if let onAddToVocabulary {
+                                TextAction(title: "Add word", systemImage: "character.book.closed", action: onAddToVocabulary)
+                                    .fixedSize()
+                                    .help("Add to vocabulary: teach Whispur a word it misheard in this dictation")
+                            }
+                            if isMarkedWrong {
+                                Label("Marked as wrong", systemImage: "checkmark")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(SophiieTheme.Palette.muted)
+                            } else {
+                                TextAction(title: "Mark as wrong", systemImage: "flag", action: onMarkWrong)
+                                    .fixedSize()
+                                    .help("Save this dictation as a private test case for the cleanup prompt")
+                            }
                         }
                     }
                     if let anomaly = item.anomaly {
@@ -263,6 +268,13 @@ private struct ActivityEntry: View {
             }
         }
         .padding(.vertical, 12)
+    }
+
+    /// The pasted text (the raw transcript after "Use raw"), or the reason
+    /// for a no-speech entry, which pasted nothing.
+    private var headline: String {
+        if item.isNoSpeech, let anomaly = item.anomaly { return anomaly.summary }
+        return item.usedRawAt == nil ? item.cleanedText : item.rawTranscript
     }
 
     /// Why the dictation looks wrong, and Play / Transcribe again while its

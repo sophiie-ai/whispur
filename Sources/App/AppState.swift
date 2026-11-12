@@ -478,7 +478,7 @@ final class AppState: ObservableObject {
     }
 
     var hasCompletedFirstDictation: Bool {
-        historyStore.items.contains { !$0.isFailed }
+        historyStore.items.contains(where: \.producedText)
     }
 
     /// Retries a failed dictation with the current settings and copies the

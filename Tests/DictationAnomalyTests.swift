@@ -93,9 +93,25 @@ final class DictationAnomalyClassificationTests: XCTestCase {
         XCTAssertEqual(DictationAnomaly.reasons(for: off), [])
     }
 
-    func testCancelledAndNoSpeechAreNeverAnomalous() {
+    func testCancelledIsNeverAnomalous() {
         XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .cancelled, seconds: 300, cps: 0, fallbackFrom: .parakeet)), [])
-        XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .noSpeech, seconds: 300, cps: 0)), [])
+    }
+
+    func testLongNoSpeechIsAnomalous() {
+        XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .noSpeech, seconds: 300, cps: 0)), [.noSpeech])
+        XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .noSpeech, seconds: 10, cps: nil)), [.noSpeech], "At the 10 s floor")
+    }
+
+    func testShortNoSpeechIsNotAnomalous() {
+        // Accidental taps and short silences.
+        XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .noSpeech, seconds: 0.4, cps: nil)), [])
+        XCTAssertEqual(DictationAnomaly.reasons(for: record(outcome: .noSpeech, seconds: 9.9, cps: 0)), [])
+        XCTAssertEqual(DictationAnomaly.reasons(for: DictationDiagnostics(outcome: .noSpeech, stage: .recording)), [], "No audio measured")
+    }
+
+    func testNoSpeechReasonNamesTheAudioLength() {
+        let mark = DictationAnomalyMark(reasons: [.noSpeech], audioFileName: nil, audioSeconds: 312.4)
+        XCTAssertEqual(mark.summary, "No speech in 312 s of audio")
     }
 }
 
@@ -170,6 +186,83 @@ final class DictationAnomalyPipelineTests: XCTestCase {
         XCTAssertNil(history.keptAudioURL(for: item))
         let kept = (try? FileManager.default.contentsOfDirectory(atPath: history.failedAudio.directory.path)) ?? []
         XCTAssertEqual(kept, [], "No recording lands in the folder")
+    }
+
+    private static func silence(seconds: Double) -> RecordingMetrics {
+        let count = max(Int(seconds * 10), 1)
+        return RecordingMetrics(
+            sampleRate: 16_000,
+            totalFrames: Int64(count * 1_600),
+            buffers: Array(repeating: BufferMetric(frameCount: 1_600, rms: 0.001, peak: 0.002), count: count)
+        )
+    }
+
+    private func dictateNoSpeech(metrics: RecordingMetrics, transcript: String = "") async throws -> (UUID, PipelineHistoryStore) {
+        let (pipeline, history) = DiagnosticsTestSupport.makePipeline(scratch: scratch, stt: { transcript })
+        let id = UUID()
+        await pipeline.processRecordingForTesting(
+            at: try DiagnosticsTestSupport.makeToneFile(in: scratch),
+            metrics: metrics,
+            dictationID: id
+        )
+        await DiagnosticsTestSupport.settle {
+            history.item(id).map { history.keptAudioURL(for: $0) != nil } ?? false
+        }
+        return (id, history)
+    }
+
+    func testLongSilentRecordingGetsAPinnedEntryWithItsAudio() async throws {
+        let (id, history) = try await dictateNoSpeech(metrics: Self.silence(seconds: 12))
+        XCTAssertEqual(history.diagnostics.item(id)?.outcome, .noSpeech)
+        XCTAssertEqual(history.diagnostics.item(id)?.anomalies, [.noSpeech])
+        let item = try XCTUnwrap(history.item(id), "Listed in Activity")
+        XCTAssertTrue(item.isNoSpeech)
+        XCTAssertTrue(item.isPinned)
+        XCTAssertFalse(item.producedText, "Not a first dictation, not counted as text")
+        XCTAssertEqual(item.anomaly?.summary, "No speech in 12 s of audio")
+        let url = try XCTUnwrap(history.keptAudioURL(for: item), "Recording kept")
+        XCTAssertEqual(url.deletingLastPathComponent().standardizedFileURL, history.failedAudio.directory.standardizedFileURL)
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+
+        history.purgeExpiredAudio(now: Date().addingTimeInterval(FailedAudioStore.retention + 60))
+        XCTAssertNil(history.item(id)?.anomaly?.audioFileName, "Deleted after 24 hours")
+    }
+
+    func testLongRecordingWithAnEmptyTranscriptIsFlagged() async throws {
+        let (id, history) = try await dictateNoSpeech(metrics: DiagnosticsTestSupport.speechMetrics(seconds: 15), transcript: " ")
+        XCTAssertEqual(history.diagnostics.item(id)?.stage, .transcription)
+        let item = try XCTUnwrap(history.item(id))
+        XCTAssertEqual(item.anomaly?.summary, "No speech in 15 s of audio")
+        XCTAssertNotNil(history.keptAudioURL(for: item))
+    }
+
+    func testShortTapsWithNoSpeechAreNotFlagged() async throws {
+        // An accidental tap: under a second of silence.
+        let (pipeline, history) = DiagnosticsTestSupport.makePipeline(scratch: scratch, stt: { "" })
+        let tap = UUID()
+        await pipeline.processRecordingForTesting(
+            at: try DiagnosticsTestSupport.makeToneFile(in: scratch),
+            metrics: Self.silence(seconds: 0.5),
+            dictationID: tap
+        )
+        // A short recording whose transcript came back empty.
+        let empty = UUID()
+        await pipeline.processRecordingForTesting(
+            at: try DiagnosticsTestSupport.makeToneFile(in: scratch),
+            metrics: DiagnosticsTestSupport.speechMetrics(seconds: 3),
+            dictationID: empty
+        )
+        await DiagnosticsTestSupport.settle { history.diagnostics.item(empty)?.audio?.normalizedSampleCount != nil }
+
+        for id in [tap, empty] {
+            XCTAssertEqual(history.diagnostics.item(id)?.outcome, .noSpeech)
+            XCTAssertNil(history.diagnostics.item(id)?.anomalies)
+            XCTAssertFalse(history.isPinned(id))
+        }
+        XCTAssertTrue(history.items.isEmpty, "Nothing listed in Activity")
+        let kept = (try? FileManager.default.contentsOfDirectory(atPath: history.failedAudio.directory.path)) ?? []
+        XCTAssertEqual(kept, [], "No recording kept")
     }
 
     func testAnomalousEntryCanBeTranscribedAgainWithoutLosingIt() async throws {
