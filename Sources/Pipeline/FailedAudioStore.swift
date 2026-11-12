@@ -32,17 +32,21 @@ final class FailedAudioStore: @unchecked Sendable {
     }
 
     /// Moves `wavURL` into the store as `<id>.wav` and returns the file name
-    /// to record in history.
-    func keep(_ wavURL: URL, id: UUID, now: Date = Date()) throws -> String {
+    /// to record in history. With `copying`, the original stays where it is.
+    func keep(_ wavURL: URL, id: UUID, now: Date = Date(), copying: Bool = false) throws -> String {
         try prepareDirectory()
         let name = "\(id.uuidString).wav"
         let destination = directory.appendingPathComponent(name)
         try? fileManager.removeItem(at: destination)
-        do {
-            try fileManager.moveItem(at: wavURL, to: destination)
-        } catch {
+        if copying {
             try fileManager.copyItem(at: wavURL, to: destination)
-            try? fileManager.removeItem(at: wavURL)
+        } else {
+            do {
+                try fileManager.moveItem(at: wavURL, to: destination)
+            } catch {
+                try fileManager.copyItem(at: wavURL, to: destination)
+                try? fileManager.removeItem(at: wavURL)
+            }
         }
         try fileManager.setAttributes([
             .posixPermissions: 0o600,
@@ -66,6 +70,24 @@ final class FailedAudioStore: @unchecked Sendable {
     func delete(_ name: String) {
         guard let url = url(for: name) else { return }
         try? fileManager.removeItem(at: url)
+    }
+
+    /// The kept recordings, newest first.
+    func recordings() -> [URL] {
+        let files = (try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        }
+        return files.sorted { modified($0) > modified($1) }
+    }
+
+    /// Deletes every recording and the folder.
+    func deleteAll() {
+        try? fileManager.removeItem(at: directory)
     }
 
     /// Deletes recordings older than `retention`. Returns the deleted names.

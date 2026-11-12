@@ -19,6 +19,8 @@ final class PipelineHistoryStore: ObservableObject {
     /// Per-dictation measurements, keyed by the same id as the entries.
     /// Clearing or deleting history clears them too.
     let diagnostics: DictationDiagnosticsStore
+    /// The opt-in ring of recent recordings kept for debugging.
+    let debugRecordings: DebugRecordingStore
     private var diagnosticsCancellable: AnyCancellable?
 
     /// - Parameter fileURL: Where the history lives. Defaults to
@@ -30,7 +32,8 @@ final class PipelineHistoryStore: ObservableObject {
         maxPinnedItems: Int = 10,
         fileURL: URL? = nil,
         failedAudio: FailedAudioStore? = nil,
-        diagnostics: DictationDiagnosticsStore? = nil
+        diagnostics: DictationDiagnosticsStore? = nil,
+        debugRecordings: DebugRecordingStore? = nil
     ) {
         self.maxItems = maxItems
         self.maxPinnedItems = maxPinnedItems
@@ -39,6 +42,9 @@ final class PipelineHistoryStore: ObservableObject {
         )
         self.diagnostics = diagnostics ?? DictationDiagnosticsStore(
             fileURL: fileURL.map { $0.deletingLastPathComponent().appendingPathComponent("dictation-diagnostics.json") }
+        )
+        self.debugRecordings = debugRecordings ?? DebugRecordingStore(
+            directory: fileURL.map { $0.deletingLastPathComponent().appendingPathComponent("DebugRecordings", isDirectory: true) }
         )
 
         if let fileURL {
@@ -76,6 +82,7 @@ final class PipelineHistoryStore: ObservableObject {
         items.forEach(deleteAudio(of:))
         items = []
         diagnostics.clear()
+        debugRecordings.deleteAll()
         save()
     }
 
@@ -225,8 +232,10 @@ final class PipelineHistoryStore: ObservableObject {
         save()
     }
 
-    /// Purges recordings past retention and drops the references to them.
+    /// Purges recordings past retention (failed, anomalous and debug ones)
+    /// and drops the references to them.
     func purgeExpiredAudio(now: Date = Date()) {
+        debugRecordings.purge(now: now)
         let removed = Set(failedAudio.purge(now: now))
         guard !removed.isEmpty else { return }
         var changed = false
