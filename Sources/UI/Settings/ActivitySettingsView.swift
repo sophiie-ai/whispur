@@ -48,6 +48,7 @@ struct ActivitySettingsView: View {
                                 if item.isFailed {
                                     FailedActivityEntry(
                                         item: item,
+                                        diagnostics: historyStore.diagnostics.item(item.id),
                                         canRetry: historyStore.canRetry(item),
                                         isRetrying: retrier.isRunning(item.id),
                                         onRetry: { onRetry(item.id) },
@@ -56,6 +57,7 @@ struct ActivitySettingsView: View {
                                 } else {
                                     ActivityEntry(
                                         item: item,
+                                        diagnostics: historyStore.diagnostics.item(item.id),
                                         isMarkedWrong: evalCases.isMarked(item.id),
                                         startsExpanded: item.id == initiallyExpanded,
                                         onMarkWrong: { markingItem = item },
@@ -127,6 +129,7 @@ struct ActivitySettingsView: View {
 
 private struct ActivityEntry: View {
     let item: PipelineResult
+    let diagnostics: DictationDiagnostics?
     let isMarkedWrong: Bool
     let onMarkWrong: () -> Void
     let onAddToVocabulary: (() -> Void)?
@@ -135,12 +138,14 @@ private struct ActivityEntry: View {
 
     init(
         item: PipelineResult,
+        diagnostics: DictationDiagnostics?,
         isMarkedWrong: Bool,
         startsExpanded: Bool,
         onMarkWrong: @escaping () -> Void,
         onAddToVocabulary: (() -> Void)?
     ) {
         self.item = item
+        self.diagnostics = diagnostics
         self.isMarkedWrong = isMarkedWrong
         self.onMarkWrong = onMarkWrong
         self.onAddToVocabulary = onAddToVocabulary
@@ -226,6 +231,9 @@ private struct ActivityEntry: View {
                                 .help("Save this dictation as a private test case for the cleanup prompt")
                         }
                     }
+                    if let diagnostics {
+                        DictationDiagnosticsLine(diagnostics: diagnostics)
+                    }
                 }
                 .transition(.opacity)
             }
@@ -253,6 +261,7 @@ private struct ActivityEntry: View {
 /// its recording is still kept.
 struct FailedActivityEntry: View {
     let item: PipelineResult
+    var diagnostics: DictationDiagnostics?
     let canRetry: Bool
     let isRetrying: Bool
     let onRetry: () -> Void
@@ -276,6 +285,9 @@ struct FailedActivityEntry: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(SophiieTheme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let diagnostics {
+                    DictationDiagnosticsLine(diagnostics: diagnostics)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

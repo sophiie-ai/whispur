@@ -650,7 +650,7 @@ final class AppState: ObservableObject {
 
         guard isSelectedSTTConfigured else {
             pipeline.discardEarlyCapture()
-            pipeline.presentError(unconfiguredSTTMessage())
+            pipeline.presentError(unconfiguredSTTMessage(), stage: .transcription)
             return
         }
 

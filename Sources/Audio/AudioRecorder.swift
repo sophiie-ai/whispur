@@ -103,6 +103,8 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     private var lastLevelPublishTime: CFAbsoluteTime = 0
 
     private var metricSampleRate: Double = 0
+    private var metricChannelCount: Int = 0
+    private var metricDeviceName: String?
     private var metricTotalFrames: Int64 = 0
     private var bufferMetrics: [BufferMetric] = []
 
@@ -152,6 +154,8 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         if let startEngineForTesting {
             removeTempFile()
             tempFileURL = try startEngineForTesting()
+            metricChannelCount = 0
+            metricDeviceName = nil
             audioRoute.withLockUnchecked { route in
                 route.held.removeAll()
                 route.holding = holdingAudio && route.handler == nil
@@ -189,6 +193,8 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         audioFile = file
         tempFileURL = tempURL
         metricSampleRate = inputFormat.sampleRate
+        metricChannelCount = Int(inputFormat.channelCount)
+        metricDeviceName = Self.currentDeviceName(of: inputNode)
         metricTotalFrames = 0
         bufferMetrics.removeAll(keepingCapacity: true)
         audioRoute.withLockUnchecked { route in
@@ -216,7 +222,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
 
         recordingFlag.withLock { $0 = true }
         let now = ProcessInfo.processInfo.systemUptime
-        logger.info(
+        logger.notice(
             """
             Recording started in \(Int((now - started) * 1000), privacy: .public) ms \
             (input node \(Int((inputReady - started) * 1000), privacy: .public) ms, \
@@ -256,7 +262,9 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         let metrics = RecordingMetrics(
             sampleRate: metricSampleRate,
             totalFrames: metricTotalFrames,
-            buffers: bufferMetrics
+            buffers: bufferMetrics,
+            channelCount: metricChannelCount,
+            inputDeviceName: metricDeviceName
         )
 
         readyFired = false
@@ -324,11 +332,11 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     private func handleIncomingBuffer(_ buffer: AVAudioPCMBuffer) {
         guard buffer.frameLength > 0 else { return }
 
-        let rms = rmsLevel(for: buffer)
+        let (rms, peak) = levels(for: buffer)
 
         let frameCount = Int(buffer.frameLength)
         metricTotalFrames &+= Int64(frameCount)
-        bufferMetrics.append(BufferMetric(frameCount: frameCount, rms: rms))
+        bufferMetrics.append(BufferMetric(frameCount: frameCount, rms: rms, peak: peak))
 
         if !readyFired && rms > 0 {
             readyFired = true
@@ -381,36 +389,60 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func rmsLevel(for buffer: AVAudioPCMBuffer) -> Float {
+    /// RMS and peak of the first channel, both 0...1.
+    private func levels(for buffer: AVAudioPCMBuffer) -> (rms: Float, peak: Float) {
         let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else { return 0 }
+        guard frameCount > 0 else { return (0, 0) }
 
         if let channelData = buffer.floatChannelData {
             var sum: Float = 0
+            var peak: Float = 0
             for frame in 0..<frameCount {
                 let sample = channelData[0][frame]
                 sum += sample * sample
+                peak = max(peak, abs(sample))
             }
-            return sqrt(sum / Float(frameCount))
+            return (sqrt(sum / Float(frameCount)), peak)
         }
 
         if let channelData = buffer.int16ChannelData {
             var sum: Float = 0
+            var peak: Float = 0
             for frame in 0..<frameCount {
                 let sample = Float(channelData[0][frame]) / Float(Int16.max)
                 sum += sample * sample
+                peak = max(peak, abs(sample))
             }
-            return sqrt(sum / Float(frameCount))
+            return (sqrt(sum / Float(frameCount)), peak)
         }
 
-        return 0
+        return (0, 0)
+    }
+
+    /// The name of the device the input node records from, for diagnostics.
+    private static func currentDeviceName(of inputNode: AVAudioInputNode) -> String? {
+        guard let audioUnit = inputNode.audioUnit else { return nil }
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioUnitGetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            &size
+        )
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return AudioDevice.name(of: deviceID)
     }
 }
 
-/// Per-buffer RMS captured during recording.
+/// Per-buffer RMS and peak captured during recording.
 struct BufferMetric {
     let frameCount: Int
     let rms: Float
+    /// The loudest sample in the buffer, 0...1.
+    var peak: Float = 0
 }
 
 /// Raw voice-activity data collected while recording. Used by the pipeline to
@@ -419,6 +451,10 @@ struct RecordingMetrics {
     let sampleRate: Double
     let totalFrames: Int64
     let buffers: [BufferMetric]
+    /// Input channels, for diagnostics. 0 when unknown.
+    var channelCount: Int = 0
+    /// The input device's name, for diagnostics.
+    var inputDeviceName: String?
 
     var totalDurationSeconds: Double {
         sampleRate > 0 ? Double(totalFrames) / sampleRate : 0
