@@ -135,6 +135,54 @@ final class STTProviderTests: XCTestCase {
         XCTAssertTrue(STTProviderID.mistral.requiresAPIKey)
     }
 
+    // MARK: - ElevenLabs
+
+    func testScribeV3IsTheDefaultAndV2StaysPickable() {
+        XCTAssertEqual(STTProviderID.elevenlabs.defaultModel, "scribe_v3")
+        XCTAssertEqual(STTProviderID.elevenlabs.defaultModel, ElevenLabsSTT.defaultModel)
+        XCTAssertEqual(STTProviderID.elevenlabs.modelOptions, [
+            STTModelOption(id: "scribe_v3", label: "Scribe v3"),
+            STTModelOption(id: "scribe_v2", label: "Scribe v2"),
+        ])
+        XCTAssertEqual(STTProviderID.elevenlabs.modelStorageKey, "elevenlabsSTTModel")
+        XCTAssertEqual(STTProviderID.elevenlabs.setupDescriptor.modelPicker?.defaultModel, "scribe_v3")
+    }
+
+    func testScribeSendsOneKeytermFieldPerTerm() {
+        for model in ["scribe_v3", "scribe_v2"] {
+            let fields = ElevenLabsSTT.formFields(
+                model: model,
+                language: .single(code: "de-DE"),
+                vocabulary: ["Whispur", "  Sophiie AI ", ""]
+            )
+            XCTAssertEqual(fields, [
+                MultipartFormField(name: "model_id", value: model),
+                MultipartFormField(name: "file_format", value: "pcm_s16le_16"),
+                MultipartFormField(name: "language_code", value: "de"),
+                MultipartFormField(name: "keyterms", value: "Whispur"),
+                MultipartFormField(name: "keyterms", value: "Sophiie AI"),
+            ], model)
+            XCTAssertFalse(fields.contains { $0.name == "biased_keywords" }, model)
+        }
+    }
+
+    func testScribeDropsKeytermsTheAPIWouldReject() {
+        let tooLong = String(repeating: "a", count: ElevenLabsSTT.maxKeytermCharacters + 1)
+        let fitsExactly = String(repeating: "b", count: ElevenLabsSTT.maxKeytermCharacters)
+        let vocabulary = [
+            "Whispur", tooLong, fitsExactly,
+            "one two three four five", "one two three four five six",
+            "<b>Acme</b>", "{name}", "[draft]", #"C:\Users"#, "Kubernetes",
+        ]
+        XCTAssertEqual(ElevenLabsSTT.keyterms(from: vocabulary), ["Whispur", fitsExactly, "one two three four five", "Kubernetes"])
+    }
+
+    func testScribeKeytermsCapAfterDroppingInvalidTerms() {
+        let terms = ElevenLabsSTT.keyterms(from: ["{bad}"] + (0 ..< 80).map { "term\($0)" })
+        XCTAssertEqual(terms.count, ElevenLabsSTT.maxKeyterms)
+        XCTAssertEqual(terms.first, "term0")
+    }
+
     // MARK: - Apple engine choice
 
     func testAppleUsesSpeechAnalyzerOnlyWhenTheModelIsReady() {

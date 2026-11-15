@@ -88,7 +88,7 @@ To walk through the welcome window again, choose `Run Setup Again` in `Settings`
 | OpenAI | Available | GPT Transcribe (default) or Whisper, via API key |
 | Groq Whisper | Available | Whisper Large v3 or v3 Turbo, via API key |
 | Deepgram | Available | Cloud STT via API key |
-| ElevenLabs Scribe | Available | Cloud STT via API key. Optional live streaming while you talk |
+| ElevenLabs Scribe | Available | Scribe v3 (default) or v2, via API key. Optional live streaming while you talk |
 | Mistral Voxtral | Available | Voxtral Mini or Small Transcribe 3, via API key |
 | Meta Muse | Available | Muse Voice Transcribe via a Meta Model API key. Optional live streaming while you talk |
 

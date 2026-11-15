@@ -220,22 +220,38 @@ final class STTStreamingTests: XCTestCase {
 
     func testElevenLabsURLCarriesManualCommitLanguageAndKeyterms() throws {
         let url = try XCTUnwrap(ElevenLabsRealtimeFormat.url(
+            model: "scribe_v3_live",
             language: .single(code: "de-DE"),
             vocabulary: ["Whispur", " ", "Sophiie AI"] + (0 ..< 60).map { "t\($0)" }
         ))
         let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
         func values(_ name: String) -> [String] { items.filter { $0.name == name }.compactMap(\.value) }
         XCTAssertEqual(url.host, "api.elevenlabs.io")
-        XCTAssertEqual(values("model_id"), ["scribe_v2_realtime"])
+        XCTAssertEqual(values("model_id"), ["scribe_v3_live"])
         XCTAssertEqual(values("audio_format"), ["pcm_16000"])
         XCTAssertEqual(values("commit_strategy"), ["manual"])
         XCTAssertEqual(values("language_code"), ["de"])
         XCTAssertEqual(values("keyterms").count, ElevenLabsRealtimeFormat.maxKeyterms)
         XCTAssertEqual(Array(values("keyterms").prefix(2)), ["Whispur", "Sophiie AI"])
 
-        let auto = try XCTUnwrap(ElevenLabsRealtimeFormat.url(language: .auto, vocabulary: []))
+        let auto = try XCTUnwrap(ElevenLabsRealtimeFormat.url(model: "scribe_v3_live", language: .auto, vocabulary: []))
         XCTAssertFalse(auto.absoluteString.contains("language_code"))
         XCTAssertFalse(auto.absoluteString.contains("keyterms"))
+    }
+
+    @MainActor
+    func testElevenLabsStreamsWithTheRealtimeModelOfThePickedBatchModel() throws {
+        XCTAssertEqual(ElevenLabsRealtimeFormat.realtimeModel(for: "scribe_v3"), "scribe_v3_live")
+        XCTAssertEqual(ElevenLabsRealtimeFormat.realtimeModel(for: "scribe_v2"), "scribe_v2_realtime")
+        let client = ProviderHTTPClient(requestLog: ProviderRequestLog(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("requests-\(UUID().uuidString).json")))
+        for (batch, realtime) in [("scribe_v3", "scribe_v3_live"), ("scribe_v2", "scribe_v2_realtime")] {
+            let provider = ElevenLabsSTT(apiKey: "k", httpClient: client, model: batch)
+            XCTAssertEqual(provider.streamingModel, realtime, batch)
+            let url = try XCTUnwrap(ElevenLabsRealtimeFormat.url(model: provider.streamingModel, language: .auto, vocabulary: []))
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertEqual(items.filter { $0.name == "model_id" }.compactMap(\.value), [realtime], batch)
+        }
+        XCTAssertEqual(ElevenLabsSTT(apiKey: "k", httpClient: client).streamingModel, "scribe_v3_live")
     }
 
     func testElevenLabsEmptyLastChunkStillCarriesTheCommit() {

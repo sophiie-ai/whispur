@@ -1,8 +1,21 @@
 import Foundation
 
 /// ElevenLabs speech-to-text provider (Scribe API).
+///
+/// Vocabulary goes to `keyterms`, one form field per term. `scribe_v3` also
+/// takes the user's other languages as `secondary_language_codes`;
+/// `scribe_v2` takes a single `language_code`.
 struct ElevenLabsSTT: STTProvider {
     static let providerID: STTProviderID = .elevenlabs
+    static let defaultModel = "scribe_v3"
+
+    /// The API's documented caps on `keyterms`: 1000 terms, each at most 50
+    /// characters and 5 words. Stay in line with the other providers' 50.
+    static let maxKeyterms = 50
+    static let maxKeytermCharacters = 50
+    static let maxKeytermWords = 5
+    /// Characters the API refuses inside a key term.
+    static let disallowedKeytermCharacters: Set<Character> = ["<", ">", "{", "}", "[", "]", "\\"]
 
     private let apiKey: String
     private let httpClient: ProviderHTTPClient
@@ -12,7 +25,7 @@ struct ElevenLabsSTT: STTProvider {
     init(
         apiKey: String,
         httpClient: ProviderHTTPClient,
-        model: String = "scribe_v2",
+        model: String = ElevenLabsSTT.defaultModel,
         timeoutSeconds: TimeInterval = 30
     ) {
         self.apiKey = apiKey
@@ -26,6 +39,57 @@ struct ElevenLabsSTT: STTProvider {
     /// The key, for the realtime session's handshake header.
     var streamingAPIKey: String { apiKey }
 
+    /// The realtime model that matches the batch model the user picked.
+    var streamingModel: String { ElevenLabsRealtimeFormat.realtimeModel(for: model) }
+
+    /// True for models that take `secondary_language_codes` (Scribe v3).
+    static func acceptsSecondaryLanguages(model: String) -> Bool {
+        model == "scribe_v3" || model.hasPrefix("scribe_v3_")
+    }
+
+    /// Text fields for one request, file part excluded.
+    ///
+    /// Scribe v3 gets the first of several languages as `language_code` and
+    /// the rest as `secondary_language_codes`. Scribe v2 takes one
+    /// `language_code`, so with several it auto-detects and the script guard
+    /// checks the result. `.auto` omits the language either way.
+    static func formFields(model: String, language: STTLanguageSelection, vocabulary: [String]) -> [MultipartFormField] {
+        var fields = [
+            MultipartFormField(name: "model_id", value: model),
+            MultipartFormField(name: "file_format", value: "pcm_s16le_16"),
+        ]
+        if acceptsSecondaryLanguages(model: model) {
+            let codes = language.isoCodes
+            if let primary = codes.first {
+                fields.append(MultipartFormField(name: "language_code", value: primary))
+            }
+            for code in codes.dropFirst() {
+                fields.append(MultipartFormField(name: "secondary_language_codes", value: code))
+            }
+        } else if let code = STTLanguageResolver.iso639_1(for: language) {
+            fields.append(MultipartFormField(name: "language_code", value: code))
+        }
+        for term in keyterms(from: vocabulary) {
+            fields.append(MultipartFormField(name: "keyterms", value: term))
+        }
+        return fields
+    }
+
+    /// Trimmed, non-empty vocabulary terms that fit the API's documented
+    /// limits, capped at `maxKeyterms`. A term that breaks a limit is dropped
+    /// rather than sent, because one bad term can fail the whole request.
+    static func keyterms(from vocabulary: [String]) -> [String] {
+        let terms = vocabulary
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { term in
+                !term.isEmpty
+                    && term.count <= maxKeytermCharacters
+                    && term.split(whereSeparator: \.isWhitespace).count <= maxKeytermWords
+                    && !term.contains(where: disallowedKeytermCharacters.contains)
+            }
+        return Array(terms.prefix(maxKeyterms))
+    }
+
     func transcribe(fileURL: URL, language: STTLanguageSelection, vocabulary: [String]) async throws -> String {
         guard let url = Self.endpointURL else {
             throw STTError.apiError(provider: .elevenlabs, message: "Invalid endpoint URL.", statusCode: nil)
@@ -38,33 +102,12 @@ struct ElevenLabsSTT: STTProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
 
-        // Scribe accepts a single `language_code` (ISO-639-1) or omit for auto.
-        let languageParam = STTLanguageResolver.iso639_1(for: language)
-
-        // Scribe's `biased_keywords` takes a JSON array of terms with
-        // optional `:weight` (1.0–5.0). Use a mid boost so Scribe prefers
-        // the user's vocabulary without overriding the acoustic model.
-        let biasedTerms = vocabulary
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .prefix(50)
-        let biasedKeywordsJSON: String? = {
-            guard !biasedTerms.isEmpty else { return nil }
-            let entries = biasedTerms.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\""))\":2.0" }
-            return "[" + entries.joined(separator: ",") + "]"
-        }()
+        let fields = Self.formFields(model: model, language: language, vocabulary: vocabulary)
 
         let audioData = try Data(contentsOf: fileURL)
         var body = Data()
         body.appendMultipart(boundary: boundary, name: "file", filename: fileURL.lastPathComponent, mimeType: "audio/wav", data: audioData)
-        body.appendMultipart(boundary: boundary, name: "model_id", value: model)
-        body.appendMultipart(boundary: boundary, name: "file_format", value: "pcm_s16le_16")
-        if let languageParam {
-            body.appendMultipart(boundary: boundary, name: "language_code", value: languageParam)
-        }
-        if let biasedKeywordsJSON {
-            body.appendMultipart(boundary: boundary, name: "biased_keywords", value: biasedKeywordsJSON)
-        }
+        body.appendMultipart(boundary: boundary, fields: fields)
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
@@ -76,10 +119,7 @@ struct ElevenLabsSTT: STTProvider {
                 requestBodySummary: """
                 multipart form-data
                 file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
-                model_id: \(model)
-                file_format: pcm_s16le_16
-                language_code: \(languageParam ?? "auto")
-                biased_keywords: \(biasedKeywordsJSON ?? "-")
+                \(fields.map { "\($0.name): \($0.value)" }.joined(separator: "\n"))
                 """
             )
 
