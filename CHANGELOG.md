@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/sophiie-ai/whispur/compare/v0.34.0...v0.35.0) (2026-11-15)
+
+
+### Features
+
+* **providers:** add ElevenLabs Scribe v3 with a model picker ([#144](https://github.com/sophiie-ai/whispur/issues/144)) ([b9b63e8](https://github.com/sophiie-ai/whispur/commit/b9b63e8c44499fcc82ad9c2cfa29b77b14e81ab0))
+
 ## [0.34.0](https://github.com/sophiie-ai/whispur/compare/v0.33.0...v0.34.0) (2026-11-12)
 
 
