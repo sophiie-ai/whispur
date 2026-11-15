@@ -66,7 +66,12 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
                 STTModelOption(id: "voxtral-mini-transcribe-3", label: "Voxtral Mini Transcribe 3"),
                 STTModelOption(id: "voxtral-small-transcribe-3", label: "Voxtral Small Transcribe 3"),
             ]
-        case .deepgram, .elevenlabs, .metaMuse, .apple, .parakeet:
+        case .elevenlabs:
+            [
+                STTModelOption(id: "scribe_v3", label: "Scribe v3"),
+                STTModelOption(id: "scribe_v2", label: "Scribe v2"),
+            ]
+        case .deepgram, .metaMuse, .apple, .parakeet:
             []
         }
     }
@@ -87,7 +92,8 @@ enum STTProviderID: String, Codable, CaseIterable, Identifiable {
         case .openai: "openaiSTTModel"
         case .groqWhisper: "groqWhisperSTTModel"
         case .mistral: "mistralSTTModel"
-        case .deepgram, .elevenlabs, .metaMuse, .apple, .parakeet: nil
+        case .elevenlabs: "elevenlabsSTTModel"
+        case .deepgram, .metaMuse, .apple, .parakeet: nil
         }
     }
 }
@@ -115,7 +121,7 @@ protocol STTProvider {
     ///   - vocabulary: Custom terms to bias the recognizer toward (names,
     ///     acronyms, product words). Providers wire this into their own
     ///     biasing feature — prompt text for Whisper, `keyterm` for
-    ///     Deepgram nova-3, `biased_keywords` for ElevenLabs Scribe,
+    ///     Deepgram nova-3, `keyterms` for ElevenLabs Scribe,
     ///     `context_bias` for Mistral, `keywords` for Meta Muse,
     ///     `contextualStrings` for Apple. Empty means no biasing.
     /// - Returns: The raw transcription text.

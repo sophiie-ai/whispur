@@ -1,10 +1,11 @@
 import Foundation
 
-/// ElevenLabs Scribe realtime (`scribe_v2_realtime`) in manual commit mode:
-/// audio goes up as base64 PCM chunks, the last chunk carries
-/// `commit: true`, and the reply is a `committed_transcript`.
+/// ElevenLabs Scribe realtime (`scribe_v3_live`, or `scribe_v2_realtime`
+/// for Scribe v2) in manual commit mode: audio goes up as base64 PCM
+/// chunks, the last chunk carries `commit: true`, and the reply is a
+/// `committed_transcript`.
 struct ElevenLabsRealtimeFormat: STTStreamingWireFormat {
-    static let model = "scribe_v2_realtime"
+    static let defaultModel = "scribe_v3_live"
     static let sampleRate = 16_000
     static let maxKeyterms = 50
 
@@ -14,7 +15,14 @@ struct ElevenLabsRealtimeFormat: STTStreamingWireFormat {
         self.sampleRate = sampleRate
     }
 
-    static func url(language: STTLanguageSelection, vocabulary: [String]) -> URL? {
+    /// The realtime model for a batch model: `scribe_v2` streams with
+    /// `scribe_v2_realtime`, `scribe_v3` (and anything newer) with
+    /// `scribe_v3_live`.
+    static func realtimeModel(for batchModel: String) -> String {
+        batchModel == "scribe_v2" ? "scribe_v2_realtime" : defaultModel
+    }
+
+    static func url(model: String, language: STTLanguageSelection, vocabulary: [String]) -> URL? {
         var components = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")
         var query = [
             URLQueryItem(name: "model_id", value: model),
@@ -92,14 +100,15 @@ extension ElevenLabsSTT: STTStreamingProvider {
 
     func makeStreamingSession(language: STTLanguageSelection, vocabulary: [String]) -> STTStreamingSession {
         let format = ElevenLabsRealtimeFormat()
-        let url = ElevenLabsRealtimeFormat.url(language: language, vocabulary: vocabulary)
+        let model = streamingModel
+        let url = ElevenLabsRealtimeFormat.url(model: model, language: language, vocabulary: vocabulary)
             ?? URL(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")!
         var request = URLRequest(url: url)
         request.setValue(streamingAPIKey, forHTTPHeaderField: "xi-api-key")
         request.timeoutInterval = 10
         return STTStreamingSession(
             providerID: .elevenlabs,
-            endpointDescription: "wss://api.elevenlabs.io/v1/speech-to-text/realtime (\(ElevenLabsRealtimeFormat.model))",
+            endpointDescription: "wss://api.elevenlabs.io/v1/speech-to-text/realtime (\(model))",
             format: format,
             socket: URLSessionStreamSocket(request: request),
             // 100 ms per chunk.

@@ -363,7 +363,7 @@ extension STTProviderID {
         case .openai: "GPT Transcribe through the OpenAI API, or any compatible gateway. Whisper shuts down in February 2027."
         case .groqWhisper: "Fast hosted Whisper. Groq bills each recording as at least 10 seconds. Shares its key with Groq cleanup."
         case .deepgram: "Nova-3 transcription with multilingual auto-detect."
-        case .elevenlabs: "Scribe transcription with keyword biasing."
+        case .elevenlabs: "Scribe v3 (default) or v2 transcription with key terms. Can stream while you talk."
         case .mistral: "Voxtral transcription with custom vocabulary."
         case .metaMuse: "Muse Voice Transcribe with keyword biasing. Can stream while you talk."
         }

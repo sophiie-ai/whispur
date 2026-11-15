@@ -128,13 +128,31 @@ final class LanguageRequestParameterTests: XCTestCase {
 
     func testElevenLabsRealtimeSendsOnlyASingleLanguage() throws {
         func codes(_ selection: STTLanguageSelection) throws -> [String] {
-            let url = try XCTUnwrap(ElevenLabsRealtimeFormat.url(language: selection, vocabulary: []))
+            let url = try XCTUnwrap(ElevenLabsRealtimeFormat.url(model: "scribe_v3_live", language: selection, vocabulary: []))
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             return items.filter { $0.name == "language_code" }.compactMap(\.value)
         }
         XCTAssertEqual(try codes(none), [])
         XCTAssertEqual(try codes(one), ["es"])
         XCTAssertEqual(try codes(two), [])
+    }
+
+    func testScribeV3SendsTheOtherLanguagesAsSecondary() {
+        XCTAssertEqual(values(ElevenLabsSTT.formFields(model: "scribe_v3", language: none, vocabulary: []), "language_code"), [])
+        XCTAssertEqual(values(ElevenLabsSTT.formFields(model: "scribe_v3", language: one, vocabulary: []), "language_code"), ["es"])
+        XCTAssertEqual(values(ElevenLabsSTT.formFields(model: "scribe_v3", language: one, vocabulary: []), "secondary_language_codes"), [])
+        let several = STTLanguageSelection(codes: ["en-US", "es-MX", "en-GB", "fr-FR"])
+        let fields = ElevenLabsSTT.formFields(model: "scribe_v3", language: several, vocabulary: [])
+        XCTAssertEqual(values(fields, "language_code"), ["en"])
+        XCTAssertEqual(values(fields, "secondary_language_codes"), ["es", "fr"])
+    }
+
+    func testScribeV2SendsOnlyASingleLanguage() {
+        XCTAssertEqual(values(ElevenLabsSTT.formFields(model: "scribe_v2", language: none, vocabulary: []), "language_code"), [])
+        XCTAssertEqual(values(ElevenLabsSTT.formFields(model: "scribe_v2", language: one, vocabulary: []), "language_code"), ["es"])
+        let fields = ElevenLabsSTT.formFields(model: "scribe_v2", language: two, vocabulary: [])
+        XCTAssertEqual(values(fields, "language_code"), [])
+        XCTAssertEqual(values(fields, "secondary_language_codes"), [], "Scribe v2 has no secondary languages")
     }
 
     func testMetaMuseBiasesTowardEveryLanguage() {

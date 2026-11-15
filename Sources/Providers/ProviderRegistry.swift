@@ -40,7 +40,11 @@ final class ProviderRegistry {
             return DeepgramSTT(apiKey: key, httpClient: httpClient)
         case .elevenlabs:
             guard let key = keychain.get(.elevenlabsAPIKey) else { return nil }
-            return ElevenLabsSTT(apiKey: key, httpClient: httpClient)
+            return ElevenLabsSTT(
+                apiKey: key,
+                httpClient: httpClient,
+                model: Self.sttModel(for: id) ?? ElevenLabsSTT.defaultModel
+            )
         case .mistral:
             guard let key = keychain.get(.mistralAPIKey) else { return nil }
             return MistralSTT(

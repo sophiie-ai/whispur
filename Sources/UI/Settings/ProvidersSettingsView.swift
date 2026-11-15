@@ -311,13 +311,17 @@ struct SpokenLanguagesRow: View {
             return OpenAISTT.usesKeywordShape(model: ProviderRegistry.sttModel(for: .openai) ?? "")
                 ? "OpenAI gets all of your languages as hints."
                 : "This OpenAI model takes one language, so it detects which of yours you're speaking."
+        case .elevenlabs:
+            return ElevenLabsSTT.acceptsSecondaryLanguages(model: ProviderRegistry.sttModel(for: .elevenlabs) ?? "")
+                ? "ElevenLabs gets all of your languages, the first as the main one."
+                : "Scribe v2 takes one language, so it detects which of yours you're speaking."
         case .deepgram:
             return "Deepgram uses nova-3's multilingual mode with your languages as hints."
         case .metaMuse:
             return "Meta Muse is steered toward your languages."
         case .apple:
             return "Apple listens in one language: your system language if it's on the list, otherwise the first one."
-        case .groqWhisper, .elevenlabs, .mistral:
+        case .groqWhisper, .mistral:
             return "\(provider.displayName) takes one language, so it detects which of yours you're speaking."
         case .parakeet:
             return "Parakeet detects the language itself and keeps to your languages' alphabet."
