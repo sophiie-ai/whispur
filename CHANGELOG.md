@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/sophiie-ai/whispur/compare/v0.35.0...v0.35.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **providers:** keep dictation working on slow and flaky networks ([#146](https://github.com/sophiie-ai/whispur/issues/146)) ([b742554](https://github.com/sophiie-ai/whispur/commit/b7425541493b09a35903f5c604e3e3d6224f00ec))
+
 ## [0.35.0](https://github.com/sophiie-ai/whispur/compare/v0.34.0...v0.35.0) (2026-11-15)
 
 
