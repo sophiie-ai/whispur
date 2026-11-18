@@ -90,7 +90,7 @@ struct RecordingOverlay: View {
             case .done(let text):
                 overlayShell {
                     statusRow(
-                        title: "Inserted",
+                        title: pipeline.transcribedOffline ? "Inserted with Parakeet (Offline)" : "Inserted",
                         detail: text,
                         leading: AnyView(
                             Image(systemName: "checkmark.circle.fill")

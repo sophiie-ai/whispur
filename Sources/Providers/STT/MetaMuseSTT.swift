@@ -106,6 +106,8 @@ struct MetaMuseSTT: STTProvider {
             throw error
         } catch let error as URLError where error.code == .timedOut {
             throw STTError.timeout(provider: .metaMuse)
+        } catch let error as URLError {
+            throw STTError.network(provider: .metaMuse, message: ProviderHTTPClient.transportErrorMessage(for: error))
         } catch {
             throw STTError.apiError(
                 provider: .metaMuse,

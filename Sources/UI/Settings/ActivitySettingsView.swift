@@ -220,7 +220,9 @@ private struct ActivityEntry: View {
                             PreferenceBadge(title: item.sttProvider.displayName, tone: .neutral)
                             if let from = item.sttFallbackFrom {
                                 PreferenceBadge(title: "Filled in for \(from.displayName)", tone: .neutral)
-                                    .help("\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
+                                    .help(item.sttFallbackOffline == true
+                                        ? "\(from.displayName) couldn't be reached, so \(item.sttProvider.displayName) transcribed this one on this Mac and cleanup was skipped. Transcribe again to send it to \(from.displayName)."
+                                        : "\(from.displayName)'s model wasn't downloaded yet, so \(item.sttProvider.displayName) transcribed this one.")
                             }
                             if item.isCleanupOff {
                                 PreferenceBadge(title: "Cleanup off", tone: .neutral)

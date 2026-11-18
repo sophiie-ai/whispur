@@ -16,10 +16,12 @@ struct ProviderHTTPResponse {
 final class ProviderHTTPClient {
     private let session: URLSession
     private let requestLog: ProviderRequestLog
+    private let retryPolicy: ProviderRetryPolicy
 
-    init(session: URLSession? = nil, requestLog: ProviderRequestLog) {
+    init(session: URLSession? = nil, requestLog: ProviderRequestLog, retryPolicy: ProviderRetryPolicy = .standard) {
         self.session = session ?? Self.makeDefaultSession()
         self.requestLog = requestLog
+        self.retryPolicy = retryPolicy
     }
 
     /// Returns a URLSession tuned for dictation's hot path:
@@ -53,19 +55,92 @@ final class ProviderHTTPClient {
         task.resume()
     }
 
+    /// Sends `request`, retrying quietly when a flaky connection (a dropped
+    /// cellular link, a provider's brief 5xx) is the likely cause. Every
+    /// attempt is listed in the Requests tab. See `ProviderRetryPolicy`.
     func send(
         _ request: URLRequest,
         providerID: String,
         kind: ProviderRequestKind,
         requestBodySummary: String? = nil
     ) async throws -> ProviderHTTPResponse {
+        let request = Self.withUploadTimeout(request, kind: kind)
+        let firstStarted = ContinuousClock.now
+        var attempt = 1
+        while true {
+            let delay: Duration
+            do {
+                let response = try await sendOnce(
+                    request,
+                    providerID: providerID,
+                    kind: kind,
+                    requestBodySummary: requestBodySummary,
+                    attempt: attempt
+                )
+                guard let next = retryPolicy.delay(
+                    afterStatus: response.response.statusCode,
+                    retryAfter: response.response.value(forHTTPHeaderField: "Retry-After"),
+                    kind: kind,
+                    attempt: attempt,
+                    elapsed: firstStarted.duration(to: .now)
+                ) else { return response }
+                delay = next
+            } catch {
+                guard let next = retryPolicy.delay(
+                    afterError: error,
+                    kind: kind,
+                    attempt: attempt,
+                    elapsed: firstStarted.duration(to: .now)
+                ) else { throw error }
+                delay = next
+            }
+            providerHTTPLogger.notice("\(providerID, privacy: .public) \(kind.rawValue, privacy: .public) retrying (attempt \(attempt + 1, privacy: .public))")
+            try await Task.sleep(for: delay)
+            attempt += 1
+        }
+    }
+
+    /// An STT upload's idle timeout, stretched for long recordings: on a slow
+    /// uplink the body trickles out, and once it is sent a long recording
+    /// keeps the provider busy before the first response byte. Capped so a
+    /// dead connection still fails in reasonable time.
+    static func withUploadTimeout(_ request: URLRequest, kind: ProviderRequestKind) -> URLRequest {
+        guard kind == .stt, let bodySize = request.httpBody?.count else { return request }
+        var request = request
+        request.timeoutInterval = uploadTimeout(base: request.timeoutInterval, bodyBytes: bodySize)
+        return request
+    }
+
+    /// `base`, plus a second per 16 KB of body (about half a second per
+    /// second of 16 kHz WAV), at most 120 seconds.
+    static func uploadTimeout(base: TimeInterval, bodyBytes: Int) -> TimeInterval {
+        let scaled = 30 + Double(bodyBytes) / 16_000
+        return max(base, min(120, scaled))
+    }
+
+    private func sendOnce(
+        _ request: URLRequest,
+        providerID: String,
+        kind: ProviderRequestKind,
+        requestBodySummary: String?,
+        attempt: Int
+    ) async throws -> ProviderHTTPResponse {
         let startedAt = Date()
         let endpointURL = Self.redactedURLString(from: request.url)
         let httpMethod = request.httpMethod ?? "GET"
-        let requestSummary = Self.makeRequestSummary(for: request, requestBodySummary: requestBodySummary)
+        var requestSummary = Self.makeRequestSummary(for: request, requestBodySummary: requestBodySummary)
+        if attempt > 1 { requestSummary = "Retry \(attempt - 1) of a request that hit a network problem.\n\n" + requestSummary }
+        let watchdog = ConnectivityWatchdog(grace: retryPolicy.offlineGrace)
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response): (Data, URLResponse)
+            do {
+                (data, response) = try await session.data(for: request, delegate: watchdog)
+            } catch let error as URLError where error.code == .cancelled && watchdog.gaveUp {
+                // The watchdog cancelled a request that sat waiting for a
+                // network; report it as offline, not as a user cancel.
+                throw URLError(.notConnectedToInternet)
+            }
             guard let httpResponse = response as? HTTPURLResponse else {
                 let message = "Received a non-HTTP response from the server."
                 let durationMS = Self.durationMS(since: startedAt)
@@ -360,5 +435,103 @@ final class ProviderHTTPClient {
         }
 
         return nil
+    }
+}
+
+// MARK: - Retries
+
+/// When a failed provider request is worth sending again.
+///
+/// Retried: a connection that dropped or couldn't open (common on cellular),
+/// a provider's 5xx, 408 and 429 (with a short `Retry-After`). An STT request
+/// that timed out gets one more try; a cleanup request that timed out gets
+/// none, and a cleanup retry only starts within its first 10 seconds, since
+/// the raw transcript is pasted instead and a retry would only make the user
+/// wait. Never retried: other 4xx (a bad key or request fails
+/// the same way again), no network at all (nothing to wait for), and
+/// cancellation.
+struct ProviderRetryPolicy {
+    /// Total tries, the first included.
+    var maxAttempts = 3
+    /// The wait before each retry; the last entry repeats.
+    var delays: [Duration] = [.milliseconds(400), .milliseconds(1_200)]
+    /// No retry starts once this much time has gone by since the first try.
+    var budget: Duration = .seconds(60)
+    /// The same for a cleanup request, kept short: when cleanup fails the
+    /// raw transcript is pasted, and waiting on retries would only delay it.
+    var cleanupBudget: Duration = .seconds(10)
+    /// How long a request may wait for a network to appear before it fails
+    /// as offline. The session waits for connectivity so a brief dropout
+    /// doesn't fail a dictation, but a long one shouldn't hang it for the
+    /// session's five-minute resource timeout.
+    var offlineGrace: TimeInterval = 10
+    /// The longest `Retry-After` honoured; longer means don't retry.
+    var maxRetryAfter: Duration = .seconds(5)
+
+    static let standard = ProviderRetryPolicy()
+
+    static let retriedTransportCodes: Set<URLError.Code> = [
+        .networkConnectionLost,
+        .cannotConnectToHost,
+        .cannotFindHost,
+        .dnsLookupFailed,
+        .secureConnectionFailed,
+        .badServerResponse,
+    ]
+
+    static let retriedStatusCodes: Set<Int> = [408, 429, 500, 502, 503, 504]
+
+    func delay(afterError error: Error, kind: ProviderRequestKind, attempt: Int, elapsed: Duration) -> Duration? {
+        guard canRetry(attempt: attempt, elapsed: elapsed, kind: kind), let urlError = error as? URLError else { return nil }
+        if urlError.code == .timedOut {
+            return kind == .stt && attempt == 1 ? delay(for: attempt) : nil
+        }
+        return Self.retriedTransportCodes.contains(urlError.code) ? delay(for: attempt) : nil
+    }
+
+    func delay(afterStatus status: Int, retryAfter: String?, kind: ProviderRequestKind = .stt, attempt: Int, elapsed: Duration) -> Duration? {
+        guard Self.retriedStatusCodes.contains(status), canRetry(attempt: attempt, elapsed: elapsed, kind: kind) else { return nil }
+        if let retryAfter, let seconds = Double(retryAfter.trimmingCharacters(in: .whitespaces)) {
+            let requested = Duration.milliseconds(Int(seconds * 1_000))
+            return requested <= maxRetryAfter ? max(requested, delay(for: attempt)) : nil
+        }
+        return delay(for: attempt)
+    }
+
+    private func canRetry(attempt: Int, elapsed: Duration, kind: ProviderRequestKind) -> Bool {
+        attempt < maxAttempts && elapsed < (kind == .llm ? cleanupBudget : budget)
+    }
+
+    private func delay(for attempt: Int) -> Duration {
+        guard !delays.isEmpty else { return .zero }
+        return delays[min(attempt - 1, delays.count - 1)]
+    }
+}
+
+/// Cancels a request that has waited `grace` seconds for a network without
+/// sending a byte, and remembers doing so.
+private final class ConnectivityWatchdog: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let grace: TimeInterval
+    private let lock = NSLock()
+    private var didGiveUp = false
+
+    init(grace: TimeInterval) {
+        self.grace = grace
+    }
+
+    var gaveUp: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return didGiveUp
+    }
+
+    func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + grace) { [weak self, weak task] in
+            guard let self, let task, task.state == .running,
+                  task.countOfBytesSent == 0, task.countOfBytesReceived == 0 else { return }
+            self.lock.lock()
+            self.didGiveUp = true
+            self.lock.unlock()
+            task.cancel()
+        }
     }
 }
