@@ -65,10 +65,10 @@ struct DeepgramSTT: STTProvider {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeoutSeconds
-        let audioData = try Data(contentsOf: fileURL)
-        request.httpBody = audioData
+        let audio = try UploadAudio.load(fileURL, for: Self.providerID)
+        request.setValue(audio.mimeType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = audio.data
 
         do {
             let response = try await httpClient.send(
@@ -76,8 +76,8 @@ struct DeepgramSTT: STTProvider {
                 providerID: Self.providerID.rawValue,
                 kind: .stt,
                 requestBodySummary: """
-                raw audio/wav body
-                file: \(fileURL.lastPathComponent) (\(audioData.count) bytes)
+                raw \(audio.mimeType) body
+                file: \(fileURL.lastPathComponent) (\(audio.data.count) bytes)
                 model: \(model)
                 smart_format: true
                 punctuate: true
@@ -105,6 +105,8 @@ struct DeepgramSTT: STTProvider {
             throw error
         } catch let error as URLError where error.code == .timedOut {
             throw STTError.timeout(provider: .deepgram)
+        } catch let error as URLError {
+            throw STTError.network(provider: .deepgram, message: ProviderHTTPClient.transportErrorMessage(for: error))
         } catch {
             throw STTError.apiError(
                 provider: .deepgram,

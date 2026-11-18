@@ -104,9 +104,9 @@ struct ElevenLabsSTT: STTProvider {
 
         let fields = Self.formFields(model: model, language: language, vocabulary: vocabulary)
 
-        let audioData = try Data(contentsOf: fileURL)
+        let audio = try UploadAudio.load(fileURL, for: Self.providerID)
         var body = Data()
-        body.appendMultipart(boundary: boundary, name: "file", filename: fileURL.lastPathComponent, mimeType: "audio/wav", data: audioData)
+        body.appendMultipart(boundary: boundary, name: "file", filename: audio.filename, mimeType: audio.mimeType, data: audio.data)
         body.appendMultipart(boundary: boundary, fields: fields)
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
@@ -118,7 +118,7 @@ struct ElevenLabsSTT: STTProvider {
                 kind: .stt,
                 requestBodySummary: """
                 multipart form-data
-                file: \(fileURL.lastPathComponent) (audio/wav, \(audioData.count) bytes)
+                file: \(fileURL.lastPathComponent) (\(audio.mimeType), \(audio.data.count) bytes)
                 \(fields.map { "\($0.name): \($0.value)" }.joined(separator: "\n"))
                 """
             )
@@ -138,6 +138,8 @@ struct ElevenLabsSTT: STTProvider {
             throw error
         } catch let error as URLError where error.code == .timedOut {
             throw STTError.timeout(provider: .elevenlabs)
+        } catch let error as URLError {
+            throw STTError.network(provider: .elevenlabs, message: ProviderHTTPClient.transportErrorMessage(for: error))
         } catch {
             throw STTError.apiError(
                 provider: .elevenlabs,

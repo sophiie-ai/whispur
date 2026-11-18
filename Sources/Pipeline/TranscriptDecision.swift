@@ -204,3 +204,22 @@ enum DictationFailureClassifier {
         return true
     }
 }
+
+/// Which transcription errors mean the provider couldn't be reached, as
+/// opposed to the provider answering no. The first kind can be filled in on
+/// this Mac; the second (a bad key, a rejected request) would only hide a
+/// problem the user has to fix.
+enum NetworkFailure {
+    static func isNetworkFailure(_ error: Error) -> Bool {
+        switch error {
+        case STTError.network, STTError.timeout:
+            return true
+        case let STTError.apiError(_, _, status?):
+            return ProviderRetryPolicy.retriedStatusCodes.contains(status)
+        case let urlError as URLError:
+            return urlError.code != .cancelled
+        default:
+            return false
+        }
+    }
+}

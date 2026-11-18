@@ -154,6 +154,9 @@ enum STTError: LocalizedError {
     case invalidAudioFormat
     case apiError(provider: STTProviderID, message: String, statusCode: Int?)
     case timeout(provider: STTProviderID)
+    /// The provider couldn't be reached: no network, a dropped connection,
+    /// a failed DNS lookup or TLS handshake. Shown like `apiError`.
+    case network(provider: STTProviderID, message: String)
     case missingAPIKey(provider: STTProviderID)
     /// An on-device provider whose model isn't on this Mac (yet).
     case modelNotReady(provider: STTProviderID, detail: String)
@@ -168,6 +171,8 @@ enum STTError: LocalizedError {
             "\(provider.displayName) error\(code.map { " (\($0))" } ?? ""): \(message)"
         case let .timeout(provider):
             "\(provider.displayName) transcription timed out."
+        case let .network(provider, message):
+            "\(provider.displayName) error: \(message)"
         case let .missingAPIKey(provider):
             "\(provider.displayName) API key is not configured."
         case let .modelNotReady(_, detail):

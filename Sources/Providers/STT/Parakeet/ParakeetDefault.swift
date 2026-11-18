@@ -130,6 +130,9 @@ struct STTRoute: Equatable {
     let provider: STTProviderID
     /// The selected provider when it couldn't run and `provider` filled in.
     let fallbackFrom: STTProviderID?
+    /// `provider` filled in because `fallbackFrom`, a cloud provider,
+    /// couldn't be reached (rather than a model still downloading).
+    var afterNetworkFailure = false
 
     /// Parakeet with its model still missing (not downloaded, downloading,
     /// deleted) transcribes with Apple on-device instead, so dictation works

@@ -65,6 +65,9 @@ final class DictationPipeline: ObservableObject {
     /// batch request. Nil while nothing has been sent, and for a streamed
     /// transcript, which always comes from `selectedSTT`.
     private(set) var lastRoute: STTRoute?
+    /// The current dictation's cloud provider couldn't be reached and
+    /// Parakeet transcribed it on this Mac instead. The overlay says so.
+    @Published private(set) var transcribedOffline = false
     /// Replaces the registry's speech providers. Tests only.
     var sttProviderOverride: ((STTProviderID) -> (any STTProvider)?)?
     var selectedLLM: LLMProviderID = .anthropic
@@ -779,6 +782,7 @@ final class DictationPipeline: ObservableObject {
         }
         defer { finishAfterNormalizing(normalization, dictationID: dictationID) }
         lastRoute = nil
+        transcribedOffline = false
         let transcriptionStarted = ContinuousClock.now
 
         do {
@@ -826,11 +830,14 @@ final class DictationPipeline: ObservableObject {
             diagnostics.stage = .cleanup
             let styleChoice = cleanupChoice()
             let decided = await ProviderRequestContext.$dictationID.withValue(dictationID) {
+                // Offline, the cleanup request would fail too: paste
+                // Parakeet's transcript as it heard it.
                 await decideText(
                     forRaw: normalizedRawTranscript,
                     styleChoice: styleChoice,
                     appBundleID: recordingAppBundleID,
-                    updatesPhase: true
+                    updatesPhase: true,
+                    skipsCleanup: transcribedOffline
                 )
             }
             guard let decided else {
@@ -869,7 +876,8 @@ final class DictationPipeline: ObservableObject {
                 appBundleID: recordingAppBundleID,
                 style: decided.style,
                 sttFallbackFrom: lastRoute?.fallbackFrom,
-                cleanupOff: decided.cleanupOff
+                cleanupOff: decided.cleanupOff,
+                sttFallbackOffline: lastRoute?.afterNetworkFailure == true
             )
 
             smartSpacedDictationID = pasteText == finalTranscript ? nil : result.id
@@ -880,7 +888,8 @@ final class DictationPipeline: ObservableObject {
             diagnostics.outcome = .success
             diagnostics.errorMessage = nil
             phase = .done(finalTranscript)
-            scheduleResetToIdle(after: .milliseconds(1200))
+            // Long enough to read that the text came from this Mac.
+            scheduleResetToIdle(after: transcribedOffline ? .seconds(3) : .milliseconds(1200))
         } catch is CancellationError {
             diagnostics.outcome = .cancelled
             diagnostics.errorMessage = nil
@@ -1076,11 +1085,12 @@ final class DictationPipeline: ObservableObject {
         forRaw normalizedRaw: String,
         styleChoice: CleanupStyleChoice?,
         appBundleID: String? = nil,
-        updatesPhase: Bool
+        updatesPhase: Bool,
+        skipsCleanup: Bool = false
     ) async -> DecidedText? {
         let spoken = TextFixes.apply(VoiceCommands.apply(to: normalizedRaw), options: textFixOptions(for: appBundleID))
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cleanupEnabled else {
+        guard cleanupEnabled, !skipsCleanup else {
             guard case let .paste(text, _) = TranscriptDecision.finalOutcome(raw: spoken, cleaned: nil) else { return nil }
             return DecidedText(text: text, llmModel: nil, style: nil, rawFallbackReason: nil, cleanupOff: true)
         }
@@ -1277,7 +1287,41 @@ final class DictationPipeline: ObservableObject {
             return text
         } catch {
             if !(error is CancellationError) { reportOnDevice(route, since: started, text: nil, error: error) }
+            // A retry from Activity is the user asking for this provider;
+            // only a live dictation falls back.
+            if updatesPhase, let text = await offlineTranscript(after: error, route: route, wavURL: wavURL) {
+                return text
+            }
             throw error
+        }
+    }
+
+    /// Parakeet's transcript of `wavURL` when the cloud provider in `route`
+    /// couldn't be reached (after the HTTP client's own retries) and Parakeet
+    /// can stand in: its model is on this Mac and it covers every one of the
+    /// user's languages. Nil otherwise, and when Parakeet fails too, so the
+    /// provider's error is what the user sees.
+    func offlineTranscript(after error: Error, route: STTRoute, wavURL: URL) async -> String? {
+        guard !Task.isCancelled,
+              !route.provider.runsOnDevice,
+              NetworkFailure.isNetworkFailure(error),
+              parakeetInstalled(),
+              ParakeetLanguages.unsupported(in: sttLanguageSelection).isEmpty,
+              let parakeet = sttProviderOverride?(.parakeet) ?? registry.makeSTTProvider(for: .parakeet)
+        else { return nil }
+        let fallback = STTRoute(provider: .parakeet, fallbackFrom: route.provider, afterNetworkFailure: true)
+        logger.notice("\(route.provider.rawValue, privacy: .public) unreachable (\(error.localizedDescription, privacy: .public)); transcribing with Parakeet")
+        lastRoute = fallback
+        let started = ContinuousClock.now
+        do {
+            let text = try await transcribe(with: parakeet, route: fallback, wavURL: wavURL, initial: nil)
+            reportOnDevice(fallback, since: started, text: text, error: nil)
+            transcribedOffline = true
+            return text
+        } catch {
+            if !(error is CancellationError) { reportOnDevice(fallback, since: started, text: nil, error: error) }
+            lastRoute = route
+            return nil
         }
     }
 
@@ -1297,13 +1341,34 @@ final class DictationPipeline: ObservableObject {
     }
 
     static func onDeviceSummary(for route: STTRoute) -> String {
+        if let from = route.fallbackFrom, route.afterNetworkFailure {
+            return "Transcribed on this Mac with \(route.provider.displayName) because \(from.displayName) couldn't be reached."
+        }
         if let from = route.fallbackFrom {
             return "Transcribed on this Mac with \(route.provider.displayName) because \(from.displayName)'s model isn't downloaded yet."
         }
         return "Transcribed on this Mac with \(route.provider.displayName)."
     }
 
+    /// A provider that turned the FLAC upload away (400 or 415) gets the
+    /// same recording again as WAV, and WAV for the rest of the session.
     private func transcribe(with sttProvider: any STTProvider, route: STTRoute, wavURL: URL, initial: String?) async throws -> String {
+        let sentFLAC = UploadAudio.sendsFLAC(to: route.provider)
+        do {
+            return try await transcribeOnce(with: sttProvider, route: route, wavURL: wavURL, initial: initial)
+        } catch let STTError.apiError(_, _, status?) where sentFLAC && (status == 400 || status == 415) {
+            UploadAudio.markFLACRejected(by: route.provider)
+            do {
+                return try await transcribeOnce(with: sttProvider, route: route, wavURL: wavURL, initial: initial)
+            } catch {
+                // WAV failed as well, so the format wasn't the problem.
+                UploadAudio.clearFLACRejection(for: route.provider)
+                throw error
+            }
+        }
+    }
+
+    private func transcribeOnce(with sttProvider: any STTProvider, route: STTRoute, wavURL: URL, initial: String?) async throws -> String {
         try await MultiLanguageTranscription.transcribe(
             provider: sttProvider,
             providerID: route.provider,
@@ -1498,6 +1563,9 @@ struct PipelineResult: Identifiable, Codable {
     /// (Parakeet while its model downloads, with `sttProvider` Apple). Nil
     /// when the selected provider ran, and for results saved before this.
     var sttFallbackFrom: STTProviderID?
+    /// True when `sttProvider` filled in because `sttFallbackFrom`, a cloud
+    /// provider, couldn't be reached. Nil otherwise and for older results.
+    var sttFallbackOffline: Bool?
     /// True when cleanup was switched off for this dictation: the pasted
     /// text is the transcript with only spoken edits and text fixes. Nil
     /// for cleaned dictations and results saved before the switch existed.
@@ -1530,7 +1598,8 @@ struct PipelineResult: Identifiable, Codable {
         style: WritingStyle? = nil,
         failure: DictationFailure? = nil,
         sttFallbackFrom: STTProviderID? = nil,
-        cleanupOff: Bool = false
+        cleanupOff: Bool = false,
+        sttFallbackOffline: Bool = false
     ) {
         self.id = id
         self.rawTranscript = rawTranscript
@@ -1544,6 +1613,7 @@ struct PipelineResult: Identifiable, Codable {
         self.failure = failure
         self.sttFallbackFrom = sttFallbackFrom
         self.cleanupOff = cleanupOff ? true : nil
+        self.sttFallbackOffline = sttFallbackOffline ? true : nil
     }
 
     /// The provider that transcribed, and the one it filled in for.
