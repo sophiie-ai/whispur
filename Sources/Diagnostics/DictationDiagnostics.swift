@@ -47,6 +47,24 @@ struct DictationDiagnostics: Codable, Identifiable, Equatable {
         var silenceRatio: Double
         /// The recording started at shortcut key-down (early capture).
         var usedEarlyCapture: Bool
+        /// What the live mic check flagged (`MicHealthMonitor`), nil when
+        /// the audio looked healthy. Records before the check lack all of
+        /// the fields below.
+        var micHealthIssue: MicHealthIssue?
+        /// Frames received per second over the input's declared sample rate.
+        /// Near 1 when healthy; nil when the recording was too short to
+        /// measure.
+        var measuredRateRatio: Double?
+        /// Short flat runs mid-speech (`MicHealthMonitor`).
+        var midStreamDropouts: Int?
+        /// Seconds from the first buffer to the flag.
+        var micHealthFlaggedAfterSeconds: Double?
+        /// The input was a Bluetooth device. Context only: Bluetooth alone
+        /// is not a problem.
+        var inputIsBluetooth: Bool?
+        /// The recording started soon after a start failed because the input
+        /// device was unavailable ('!dev').
+        var startedAfterDeviceUnavailable: Bool?
     }
 
     struct Transcription: Codable, Equatable {
@@ -168,7 +186,13 @@ extension DictationDiagnostics.Audio {
             peakLevel: Double(metrics.buffers.map(\.peak).max() ?? 0),
             rmsLevel: frames > 0 ? (sumOfSquares / Double(frames)).squareRoot() : 0,
             silenceRatio: frames > 0 ? Double(silentFrames) / Double(frames) : 1,
-            usedEarlyCapture: usedEarlyCapture
+            usedEarlyCapture: usedEarlyCapture,
+            micHealthIssue: metrics.micHealth.issue,
+            measuredRateRatio: metrics.micHealth.measuredRateRatio,
+            midStreamDropouts: metrics.micHealth.dropoutCount,
+            micHealthFlaggedAfterSeconds: metrics.micHealth.flaggedAfterSeconds,
+            inputIsBluetooth: metrics.inputIsBluetooth,
+            startedAfterDeviceUnavailable: metrics.startedAfterDeviceUnavailable ? true : nil
         )
     }
 }
@@ -244,6 +268,9 @@ extension DictationDiagnostics {
             parts.append("\(Self.formatDuration(audio.recordingSeconds)) audio")
             if audio.silenceRatio >= 0.5 {
                 parts.append("\(Int((audio.silenceRatio * 100).rounded()))% silent")
+            }
+            if audio.micHealthIssue != nil {
+                parts.append("mic audio broken")
             }
         }
         if let transcription {
