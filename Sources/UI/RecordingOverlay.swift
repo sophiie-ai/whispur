@@ -24,6 +24,8 @@ struct RecordingOverlay: View {
     var style: OverlayStyle = .standard
     let onStop: () -> Void
     let onCancel: () -> Void
+    /// The mic warning's "Use built-in mic".
+    var onSwitchToBuiltInMic: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -62,6 +64,10 @@ struct RecordingOverlay: View {
                 overlayShell {
                     VStack(alignment: .leading, spacing: 10) {
                         recordingRow
+                        if let warning = pipeline.micHealthWarning {
+                            micWarningRow(warning)
+                                .transition(.opacity)
+                        }
                         if pipeline.streamsLiveTranscript, !pipeline.liveTranscript.isEmpty {
                             LiveTranscriptText(
                                 text: pipeline.liveTranscript,
@@ -74,6 +80,7 @@ struct RecordingOverlay: View {
                         }
                     }
                     .sophiieAnimation(value: pipeline.liveTranscript.isEmpty)
+                    .sophiieAnimation(value: pipeline.micHealthWarning)
                 }
             case .normalizingAudio, .transcribing, .cleaningTranscript, .pasting:
                 overlayShell {
@@ -160,6 +167,32 @@ struct RecordingOverlay: View {
             }
         }
         .sophiieAnimation(value: pipeline.activeTriggerMode)
+    }
+
+    /// Amber, once per recording: the audio is broken and won't be
+    /// pasted. Offers the built-in mic when there is one to switch to.
+    private func micWarningRow(_ warning: MicHealthWarning) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(OnDark.warning)
+            Text("Mic audio is breaking up")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(OnDark.warning)
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 6)
+            if warning.builtInMicrophoneUID != nil {
+                Button("Use built-in mic", action: onSwitchToBuiltInMic)
+                    .buttonStyle(.sophiieSecondaryOnDark)
+                    .controlSize(.small)
+                    .help("Restart this recording on the built-in microphone")
+            } else {
+                Text("It won't be pasted")
+                    .font(.caption)
+                    .foregroundStyle(OnDark.inkSecondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var cancelButton: some View {
@@ -385,7 +418,12 @@ struct CompactRecordingOverlay: View {
         switch pipeline.phase {
         case .recording:
             HStack(spacing: 8) {
-                MiniWaveformView(samples: pipeline.audioSamples, silence: pipeline.isHearingSilence)
+                // The pill has no room for words: a broken mic turns the
+                // waveform amber, like silence does.
+                MiniWaveformView(
+                    samples: pipeline.audioSamples,
+                    silence: pipeline.isHearingSilence || pipeline.micHealthWarning != nil
+                )
                     .frame(width: 56, height: 16)
                 if showsLiveWords {
                     LiveTranscriptText(
