@@ -21,6 +21,13 @@ final class DictationPipeline: ObservableObject {
     /// Words heard so far while streaming, for the overlay. Empty when not
     /// streaming.
     @Published private(set) var liveTranscript: String = ""
+    /// Set once per recording when the live mic check finds the audio
+    /// broken (`MicHealthMonitor`). The overlay warns while recording, and
+    /// the recording is not pasted.
+    @Published private(set) var micHealthWarning: MicHealthWarning?
+    /// The built-in microphone's UID, for the warning's switch action.
+    /// Injectable for tests.
+    var builtInMicrophoneUID: () -> String? = { AudioDevice.builtInInputDevice()?.uid }
 
     private var silentSampleCount: Int = 0
     private static let silenceLevelThreshold: Float = 0.05
@@ -301,8 +308,10 @@ final class DictationPipeline: ObservableObject {
         }
 
         microphoneRequestTask?.cancel()
+        let assumedStatus = microphoneStatusForTesting
         microphoneRequestTask = Task { [weak self] in
-            let status = await Self.readMicrophoneStatus()
+            let status: AVAuthorizationStatus
+            if let assumedStatus { status = assumedStatus } else { status = await Self.readMicrophoneStatus() }
             guard let self, !Task.isCancelled else { return }
             self.lastKnownMicrophoneStatus = status
             await self.requestMicrophoneAccessAndBeginRecording(status: status)
@@ -330,6 +339,7 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = { [weak self] in
             Task { @MainActor in self?.recorderHeardFirstAudio(generation: generation) }
         }
+        watchMicHealth(generation: generation)
         earlyCaptureWatchdog = Task { [weak self] in
             try? await Task.sleep(for: Self.earlyCaptureTimeout)
             guard !Task.isCancelled, let self, self.earlyCapture?.generation == generation else { return }
@@ -361,8 +371,9 @@ final class DictationPipeline: ObservableObject {
         }
     }
 
-    /// Test seam: the microphone permission `beginEarlyCapture` sees, both
-    /// up front and in its recheck, instead of the system's.
+    /// Test seam: the microphone permission `beginEarlyCapture` (up front
+    /// and in its recheck) and `startRecording` see, instead of the
+    /// system's.
     private var microphoneStatusForTesting: AVAuthorizationStatus?
     func assumeMicrophoneStatusForTesting(_ status: AVAuthorizationStatus) {
         microphoneStatusForTesting = status
@@ -376,6 +387,8 @@ final class DictationPipeline: ObservableObject {
         guard early.generation == recordingGeneration else { return }
         recordingGeneration &+= 1
         recorder.onRecordingReady = nil
+        recorder.onMicHealthIssue = nil
+        micHealthWarning = nil
         recorder.onAudioBuffer = nil
         recorder.discardRecording()
         logger.info("Early capture discarded")
@@ -436,6 +449,7 @@ final class DictationPipeline: ObservableObject {
         audioLevel = 0
 
         recorder.onRecordingReady = nil
+        recorder.onMicHealthIssue = nil
 
         let stopped = recorder.stopRecording()
         recorder.onAudioBuffer = nil
@@ -493,6 +507,8 @@ final class DictationPipeline: ObservableObject {
         audioLevelCancellable = nil
 
         recorder.onRecordingReady = nil
+        recorder.onMicHealthIssue = nil
+        micHealthWarning = nil
         let stopped = recorder.stopRecording()
         recorder.onAudioBuffer = nil
         if wasRecording {
@@ -585,7 +601,7 @@ final class DictationPipeline: ObservableObject {
         }
     }
 
-    private func beginRecording() async {
+    private func beginRecording(ticket: Int? = nil) async {
         // Move out of `.idle` before touching the recorder so stop events are
         // never dropped even if the user stops immediately. A discarded
         // early capture may still be stopping; the recorder serializes this
@@ -598,9 +614,73 @@ final class DictationPipeline: ObservableObject {
         recorder.onRecordingReady = { [weak self] in
             Task { @MainActor in self?.recorderHeardFirstAudio(generation: generation) }
         }
+        watchMicHealth(generation: generation)
 
         startStreamingIfEnabled()
-        await startRecorder(generation: generation, holdingAudio: false)
+        await startRecorder(generation: generation, holdingAudio: false, ticket: ticket)
+    }
+
+    /// Clears the last recording's warning and listens for this one's.
+    private func watchMicHealth(generation: Int) {
+        micHealthWarning = nil
+        recorder.onMicHealthIssue = { [weak self] issue in
+            Task { @MainActor in self?.recorderFoundMicIssue(issue, generation: generation) }
+        }
+    }
+
+    /// The live mic check flagged the recording: warn once, offering the
+    /// built-in microphone when the recording isn't already on it.
+    private func recorderFoundMicIssue(_ issue: MicHealthIssue, generation: Int) {
+        guard generation == recordingGeneration, micHealthWarning == nil else { return }
+        let builtIn = recorder.currentInputIsBuiltIn ? nil : builtInMicrophoneUID()
+        micHealthWarning = MicHealthWarning(issue: issue, builtInMicrophoneUID: builtIn)
+        logger.warning("Mic audio is breaking up (\(issue.rawValue, privacy: .public)); this recording won't be pasted")
+    }
+
+    /// Throws the current recording away and starts a new one with the
+    /// same trigger mode, on whatever input the settings now pick. For the
+    /// mic warning's "Use built-in mic": the broken recording is never
+    /// pasted, so nothing worth keeping is lost, and the shortcut session
+    /// carries on (release or press again to stop the new recording).
+    func restartRecording() {
+        guard phase == .starting || phase == .recording, earlyCapture == nil else { return }
+        let mode = activeTriggerMode
+        recordingGeneration &+= 1
+        cancelResetTask()
+        microphoneRequestTask?.cancel()
+        microphoneRequestTask = nil
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
+        recorder.onRecordingReady = nil
+        recorder.onMicHealthIssue = nil
+
+        let stopped = recorder.stopRecording()
+        recorder.onAudioBuffer = nil
+        recordDiagnostics(DictationDiagnostics(
+            outcome: .cancelled,
+            stage: .recording,
+            errorMessage: "Restarted on another microphone.",
+            audio: stopped.map { DictationDiagnostics.Audio(metrics: $0.metrics, usedEarlyCapture: recordingUsedEarlyCapture) }
+        ))
+        streamingSession?.cancel()
+        streamingSession = nil
+        recorder.cleanup()
+        systemAudioMuter.restore()
+        audioLevel = 0
+        resetAudioSamples()
+
+        activeTriggerMode = mode
+        micHealthWarning = nil
+        phase = .starting
+        // Taken now, so a stop that comes before the new start runs makes
+        // the recorder refuse it instead of opening the microphone after.
+        let ticket = recorder.startTicket()
+        logger.notice("Restarting the recording on the current input setting")
+        microphoneRequestTask = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            await self.beginRecording(ticket: ticket)
+            self.microphoneRequestTask = nil
+        }
     }
 
     /// Starts the engine for `generation` and, once it runs, finishes the
@@ -771,6 +851,42 @@ final class DictationPipeline: ObservableObject {
             return
         }
 
+        // The live mic check found the audio broken (sped up, slowed down,
+        // or full of dropouts). A transcript of it is nonsense that reads
+        // like text, so nothing is sent or pasted: the dictation fails with
+        // its recording kept, and Activity can transcribe it again.
+        if metrics.micHealth.issue != nil {
+            stream?.cancel()
+            phase = .normalizingAudio
+            let normalized = try? await Task.detached(priority: .userInitiated) {
+                try AudioNormalization.normalizeMeasured(recordedURL)
+            }.value
+            defer { if let normalized { try? FileManager.default.removeItem(at: normalized.url) } }
+            if let normalized {
+                diagnostics.audio?.normalizedSeconds = normalized.durationSeconds
+                diagnostics.audio?.normalizedSampleCount = normalized.sampleCount
+            }
+            guard !Task.isCancelled else {
+                diagnostics.outcome = .cancelled
+                diagnostics.errorMessage = nil
+                return
+            }
+            let message = Self.brokenMicAudioMessage
+            diagnostics.outcome = .failed
+            diagnostics.errorMessage = message
+            historyStore.recordFailure(
+                id: dictationID,
+                error: message,
+                wavURL: normalized?.url,
+                sttProvider: selectedSTT,
+                llmProvider: selectedLLM,
+                appBundleID: recordingAppBundleID,
+                style: cleanupChoice()?.style
+            )
+            showError(message, dictationID: dictationID)
+            return
+        }
+
         // The recording is always normalized, even while a stream is
         // finishing: it is the fallback if streaming fails, and the copy kept
         // for a retry if the dictation fails. Removed at the end unless a
@@ -837,7 +953,8 @@ final class DictationPipeline: ObservableObject {
                     styleChoice: styleChoice,
                     appBundleID: recordingAppBundleID,
                     updatesPhase: true,
-                    skipsCleanup: transcribedOffline
+                    skipsCleanup: transcribedOffline,
+                    micAudioCorrupted: metrics.micHealth.issue != nil
                 )
             }
             guard let decided else {
@@ -939,6 +1056,8 @@ final class DictationPipeline: ObservableObject {
             }
         }
     }
+
+    static let brokenMicAudioMessage = "Your mic's audio was breaking up, so nothing was pasted. The recording is in Activity to try again."
 
     /// Transcription signals for diagnostics. `rawTranscript` is nil when
     /// transcription failed.
@@ -1086,7 +1205,8 @@ final class DictationPipeline: ObservableObject {
         styleChoice: CleanupStyleChoice?,
         appBundleID: String? = nil,
         updatesPhase: Bool,
-        skipsCleanup: Bool = false
+        skipsCleanup: Bool = false,
+        micAudioCorrupted: Bool = false
     ) async -> DecidedText? {
         let spoken = TextFixes.apply(VoiceCommands.apply(to: normalizedRaw), options: textFixOptions(for: appBundleID))
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1097,6 +1217,12 @@ final class DictationPipeline: ObservableObject {
         let cleanup = await clean(spoken, styleChoice: styleChoice, updatesPhase: updatesPhase)
         switch TranscriptDecision.finalOutcome(raw: spoken, cleaned: cleanup.text) {
         case .dismiss:
+            return nil
+        case .paste(_, .cleanupEmpty?) where micAudioCorrupted:
+            // Cleanup found no real speech, and the audio is known to be
+            // broken: believe cleanup instead of pasting a raw transcript of
+            // garbled audio.
+            logger.warning("Cleanup returned no text for broken mic audio; not falling back to the raw transcript")
             return nil
         case let .paste(text, rawFallbackReason):
             if let rawFallbackReason, cleanup.text != nil {
@@ -1251,8 +1377,15 @@ final class DictationPipeline: ObservableObject {
             throw RetryError.noSpeech
         }
         let styleChoice = cleanupStyle?(appBundleID)
+        let micAudioCorrupted = historyStore.diagnostics.item(dictationID)?.audio?.micHealthIssue != nil
         let decided = await ProviderRequestContext.$dictationID.withValue(dictationID) {
-            await decideText(forRaw: normalizedRaw, styleChoice: styleChoice, appBundleID: appBundleID, updatesPhase: false)
+            await decideText(
+                forRaw: normalizedRaw,
+                styleChoice: styleChoice,
+                appBundleID: appBundleID,
+                updatesPhase: false,
+                micAudioCorrupted: micAudioCorrupted
+            )
         }
         guard let decided else { throw RetryError.noSpeech }
         let cleaned = decided.rawFallbackReason == nil
@@ -1483,6 +1616,11 @@ final class DictationPipeline: ObservableObject {
         lastResult = result
     }
 
+    /// Sets the mic warning. Only for overlay renders and tests.
+    func setMicHealthWarningForRendering(_ warning: MicHealthWarning?) {
+        micHealthWarning = warning
+    }
+
     /// Runs a finished recording through the pipeline as `stopAndProcess`
     /// would, without a microphone. Tests only.
     func processRecordingForTesting(
@@ -1526,6 +1664,14 @@ final class DictationPipeline: ObservableObject {
             }
         }
     }
+}
+
+/// The overlay's warning that the microphone's audio is broken.
+struct MicHealthWarning: Equatable {
+    let issue: MicHealthIssue
+    /// Offered as "Use built-in mic"; nil when there is none, or the
+    /// recording already uses it.
+    let builtInMicrophoneUID: String?
 }
 
 enum PipelinePhase: Equatable {

@@ -227,7 +227,8 @@ final class AppState: ObservableObject {
             to: pipeline,
             styleProvider: { [weak self] in self?.overlayStyle ?? .standard },
             onStop: { [weak self] in self?.stopDictation() },
-            onCancel: { [weak self] in self?.cancelDictation() }
+            onCancel: { [weak self] in self?.cancelDictation() },
+            onSwitchToBuiltInMic: { [weak self] in self?.switchToBuiltInMicrophone() }
         )
 
         syncPipelineConfig()
@@ -993,6 +994,15 @@ final class AppState: ObservableObject {
     private func syncHotkeySessionState() {
         hotkeyManager.setToggleSessionActive(shortcutSessionController.activeMode == .toggle)
         hotkeyManager.setShortcutSessionActive(shortcutSessionController.activeMode != nil)
+    }
+
+    /// The mic warning's action: make the built-in microphone the input
+    /// device (the same setting as Settings > Input device) and restart the
+    /// recording on it.
+    func switchToBuiltInMicrophone() {
+        guard let uid = pipeline.micHealthWarning?.builtInMicrophoneUID else { return }
+        preferredAudioInputUID = uid
+        pipeline.restartRecording()
     }
 
     func cancelDictation() {
