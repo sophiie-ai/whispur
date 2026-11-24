@@ -148,6 +148,20 @@ On GitHub at github.com/sophiie-ai/whispur. Issues and pull requests are welcome
 - The app has no telemetry. The website uses cookie-free Vercel Web Analytics and Speed Insights.
 - Full policy: https://whispur.app/privacy
 
+## Blog and comparisons
+
+- [Blog](https://whispur.app/blog): guides to voice dictation on a Mac (Markdown: https://whispur.app/blog.md)
+- [Best Mac dictation apps in 2026: an honest comparison](https://whispur.app/blog/best-mac-dictation-apps): An honest comparison of Whispur, Wispr Flow, Superwhisper, MacWhisper and Apple Dictation: price, privacy, engines, offline use and platforms.
+- [Offline dictation on a Mac: private, on-device speech to text](https://whispur.app/blog/offline-dictation-mac): How on-device dictation works with NVIDIA Parakeet and Apple speech recognition, the one-time model download, Apple silicon vs Intel, and when cloud is worth it.
+- [Whisper vs Scribe vs Nova-3: choosing a speech engine for dictation](https://whispur.app/blog/whisper-vs-scribe-vs-nova-3): The trade-offs between the eight speech engines Whispur supports: latency, cost model, streaming, languages and custom vocabulary, and how to switch.
+- [Dictating code, commit messages and AI prompts on a Mac](https://whispur.app/blog/dictating-code-and-prompts): A developer's setup for voice: custom vocabulary, spoken symbols, the Code-aware style per app, the editable cleanup prompt and hands-free Command + Fn.
+- [Compare Whispur](https://whispur.app/compare): side-by-side comparisons with other dictation tools, sourced from each product's own site (Markdown: https://whispur.app/compare.md)
+- [Whispur vs Wispr Flow](https://whispur.app/compare/wispr-flow): Cross-platform cloud subscription vs a free, open-source Mac app that transcribes on-device by default.
+- [Whispur vs Superwhisper](https://whispur.app/compare/superwhisper): Two dictation apps with local models and custom prompts: one multi-platform with a Pro plan, one Mac-only, free and open source.
+- [Whispur vs MacWhisper](https://whispur.app/compare/macwhisper): MacWhisper leads with file and meeting transcription; Whispur does live dictation only. When to pick each, or use both.
+- [Whispur vs Apple Dictation](https://whispur.app/compare/apple-dictation): What the free, built-in macOS Dictation does well, and what Whispur adds on top: engines, cleanup, vocabulary, styles and history.
+- [Whispur and Granola: different jobs](https://whispur.app/compare/granola): Different jobs: Granola for meeting notes, Whispur for writing by voice. Plus how Granola's voice typing compares.
+
 ## About
 
 Whispur is made by Sophiie AI Pty Ltd (https://sophiie.ai). © 2026 Sophiie AI Pty Ltd. Released under the MIT License.

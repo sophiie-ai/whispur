@@ -12,6 +12,17 @@ const TWINS = {
   "/changelog": "/CHANGELOG.md",
 };
 
+// Blog and comparison pages: /blog, /compare, /blog/<slug> and
+// /compare/<slug> each have a twin at the same path plus ".md". A slug with
+// no twin gets the Markdown 404, like any other unknown page.
+const SECTION_TWIN = /^\/(blog|compare)(\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
+
+export function twinFor(pathname) {
+  if (TWINS[pathname]) return TWINS[pathname];
+  if (SECTION_TWIN.test(pathname)) return `${pathname}.md`;
+  return undefined;
+}
+
 const ASSET_PREFIXES = ["/media/", "/screenshots/", "/fonts/", "/brand/", "/_vercel/"];
 
 // Forwarded on the twin sub-request so a protected preview authorises it the
@@ -66,6 +77,7 @@ Try one of these instead:
 - [llms-full.txt](https://whispur.app/llms-full.txt): the full site content as Markdown
 - [Sitemap](https://whispur.app/sitemap.xml): every page on the site
 - [Changelog](https://whispur.app/CHANGELOG.md)
+- [Blog](https://whispur.app/blog.md) and [comparisons](https://whispur.app/compare.md)
 - [Download the latest DMG](https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg)
 `;
 }
@@ -84,7 +96,7 @@ export default async function middleware(request) {
   const pathname = normalizePath(new URL(request.url).pathname);
   if (isStaticAsset(pathname)) return;
 
-  const twin = TWINS[pathname];
+  const twin = twinFor(pathname);
   if (twin) {
     const headers = { Accept: "text/markdown, text/plain" };
     for (const name of FORWARDED_HEADERS) {
@@ -99,6 +111,10 @@ export default async function middleware(request) {
       if (start.length > 0 && !start.startsWith("<")) {
         return markdownResponse(request, body, 200, "public, max-age=0, s-maxage=3600, must-revalidate");
       }
+    }
+    // A section slug with no twin is an unknown page.
+    if (upstream.status === 404 && !TWINS[pathname]) {
+      return markdownResponse(request, notFoundMarkdown(pathname), 404, "public, max-age=0, s-maxage=600");
     }
     // Twin missing, or the sub-request got HTML back (e.g. a Deployment
     // Protection page on a preview): never label HTML as Markdown.

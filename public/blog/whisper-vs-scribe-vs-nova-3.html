@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Whisper vs Scribe vs Nova-3 for dictation | Whispur</title>
+  <meta name="description" content="Choosing a speech-to-text engine for Mac dictation: Whisper, gpt-transcribe, Nova-3, Scribe, Voxtral, Muse, Parakeet and Apple. Latency, cost, vocabulary." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://whispur.app/blog/whisper-vs-scribe-vs-nova-3" />
+  <link rel="alternate" type="text/markdown" href="/blog/whisper-vs-scribe-vs-nova-3.md" title="This page as Markdown" />
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Whisper vs Scribe vs Nova-3 for dictation | Whispur" />
+  <meta property="og:description" content="Choosing a speech-to-text engine for Mac dictation: Whisper, gpt-transcribe, Nova-3, Scribe, Voxtral, Muse, Parakeet and Apple. Latency, cost, vocabulary." />
+  <meta property="og:url" content="https://whispur.app/blog/whisper-vs-scribe-vs-nova-3" />
+  <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Whisper vs Scribe vs Nova-3 for dictation | Whispur" />
+  <meta name="twitter:description" content="Choosing a speech-to-text engine for Mac dictation: Whisper, gpt-transcribe, Nova-3, Scribe, Voxtral, Muse, Parakeet and Apple. Latency, cost, vocabulary." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+
+  <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Whisper vs Scribe vs Nova-3: choosing a speech engine for dictation",
+  "description": "Choosing a speech-to-text engine for Mac dictation: Whisper, gpt-transcribe, Nova-3, Scribe, Voxtral, Muse, Parakeet and Apple. Latency, cost, vocabulary.",
+  "datePublished": "2026-11-24",
+  "dateModified": "2026-11-24",
+  "author": {
+    "@type": "Organization",
+    "name": "The Whispur team",
+    "url": "https://whispur.app/about"
+  },
+  "publisher": {
+    "@id": "https://sophiie.ai/#organization"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://whispur.app/blog/whisper-vs-scribe-vs-nova-3"
+  },
+  "image": "https://whispur.app/og-image.png",
+  "inLanguage": "en"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Whispur",
+      "item": "https://whispur.app/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://whispur.app/blog"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Whisper vs Scribe vs Nova-3: choosing a speech engine for dictation",
+      "item": "https://whispur.app/blog/whisper-vs-scribe-vs-nova-3"
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div class="site-header__brand">
+        <a class="brand" href="/" aria-label="Whispur home">
+          <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" />
+          <span class="brand__name">Whispur</span>
+        </a>
+        <a class="brand__by" href="https://sophiie.ai" rel="noopener">
+          <span>by</span>
+          <img src="/brand/sophiie.svg" alt="Sophiie" width="82" height="14" />
+        </a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <ul class="site-nav__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#providers">Providers</a></li>
+          <li><a href="/#install">Install</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/changelog">Changelog</a></li>
+          <li><a href="/blog" aria-current="page">Blog</a></li>
+        </ul>
+        <div class="site-nav__actions">
+          <a class="hp-btn hp-btn--secondary site-nav__github" href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a>
+          <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="container container--narrow">
+      <div class="doc-hero">
+        <p class="eyebrow"><a href="/blog">Blog</a></p>
+        <h1>Whisper vs Scribe vs Nova-3: choosing a speech engine for dictation</h1>
+        <p class="byline">By the Whispur team at <a href="https://sophiie.ai" rel="noopener">Sophiie AI</a> · <time datetime="2026-11-24">24 November 2026</time></p>
+      </div>
+
+      <article class="prose article">
+<p>Most dictation apps pick a speech engine for you. Whispur lets you choose from eight: two that run on your Mac with no key, and six cloud engines you use with your own API key. That choice is useful, but it raises a fair question. Which one should you use?</p>
+<p>This guide walks through the trade-offs that matter for dictation, as opposed to transcribing long recordings: how quickly text appears, how you pay, whether the engine streams, how it handles languages, and whether it accepts your custom vocabulary. It ends with how to switch engines in Whispur. We do not publish accuracy benchmarks here, because accuracy depends heavily on your voice, microphone, language and vocabulary. The best test is your own: try two engines for a day each and use the Activity tab to compare.</p>
+<h2 id="the-engines-whispur-supports">The engines Whispur supports</h2>
+<div class="article-table"><table>
+<thead><tr>
+<th scope="col">Engine</th>
+<th scope="col">Where it runs</th>
+<th scope="col">Models in Whispur</th>
+<th scope="col">Vocabulary</th>
+<th scope="col">Streaming</th>
+</tr></thead><tbody>
+<tr><th scope="row">NVIDIA Parakeet</th><td>Your Mac (Neural Engine)</td><td>Parakeet Ultra, 25 European languages</td><td>Not passed to the engine; used by cleanup</td><td>No</td></tr>
+<tr><th scope="row">Apple speech recognition</th><td>Built into macOS</td><td>SpeechAnalyzer on macOS 26 and later</td><td>Contextual hints</td><td>No</td></tr>
+<tr><th scope="row">OpenAI</th><td>Cloud, your key</td><td>gpt-transcribe (default), whisper-1 until February 2027, or any OpenAI-compatible endpoint</td><td>Keywords (gpt-transcribe) or prompt (whisper-1)</td><td>No</td></tr>
+<tr><th scope="row">Groq</th><td>Cloud, your key</td><td>Whisper Large v3 (default) or v3 Turbo</td><td>Prompt</td><td>No</td></tr>
+<tr><th scope="row">Deepgram</th><td>Cloud, your key</td><td>Nova-3</td><td>Key terms</td><td>No</td></tr>
+<tr><th scope="row">ElevenLabs</th><td>Cloud, your key</td><td>Scribe v3 (default) or Scribe v2</td><td>Key terms</td><td>Optional</td></tr>
+<tr><th scope="row">Mistral</th><td>Cloud, your key</td><td>Voxtral Mini Transcribe 3 (default) or Voxtral Small Transcribe 3</td><td>Context bias</td><td>No</td></tr>
+<tr><th scope="row">Meta Muse</th><td>Cloud, your key</td><td>Muse Voice Transcribe</td><td>Keywords</td><td>Optional</td></tr>
+</tbody></table></div>
+<p>"Streaming" means Whispur sends audio while you talk and shows the words heard so far in the recording overlay. Every other engine works in batch: Whispur sends the recording when you let go of the shortcut.</p>
+<h2 id="latency-what-you-actually-feel">Latency: what you actually feel</h2>
+<p>For dictation, the delay that matters is the gap between letting go of the shortcut and seeing your text. That gap has up to three parts: uploading the audio, the engine's processing time, and the optional AI cleanup step.</p>
+<p>A few things in Whispur shorten it regardless of engine:</p>
+<ul>
+<li>Audio is converted to 16 kHz mono before it is sent, and providers that accept FLAC (OpenAI, Groq, Deepgram, ElevenLabs and Mistral) get it compressed as FLAC. Meta Muse takes WAV.</li>
+<li>Local engines skip the upload entirely.</li>
+<li>Switching off "Clean up with AI" removes the cleanup round trip. Whispur then pastes what the engine heard, after its local text fixes.</li>
+</ul>
+<p>Streaming engines change how the wait feels. With ElevenLabs Scribe or Meta Muse and "Stream audio while you talk" turned on, you see words in the overlay as you speak, and the engine has already heard most of the audio by the time you let go. Streaming is opt-in. If a stream fails, Whispur falls back to sending the full recording in batch, so you do not lose the dictation.</p>
+<p>Groq is worth a mention here. Groq publishes a "speed factor" for its Whisper models: as of November 2026 its docs list 189 for Whisper Large v3 and 216 for v3 Turbo. That is Groq's own figure for how much faster than real time the model runs.</p>
+<p>We do not quote end-to-end latency numbers for each engine. They vary with your network, region and recording length, and a number measured on our machines would not tell you much about yours. The Requests tab in Whispur shows the timing of every provider call, so you can measure your own.</p>
+<h2 id="cost-how-each-engine-bills">Cost: how each engine bills</h2>
+<p>Whispur is free and never charges for transcription. Cloud engines bill you directly, on your own account, for what you use. The local engines cost nothing to run.</p>
+<p>The cost models differ:</p>
+<ul>
+<li><strong>Parakeet and Apple speech recognition:</strong> free. Parakeet needs a one-time model download of about 630 MB.</li>
+<li><strong>Deepgram:</strong> billed per second of audio. As of November 2026, Deepgram's pricing page lists Nova-3 pre-recorded audio at $0.0043 per minute for monolingual and $0.0052 per minute for multilingual on pay-as-you-go, and offers a $200 free credit to start.</li>
+<li><strong>Groq:</strong> billed per hour of audio transcribed. As of November 2026, Groq's docs list Whisper Large v3 at $0.111 per hour and Whisper Large v3 Turbo at $0.04 per hour.</li>
+<li><strong>ElevenLabs:</strong> billed per hour of audio, with rates that vary by plan and model. Its docs note that key term prompting costs extra and that silence counts toward billed time.</li>
+<li><strong>OpenAI, Mistral and Meta Muse:</strong> billed by the provider for usage on your own key. Check each provider's pricing page for current rates.</li>
+</ul>
+<p>Dictation is short. Most dictations are seconds long, not hours, so for many people the cloud bill is small. But it is your bill, so it is worth checking the provider's pricing page before you commit.</p>
+<h2 id="languages">Languages</h2>
+<p>Whispur lets you pick the languages you speak in Settings. Several are fine. How Whispur passes them on depends on the engine:</p>
+<ul>
+<li><strong>Parakeet</strong> covers 25 European languages. If you speak a language it does not cover, pick another engine.</li>
+<li><strong>Apple speech recognition</strong> works in one language at a time.</li>
+<li><strong>OpenAI gpt-transcribe</strong> gets every language you picked as a hint. <strong>whisper-1</strong> and <strong>Groq Whisper</strong> take one language, or detect it automatically.</li>
+<li><strong>Deepgram Nova-3</strong> uses one language when you pick one, and its multilingual mode with a hint per language when you pick several.</li>
+<li><strong>ElevenLabs Scribe v3</strong> takes your other languages as secondary languages. ElevenLabs says Scribe v3 and v2 support more than 90 languages.</li>
+<li><strong>Meta Muse</strong> takes your languages as a language bias.</li>
+</ul>
+<p>Whispur also runs a guard when you speak several languages: if a result comes back in the wrong writing system, it transcribes again.</p>
+<h2 id="custom-vocabulary-and-key-terms">Custom vocabulary and key terms</h2>
+<p>This is where engines differ most for technical users. Add your terms in Settings &gt; Dictionary, and Whispur sends them to the engine in the form it understands:</p>
+<ul>
+<li><strong>Deepgram Nova-3</strong> gets them as key terms. Deepgram's docs describe key terms as a way to improve recognition of important terminology, product and company names, with a limit of 500 tokens per request.</li>
+<li><strong>ElevenLabs Scribe</strong> gets them as key terms. ElevenLabs documents up to 1,000 key terms for batch requests. Whispur sends up to 50.</li>
+<li><strong>OpenAI gpt-transcribe</strong> gets them as keywords, up to 50.</li>
+<li><strong>whisper-1 and Groq Whisper</strong> get them as a short comma-separated prompt. Whisper prompts are capped at 224 tokens, so long lists are trimmed.</li>
+<li><strong>Mistral Voxtral</strong> gets them as context bias.</li>
+<li><strong>Meta Muse</strong> gets them as keywords.</li>
+<li><strong>Apple speech recognition</strong> gets them as contextual hints.</li>
+<li><strong>Parakeet</strong> does not receive them.</li>
+</ul>
+<p>Whatever the engine, your Dictionary also reaches the AI cleanup step if you use one, and clear-cut "heard as" misspellings are fixed in code on your Mac. So even Parakeet users benefit from a well-kept Dictionary.</p>
+<h2 id="privacy">Privacy</h2>
+<p>Local engines keep audio on your Mac. Parakeet runs entirely on your Mac once its model is downloaded. Apple speech recognition uses the framework built into macOS, and depending on the Mac and language, macOS may process audio on the device or with Apple's speech service.</p>
+<p>Cloud engines receive your audio directly from your Mac, using your API key. There is no Whispur server in between. Each provider's own data policy then applies, so read it if that matters to you. Our guide to <a href="/blog/offline-dictation-mac">offline dictation on a Mac</a> covers the local route in detail.</p>
+<h2 id="which-engine-should-you-pick">Which engine should you pick?</h2>
+<p>Some starting points:</p>
+<ul>
+<li><strong>You want privacy and no setup:</strong> Parakeet on Apple silicon, which is the default anyway.</li>
+<li><strong>You are on an Intel Mac:</strong> Apple speech recognition, or any cloud engine.</li>
+<li><strong>You use a lot of names and jargon:</strong> Deepgram Nova-3, ElevenLabs Scribe or OpenAI gpt-transcribe, which accept your vocabulary directly.</li>
+<li><strong>You want to see words as you speak:</strong> ElevenLabs Scribe or Meta Muse with streaming on.</li>
+<li><strong>You want low cost per hour from a cloud engine:</strong> compare Groq's Whisper Turbo and Deepgram's published rates.</li>
+<li><strong>You speak several languages in one sentence:</strong> try Deepgram's multilingual mode or ElevenLabs Scribe v3 with secondary languages.</li>
+</ul>
+<h2 id="how-to-switch-engines-in-whispur">How to switch engines in Whispur</h2>
+<ol>
+<li>Open Settings &gt; Providers.</li>
+<li>Add the API key for the engine you want. It is stored in the macOS Keychain.</li>
+<li>Choose that engine as your speech provider. Where Whispur offers a model picker (OpenAI, Groq, ElevenLabs and Mistral), pick the model.</li>
+<li>For ElevenLabs or Meta Muse, turn on "Stream audio while you talk" if you want live words.</li>
+<li>Dictate as usual. The Activity tab shows the raw and cleaned text, and the Requests tab shows each call's timing and any error.</li>
+</ol>
+<p>If a cloud engine can't be reached, and Parakeet's model is on your Mac and covers your languages, Whispur transcribes that dictation with Parakeet so you do not lose it.</p>
+<p>For developers, our guide to <a href="/blog/dictating-code-and-prompts">dictating code and prompts</a> shows how vocabulary, the cleanup prompt and per-app styles fit together. To see how Whispur compares with other apps, read <a href="/blog/best-mac-dictation-apps">the best Mac dictation apps in 2026</a> or browse the <a href="/compare">comparison pages</a>.</p>
+<h2 id="try-whispur">Try Whispur</h2>
+<p><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a> and start with no key on Parakeet. Add a cloud key later if you want to compare engines.</p>
+<h2 id="sources-checked-24-november-2026">Sources, checked 24 November 2026</h2>
+<ul>
+<li><a href="https://deepgram.com/pricing" rel="noopener">Deepgram pricing</a></li>
+<li><a href="https://developers.deepgram.com/docs/keyterm" rel="noopener">Deepgram key term prompting</a></li>
+<li><a href="https://console.groq.com/docs/speech-to-text" rel="noopener">Groq speech to text docs</a></li>
+<li><a href="https://elevenlabs.io/docs/capabilities/speech-to-text" rel="noopener">ElevenLabs speech to text docs</a></li>
+<li>Whispur facts: <a href="https://github.com/sophiie-ai/whispur#readme" rel="noopener">README</a>, <a href="/changelog">changelog</a> and the provider source code in <a href="https://github.com/sophiie-ai/whispur/tree/main/Sources/Providers" rel="noopener">Sources/Providers</a></li>
+</ul>
+      </article>
+
+      <div class="callout">
+        <p><strong>Try Whispur.</strong> Free and open source for macOS 14 or later. No account, no API key needed to start.</p>
+        <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a>
+      </div>
+    </div>
+  </main>
+
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="brand" href="/" aria-label="Whispur home">
+            <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" loading="lazy" />
+            <span class="brand__name">Whispur</span>
+          </a>
+          <p>Free, open-source voice dictation for macOS.</p>
+          <a class="sophiie-mark" href="https://sophiie.ai" rel="noopener">
+            <span>A product by</span>
+            <img src="/brand/sophiie.svg" alt="Sophiie" width="94" height="16" loading="lazy" />
+          </a>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div class="footer-col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a></li>
+              <li><a href="/changelog">Changelog</a></li>
+              <li><a href="/blog">Blog</a></li>
+              <li><a href="/compare">Compare</a></li>
+              <li><a href="/#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Open source</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">All releases</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li><a href="/about">About Whispur</a></li>
+              <li><a href="/contact">Contact</a></li>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__bottom">
+        <p>&copy; 2026 Sophiie AI Pty Ltd</p>
+        <p>Released under the MIT License.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>
