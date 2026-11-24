@@ -81,6 +81,7 @@ final class PermissionGuideRenderTests: XCTestCase {
                 (.needsRestart, .accessibility, "accessibility-restart"),
                 (.needsRestart, .tryIt, "try-it-restart"),
                 (.needsRestart, .ready, "ready-restart"),
+                (.finishing, .ready, "ready-finishing"),
                 (.on, .ready, "ready-all-set"),
             ]
             for (status, step, name) in states {
@@ -88,6 +89,10 @@ final class PermissionGuideRenderTests: XCTestCase {
                 try render(OnboardingWindow(appState: appState, initialStep: step) {}, scheme: scheme, size: onboardingSize,
                            to: dir.appendingPathComponent("onboarding-\(name)-\(suffix).png"))
             }
+            // Listening, but the shortcut has never reached Whispur.
+            appState.hotkeyManager.setAccessibilityForRendering(.on, tapHeardEvent: false)
+            try render(OnboardingWindow(appState: appState, initialStep: .ready) {}, scheme: scheme, size: onboardingSize,
+                       to: dir.appendingPathComponent("onboarding-ready-untested-\(suffix).png"))
             appState.hotkeyManager.setAccessibilityForRendering(savedAccessibility)
 
             // The welcome story at a few moments, and its Reduce Motion form.
@@ -116,7 +121,7 @@ final class PermissionGuideRenderTests: XCTestCase {
                        to: dir.appendingPathComponent("onboarding-languages-no-download-\(suffix).png"))
             appState.sttLanguageSelection = .single(code: "en-US")
             let pillStates: [(ParakeetModelManager.DownloadState, OnboardingStep, String)] = [
-                (.downloading(fraction: 0.4, isPreparing: false), .shortcuts, "shortcuts-pill-40"),
+                (.downloading(fraction: 0.4, isPreparing: false), .ready, "ready-pill-40"),
                 (.downloading(fraction: 0.4, isPreparing: false), .tryIt, "try-it-pill-40"),
                 (.installed(bytesOnDisk: 632_000_000), .microphone, "microphone-pill-ready"),
                 (.failed("The network connection was lost."), .accessibility, "accessibility-pill-failed"),

@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The welcome screen's before-and-after, drawn from `WelcomeStoryTimeline`.
-/// Plays once on its own, offers a replay, and never holds anything up:
-/// Continue works the whole time. With Reduce Motion it shows the two
-/// finished composers side by side and doesn't animate.
+/// Loops on its own, holding the finished scene a moment between passes,
+/// and never holds anything up: Continue works the whole time. With Reduce
+/// Motion it shows the two finished composers side by side and doesn't
+/// animate.
 struct WelcomeStoryView: View {
     private typealias Palette = SophiieTheme.Palette
     private typealias Story = WelcomeStoryTimeline
@@ -14,7 +15,6 @@ struct WelcomeStoryView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.onboardingRendersReducedMotion) private var rendersReducedMotion
     @State private var startedAt = Date()
-    @State private var finished = false
 
     private var reduceMotion: Bool { systemReduceMotion || rendersReducedMotion }
 
@@ -25,64 +25,37 @@ struct WelcomeStoryView: View {
             } else if reduceMotion {
                 scene(Story.finalFrame)
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: finished)) { context in
-                    scene(Story.frame(at: context.date.timeIntervalSince(startedAt)))
-                }
-                .task(id: startedAt) {
-                    finished = false
-                    try? await Task.sleep(for: .seconds(Story.end + 0.2))
-                    finished = true
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                    scene(Story.frame(at: Story.loopTime(context.date.timeIntervalSince(startedAt))))
                 }
             }
         }
     }
 
     private func scene(_ frame: Story.Frame) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 14) {
-                StoryCard(
-                    title: "Without Whispur",
-                    elapsed: frame.handElapsed,
-                    isDone: frame.handDone,
-                    accent: Palette.OnDark.muted
-                ) {
-                    HandComposer(text: frame.handText, isDone: frame.handDone)
-                }
-                StoryCard(
-                    title: "With Whispur",
-                    elapsed: frame.voiceElapsed,
-                    isDone: frame.voicePhase == .done,
-                    accent: Palette.sky
-                ) {
-                    VoiceComposer(phase: frame.voicePhase, text: frame.voiceText)
-                }
+        HStack(spacing: 14) {
+            StoryCard(
+                title: "Without Whispur",
+                elapsed: frame.handElapsed,
+                isDone: frame.handDone,
+                accent: Palette.OnDark.muted
+            ) {
+                HandComposer(text: frame.handText, isDone: frame.handDone)
             }
-            // One spoken summary for the decorative scene; the replay button
-            // below stays its own VoiceOver element.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
-            )
-            replayButton
-                .opacity(showsReplay ? 1 : 0)
-                .accessibilityHidden(!showsReplay)
-                .animation(.easeOut(duration: 0.25), value: finished)
+            StoryCard(
+                title: "With Whispur",
+                elapsed: frame.voiceElapsed,
+                isDone: frame.voicePhase == .done,
+                accent: Palette.sky
+            ) {
+                VoiceComposer(phase: frame.voicePhase, text: frame.voiceText)
+            }
         }
-    }
-
-    private var showsReplay: Bool { finished && fixedTime == nil && !reduceMotion }
-
-    private var replayButton: some View {
-        Button {
-            startedAt = Date()
-        } label: {
-            Label("Play again", systemImage: "arrow.counterclockwise")
-                .font(SophiieTheme.Typography.caption)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.OnDark.muted)
-        .disabled(!finished)
-        .accessibilityLabel("Play the comparison again")
+        // One spoken summary for the decorative scene.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
+        )
     }
 }
 

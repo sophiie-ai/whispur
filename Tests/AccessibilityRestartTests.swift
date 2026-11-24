@@ -49,6 +49,24 @@ final class AccessibilityRestartTests: XCTestCase {
         XCTAssertFalse(AccessibilityStatus.off.isGranted)
     }
 
+    func testHealthCheckCoversEveryCell() {
+        func action(trusted: Bool, tap: Bool, enabled: Bool, tried: Bool = false) -> AccessibilityHealthCheck.Action {
+            AccessibilityHealthCheck.action(trusted: trusted, tapExists: tap, tapEnabled: enabled, reenableTried: tried)
+        }
+        // Healthy: nothing to do, and it stays cheap.
+        XCTAssertEqual(action(trusted: true, tap: true, enabled: true), .none)
+        // Grant revoked: the tap goes, so the status reads off.
+        XCTAssertEqual(action(trusted: false, tap: true, enabled: true), .tearDown)
+        XCTAssertEqual(action(trusted: false, tap: true, enabled: false), .tearDown)
+        XCTAssertEqual(action(trusted: false, tap: false, enabled: false), .none)
+        // macOS switched the tap off: switch it on, then rebuild if that didn't take.
+        XCTAssertEqual(action(trusted: true, tap: true, enabled: false), .reenable)
+        XCTAssertEqual(action(trusted: true, tap: true, enabled: false, tried: true), .reinstall)
+        XCTAssertEqual(action(trusted: true, tap: true, enabled: true, tried: true), .none)
+        // Granted with no tap: install.
+        XCTAssertEqual(action(trusted: true, tap: false, enabled: false), .install)
+    }
+
     func testRelaunchHelperPassesPathsAsParameters() {
         let bundle = URL(fileURLWithPath: "/Applications/Whis \"pur\".app")
         let plain = AppRelauncher.arguments(pid: 42, bundle: bundle, ejecting: nil)

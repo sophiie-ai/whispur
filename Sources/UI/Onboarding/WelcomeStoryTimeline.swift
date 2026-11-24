@@ -49,6 +49,16 @@ enum WelcomeStoryTimeline {
     static var voiceDuration: TimeInterval { voiceListenDuration + voiceLandDuration }
     /// When the whole scene has played out.
     static var end: TimeInterval { max(handEnd, lead + voiceDuration) }
+    /// How long the finished scene holds before the story starts over.
+    static let loopHold: TimeInterval = 2.5
+    /// One full pass: the story, then the hold on its last frame.
+    static var loopDuration: TimeInterval { end + loopHold }
+
+    /// The story time to draw `elapsed` seconds after the loop started.
+    static func loopTime(_ elapsed: TimeInterval) -> TimeInterval {
+        guard elapsed > 0 else { return 0 }
+        return elapsed.truncatingRemainder(dividingBy: loopDuration)
+    }
 
     // MARK: Hand typing
 

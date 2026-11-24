@@ -724,10 +724,29 @@ final class AppState: ObservableObject {
                 _ = await AudioRecorder.requestMicrophoneAccess()
                 await MainActor.run {
                     self.refreshPermissionSnapshot()
+                    self.bringOnboardingToFront()
                 }
             }
         default:
             showPermissionGuide(.microphone)
+        }
+    }
+
+    /// Answering the system microphone prompt can leave Whispur behind the
+    /// app that was in front before: bring onboarding back. Never while a
+    /// permission guide is up, which sits beside System Settings on purpose.
+    private func bringOnboardingToFront() {
+        guard permissionGuide.activePermission == nil,
+              let window = NSApp.windows.first(where: { $0.identifier == OnboardingWindow.windowIdentifier }),
+              window.isVisible else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// System Settings → Keyboard, where "Press 🌐 key to" lives.
+    func openKeyboardSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -948,7 +967,14 @@ final class AppState: ObservableObject {
 
                 let isBusy = !self.pipeline.canStartRecording && !self.pipeline.canStopRecording
 
-                let action = self.shortcutSessionController.handle(event: event, isBusy: isBusy)
+                var action = self.shortcutSessionController.handle(event: event, isBusy: isBusy)
+                if case .start = action, Self.ignoresShortcutStart(
+                    accessibilityGranted: self.hotkeyManager.isAccessibilityGranted,
+                    onboardingCompleted: self.onboardingCompleted
+                ) {
+                    self.shortcutSessionController.reset()
+                    action = nil
+                }
                 switch action {
                 case .start(let mode):
                     self.startDictation(triggerMode: mode)
@@ -986,6 +1012,15 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Before Accessibility is granted, the fallback key monitors can still
+    /// see the shortcut. During first-run setup that press is ignored: the
+    /// user hasn't reached the step that explains it, and an error overlay
+    /// mid-onboarding only confuses. Afterwards the start goes through and
+    /// its error says what's missing.
+    nonisolated static func ignoresShortcutStart(accessibilityGranted: Bool, onboardingCompleted: Bool) -> Bool {
+        !accessibilityGranted && !onboardingCompleted
     }
 
     /// Mirror the controller's toggle state into the hotkey manager so a

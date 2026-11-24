@@ -4,7 +4,7 @@ import XCTest
 final class OnboardingPlanTests: XCTestCase {
     func testTheLanguageStepSitsRightAfterWelcomeWhenAsked() {
         let plan = OnboardingPlan(asksLanguages: true)
-        XCTAssertEqual(plan.steps, [.welcome, .languages, .microphone, .accessibility, .shortcuts, .tryIt, .ready])
+        XCTAssertEqual(plan.steps, [.welcome, .languages, .microphone, .accessibility, .tryIt, .ready])
         XCTAssertEqual(plan.next(after: .welcome), .languages)
         XCTAssertEqual(plan.next(after: .languages), .microphone)
         XCTAssertEqual(plan.previous(before: .microphone), .languages)
@@ -52,7 +52,7 @@ final class OnboardingSpeechSetupTests: XCTestCase {
     func testThePillShowsOnEveryScreenAfterTheLanguagesOnly() {
         let plan = OnboardingPlan(asksLanguages: true)
         let shown = plan.steps.filter { OnboardingSpeechSetup.showsDownloadPill(on: $0, plan: plan, usesParakeetDownload: true) }
-        XCTAssertEqual(shown, [.microphone, .accessibility, .shortcuts, .tryIt, .ready])
+        XCTAssertEqual(shown, [.microphone, .accessibility, .tryIt, .ready])
         // No download framing: no pill anywhere, even with the language step.
         XCTAssertTrue(plan.steps.allSatisfy { !OnboardingSpeechSetup.showsDownloadPill(on: $0, plan: plan, usesParakeetDownload: false) })
         XCTAssertTrue(OnboardingPlan.standard.steps.allSatisfy {
@@ -160,6 +160,19 @@ final class WelcomeStoryTimelineTests: XCTestCase {
         XCTAssertEqual(voiceDone.voicePhase, .done)
         XCTAssertFalse(voiceDone.handDone)
         XCTAssertNotEqual(voiceDone.handText, Story.reply)
+    }
+
+    func testTheStoryLoopsAfterHoldingItsLastFrame() {
+        XCTAssertEqual(Story.loopDuration, Story.end + Story.loopHold, accuracy: 0.0001)
+        XCTAssertEqual(Story.loopTime(0), 0)
+        XCTAssertEqual(Story.loopTime(-1), 0)
+        XCTAssertEqual(Story.loopTime(1.2), 1.2, accuracy: 0.0001)
+        // The hold shows the finished scene.
+        XCTAssertEqual(Story.frame(at: Story.loopTime(Story.end + Story.loopHold / 2)), Story.finalFrame)
+        // Then it starts over, and keeps doing so.
+        XCTAssertEqual(Story.loopTime(Story.loopDuration + 0.5), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(Story.loopTime(Story.loopDuration * 7 + 1.25), 1.25, accuracy: 0.0001)
+        XCTAssertEqual(Story.frame(at: Story.loopTime(Story.loopDuration)), Story.frame(at: 0))
     }
 
     func testClockFormat() {
