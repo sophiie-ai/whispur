@@ -10,7 +10,7 @@ Pull requests are welcome too. See the [contributing guide](https://github.com/s
 
 ## Security issues
 
-Please do not report a security vulnerability in a public issue. Use GitHub's [private vulnerability reporting](https://github.com/sophiie-ai/whispur/security/advisories/new) for the repository, or email us at [__CONTACT_EMAIL__](mailto:__CONTACT_EMAIL__). Tell us the affected version and how to reproduce the problem, and we will reply as soon as we can.
+Please do not report a security vulnerability in a public issue. Use GitHub's [private vulnerability reporting](https://github.com/sophiie-ai/whispur/security/advisories/new) for the repository, or email us at [whispur@sophiie.ai](mailto:whispur@sophiie.ai). Tell us the affected version and how to reproduce the problem, and we will reply as soon as we can.
 
 ## Privacy questions
 
@@ -18,12 +18,11 @@ Whispur has no account and no backend server, so we do not hold your audio, tran
 
 ## Everything else
 
-For press, partnerships or anything that does not belong in a public issue, email [__CONTACT_EMAIL__](mailto:__CONTACT_EMAIL__).
+For press, partnerships or anything that does not belong in a public issue, email [whispur@sophiie.ai](mailto:whispur@sophiie.ai).
 
 - **Company:** Sophiie AI Pty Ltd ([sophiie.ai](https://sophiie.ai))
-- **Email:** [__CONTACT_EMAIL__](mailto:__CONTACT_EMAIL__)
-- **Phone:** __CONTACT_PHONE__
-- **Address:** __STREET__, __LOCALITY__ __REGION__ __POSTCODE__, __COUNTRY__
+- **Email:** [whispur@sophiie.ai](mailto:whispur@sophiie.ai)
+- **Address:** 6A/50 Appel St, Surfers Paradise QLD 4217, Australia
 
 ---
 
