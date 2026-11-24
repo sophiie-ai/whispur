@@ -720,6 +720,11 @@ final class AppState: ObservableObject {
         case .authorized:
             refreshPermissionSnapshot()
         case .notDetermined:
+            // Float onboarding above other apps while the prompt is open:
+            // answering it hands focus back to whichever app was in front
+            // before, and activation on macOS 14 and later is cooperative, so
+            // Whispur cannot win that race by asking to activate.
+            setOnboardingFloating(true)
             Task {
                 _ = await AudioRecorder.requestMicrophoneAccess()
                 await MainActor.run {
@@ -732,15 +737,51 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Answering the system microphone prompt can leave Whispur behind the
-    /// app that was in front before: bring onboarding back. Never while a
-    /// permission guide is up, which sits beside System Settings on purpose.
+    /// After the microphone prompt: try to make onboarding key, and keep it
+    /// floating until Whispur really is the active app. macOS usually refuses
+    /// the activation here, and a window that stops floating while another
+    /// app is active sorts behind that app's windows. The user's next click
+    /// in onboarding activates Whispur, which ends the float.
     private func bringOnboardingToFront() {
-        guard permissionGuide.activePermission == nil,
-              let window = NSApp.windows.first(where: { $0.identifier == OnboardingWindow.windowIdentifier }),
-              window.isVisible else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        if let window = onboardingWindow() {
+            window.orderFrontRegardless()
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+        }
+        if NSApp.isActive {
+            setOnboardingFloating(false)
+            return
+        }
+        floatEndObserver.map(NotificationCenter.default.removeObserver)
+        floatEndObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.endOnboardingFloat() }
+        }
+    }
+
+    private func endOnboardingFloat() {
+        floatEndObserver.map(NotificationCenter.default.removeObserver)
+        floatEndObserver = nil
+        setOnboardingFloating(false)
+    }
+
+    private var floatEndObserver: NSObjectProtocol?
+
+    /// Never floats while a permission guide is up: the guide sits beside
+    /// System Settings on purpose and onboarding must not cover it.
+    private func setOnboardingFloating(_ floating: Bool) {
+        guard let window = onboardingWindow() else { return }
+        let level: NSWindow.Level = floating && permissionGuide.activePermission == nil ? .floating : .normal
+        guard window.level != level else { return }
+        window.level = level
+        if level == .floating { window.orderFrontRegardless() }
+    }
+
+    private func onboardingWindow() -> NSWindow? {
+        NSApp.windows.first { $0.identifier == OnboardingWindow.windowIdentifier && $0.isVisible }
     }
 
     /// System Settings → Keyboard, where "Press 🌐 key to" lives.
@@ -807,6 +848,7 @@ final class AppState: ObservableObject {
     /// the grant up straight away and comes back to the front, where
     /// onboarding moves on by itself.
     func showPermissionGuide(_ permission: GuidedPermission) {
+        endOnboardingFloat()
         permissionGuide.show(permission) { [weak self] outcome in
             guard let self else { return }
             self.hotkeyManager.recheckAccessibility()
