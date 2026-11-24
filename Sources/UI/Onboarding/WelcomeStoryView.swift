@@ -58,7 +58,7 @@ struct WelcomeStoryView: View {
         // One spoken summary for the decorative scene.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "Typing a reply by hand takes \(Story.clock(example.realHandDuration)). Saying it with Whispur takes \(Story.clock(example.realVoiceDuration))."
+            "Typing a reply by hand takes \(Story.clock(example.handDuration)). Saying it with Whispur takes \(Story.clock(example.voiceDuration))."
         )
     }
 }

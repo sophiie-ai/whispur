@@ -2,10 +2,11 @@ import Foundation
 
 /// The welcome screen's before-and-after, told five times: someone sends a
 /// message, and the same reply gets written twice. By hand it hesitates,
-/// slips and backspaces; by voice it arrives whole. Both take their
-/// real-world time, derived from the reply and the script, and play back as
-/// one timelapse. Each example plays, holds its finished scene, then the
-/// next one starts; after the last, the first comes back.
+/// slips and backspaces; by voice it arrives whole and then sits done while
+/// the hand keeps typing. Everything plays in real time, with durations
+/// derived from the reply and the script. Each example plays, holds its
+/// finished scene, then the next one starts; after the last, the first
+/// comes back.
 ///
 /// Pure data: each example is an ordered list of timed events and the frame
 /// they add up to at any moment, and `position(at:)` maps time on the loop
@@ -39,27 +40,21 @@ enum WelcomeStoryTimeline {
         case pause(TimeInterval)
     }
 
-    // MARK: Real-world model
+    // MARK: Timing
 
     /// Hand typing at about 40 wpm: 200 characters a minute.
-    static let realSecondsPerCharacter: TimeInterval = 0.30
+    static let secondsPerCharacter: TimeInterval = 0.30
     /// A backspace is a repeated key, quicker than finding the next letter.
-    static let realSecondsPerBackspace: TimeInterval = 0.15
+    static let secondsPerBackspace: TimeInterval = 0.15
     /// The beat between the last letter and hitting send.
-    static let realFinishBeat: TimeInterval = 0.4
+    static let finishBeat: TimeInterval = 0.4
     /// Speaking at about 150 wpm.
-    static let realWordsPerSecond: Double = 2.5
+    static let wordsPerSecond: Double = 2.5
     /// Transcription and cleanup after the speaker stops, before text lands.
-    static let realLandDuration: TimeInterval = 0.5
-
-    // MARK: Playback
-
-    /// The whole scene plays as a timelapse at this one speed-up, hand and
-    /// voice alike, so the visual ratio stays honest; the clocks show real time.
-    static let speedUp: Double = 3.2
-    /// A beat of wall time before either side starts, so the scene reads first.
+    static let landDuration: TimeInterval = 0.5
+    /// A beat before either side starts, so the scene reads first.
     static let lead: TimeInterval = 0.4
-    /// Wall time a finished scene holds before the next example starts.
+    /// How long a finished scene holds before the next example starts.
     static let hold: TimeInterval = 2.5
 
     /// Small, repeatable unevenness so the typing doesn't tick like a metronome.
@@ -71,7 +66,7 @@ enum WelcomeStoryTimeline {
     // MARK: Examples
 
     /// One message and its reply. The hand script types the reply with one
-    /// natural slip and its fix (pauses in real seconds); it must end on
+    /// natural slip and its fix (pauses in seconds); it must end on
     /// exactly `reply`. Every duration is derived from the text and script.
     struct Example {
         /// What the other person asked.
@@ -82,10 +77,10 @@ enum WelcomeStoryTimeline {
         let typo: String
         let script: [Op]
 
-        /// Everything that happens, in playback time order.
+        /// Everything that happens, in time order.
         let events: [TimedEvent]
-        /// Real seconds to type the reply by hand, slip and pauses included.
-        let realHandDuration: TimeInterval
+        /// Seconds to type the reply by hand, slip and pauses included.
+        let handDuration: TimeInterval
 
         init(question: String, reply: String, typo: String, script: [Op]) {
             self.question = question
@@ -93,33 +88,30 @@ enum WelcomeStoryTimeline {
             self.typo = typo
             self.script = script
             let hand = WelcomeStoryTimeline.handTrack(script)
-            realHandDuration = hand.real
-            let realListen = WelcomeStoryTimeline.realListenDuration(for: reply)
+            handDuration = hand.duration
+            let listen = WelcomeStoryTimeline.listenDuration(for: reply)
+            let lead = WelcomeStoryTimeline.lead
             let voiceEvents = [
-                TimedEvent(at: WelcomeStoryTimeline.playback(0), event: .voiceListening),
-                TimedEvent(at: WelcomeStoryTimeline.playback(realListen), event: .voiceLanding),
-                TimedEvent(at: WelcomeStoryTimeline.playback(realListen + WelcomeStoryTimeline.realLandDuration), event: .voiceDone),
+                TimedEvent(at: lead, event: .voiceListening),
+                TimedEvent(at: lead + listen, event: .voiceLanding),
+                TimedEvent(at: lead + listen + WelcomeStoryTimeline.landDuration, event: .voiceDone),
             ]
             events = (hand.events + voiceEvents).sorted { $0.at < $1.at }
         }
 
-        /// Real seconds to say it: the words at speaking pace, then landing.
-        var realVoiceDuration: TimeInterval { realListenDuration + WelcomeStoryTimeline.realLandDuration }
-        var realListenDuration: TimeInterval { WelcomeStoryTimeline.realListenDuration(for: reply) }
+        /// Seconds spent speaking the reply's words.
+        var listenDuration: TimeInterval { WelcomeStoryTimeline.listenDuration(for: reply) }
+        /// Seconds to say it: the words at speaking pace, then landing.
+        var voiceDuration: TimeInterval { listenDuration + WelcomeStoryTimeline.landDuration }
 
-        /// Wall seconds each side plays for.
-        var handDuration: TimeInterval { realHandDuration / WelcomeStoryTimeline.speedUp }
-        var voiceDuration: TimeInterval { realVoiceDuration / WelcomeStoryTimeline.speedUp }
-        var listenDuration: TimeInterval { realListenDuration / WelcomeStoryTimeline.speedUp }
-        var landDuration: TimeInterval { WelcomeStoryTimeline.realLandDuration / WelcomeStoryTimeline.speedUp }
-
-        /// When the whole scene has played out, in wall time.
+        /// When the whole scene has played out.
         var end: TimeInterval { WelcomeStoryTimeline.lead + max(handDuration, voiceDuration) }
         /// This example's slot on the loop: the scene, then the hold.
         var slot: TimeInterval { end + WelcomeStoryTimeline.hold }
 
-        /// The scene `time` wall seconds in. Before zero it's the empty
-        /// opening; past `end` it's the finished pair. Clocks read real time.
+        /// The scene at `time` seconds in. Before zero it's the empty
+        /// opening; past `end` it's the finished pair. The clocks show the
+        /// seconds since each side started, stopping when it's done.
         func frame(at time: TimeInterval) -> Frame {
             var frame = Frame(reply: reply)
             for timed in events where timed.at <= time {
@@ -134,11 +126,11 @@ enum WelcomeStoryTimeline {
             let lead = WelcomeStoryTimeline.lead
             if case .landing = frame.voicePhase {
                 let start = lead + listenDuration
-                frame.voicePhase = .landing(min(max((time - start) / landDuration, 0), 1))
+                frame.voicePhase = .landing(min(max((time - start) / WelcomeStoryTimeline.landDuration, 0), 1))
             }
-            let real = max(time - lead, 0) * WelcomeStoryTimeline.speedUp
-            frame.handElapsed = min(real, realHandDuration)
-            frame.voiceElapsed = min(real, realVoiceDuration)
+            let elapsed = max(time - lead, 0)
+            frame.handElapsed = min(elapsed, handDuration)
+            frame.voiceElapsed = min(elapsed, voiceDuration)
             return frame
         }
 
@@ -146,14 +138,9 @@ enum WelcomeStoryTimeline {
         var finalFrame: Frame { frame(at: end) }
     }
 
-    /// Real seconds to speak `reply`'s words.
-    static func realListenDuration(for reply: String) -> TimeInterval {
-        Double(reply.split(whereSeparator: \.isWhitespace).count) / realWordsPerSecond
-    }
-
-    /// Wall time on the scene for `real` seconds into it.
-    static func playback(_ real: TimeInterval) -> TimeInterval {
-        lead + real / speedUp
+    /// Seconds to speak `reply`'s words.
+    static func listenDuration(for reply: String) -> TimeInterval {
+        Double(reply.split(whereSeparator: \.isWhitespace).count) / wordsPerSecond
     }
 
     /// The five examples, in the order they play.
@@ -175,17 +162,17 @@ enum WelcomeStoryTimeline {
         ),
         Example(
             question: "Can you send the deck before the 3pm call?",
-            reply: "Yep, sending it now. I added the pricing slide you asked for.",
+            reply: "Sending it now, pricing slide included.",
             typo: "pricnig",
             script: [
-                .type("Yep, sending it now. "),
-                .pause(0.7),
-                .type("I added the pricnig"),
+                .type("Sending it now, "),
+                .pause(0.6),
+                .type("pricnig"),
                 .pause(0.6),
                 .back(3),
                 .type("ing slide"),
-                .pause(0.6),
-                .type(" you asked for."),
+                .pause(0.45),
+                .type(" included."),
             ]
         ),
         Example(
@@ -207,19 +194,15 @@ enum WelcomeStoryTimeline {
         ),
         Example(
             question: "Dinner tonight? We're thinking Thai.",
-            reply: "I'm in! Book for 7 and I'll meet you there after work.",
-            typo: "aftre",
+            reply: "I'm in! See you at 7.",
+            typo: "Se you",
             script: [
                 .type("I'm in! "),
-                .pause(0.6),
-                .type("Book for 7"),
-                .pause(0.75),
-                .type(" and I'll meet you"),
                 .pause(0.5),
-                .type(" there aftre"),
+                .type("Se you"),
                 .pause(0.6),
-                .back(2),
-                .type("er work."),
+                .back(4),
+                .type("e you at 7."),
             ]
         ),
         Example(
@@ -256,34 +239,34 @@ enum WelcomeStoryTimeline {
 
     // MARK: Building an example
 
-    /// The hand's keystrokes in playback time, and its real duration.
-    private static func handTrack(_ script: [Op]) -> (events: [TimedEvent], real: TimeInterval) {
+    /// The hand's keystrokes, and how long it takes.
+    private static func handTrack(_ script: [Op]) -> (events: [TimedEvent], duration: TimeInterval) {
         var out: [TimedEvent] = []
         var text = ""
-        var real: TimeInterval = 0
+        var elapsed: TimeInterval = 0
         var n = 0
         for op in script {
             switch op {
             case let .type(chars):
                 for c in chars {
                     n += 1
-                    real += realSecondsPerCharacter * wobble(n)
+                    elapsed += secondsPerCharacter * wobble(n)
                     text.append(c)
-                    out.append(TimedEvent(at: playback(real), event: .handTyped(text)))
+                    out.append(TimedEvent(at: lead + elapsed, event: .handTyped(text)))
                 }
             case let .back(count):
                 for _ in 0..<count {
-                    real += realSecondsPerBackspace
+                    elapsed += secondsPerBackspace
                     text.removeLast()
-                    out.append(TimedEvent(at: playback(real), event: .handTyped(text)))
+                    out.append(TimedEvent(at: lead + elapsed, event: .handTyped(text)))
                 }
             case let .pause(seconds):
-                real += seconds
+                elapsed += seconds
             }
         }
-        real += realFinishBeat
-        out.append(TimedEvent(at: playback(real), event: .handDone))
-        return (out, real)
+        elapsed += finishBeat
+        out.append(TimedEvent(at: lead + elapsed, event: .handDone))
+        return (out, elapsed)
     }
 
     // MARK: Frames
