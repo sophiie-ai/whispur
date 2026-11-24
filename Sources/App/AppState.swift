@@ -52,7 +52,7 @@ final class AppState: ObservableObject {
     @AppStorage("useRawToastEnabled") var useRawToastEnabled: Bool = true
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
-    @AppStorage("overlayStyle") var overlayStyle: OverlayStyle = .standard
+    @AppStorage(AppState.overlayStyleKey) var overlayStyle: OverlayStyle = OverlayStyle.newInstallDefault
     /// 0...100. How much to reduce the system output volume by while
     /// recording. 100 = full mute (the original behavior); lower values
     /// just duck playback so background audio is still audible. Only
@@ -141,6 +141,9 @@ final class AppState: ObservableObject {
         evalCases: MyEvalCaseStore? = nil,
         startsServices: Bool = true
     ) {
+        // First, while "has this install run before" is still answerable
+        // from the stored keys alone. Renders and tests never write it.
+        if startsServices { Self.pinOverlayStyleIfNeeded() }
         // Before anything reads the language setting.
         Self.migrateSpokenLanguagesIfNeeded()
         // Before anything reads the speech provider. Renders and tests
@@ -1239,7 +1242,7 @@ final class AppState: ObservableObject {
         return ShortcutBinding(storageValue: storedValue) ?? fallback
     }
 
-    static let shortcutStyleKey = "shortcutStyle"
+    nonisolated static let shortcutStyleKey = "shortcutStyle"
     static let tapOrHoldShortcutKey = "tapOrHoldShortcut"
 
     /// A stored style wins. Without one, anyone who has used Whispur before
@@ -1253,10 +1256,36 @@ final class AppState: ObservableObject {
            let style = DictationShortcutStyle(rawValue: stored) {
             return style
         }
-        let isExistingUser = defaults.object(forKey: "holdShortcut") != nil
+        return isExistingInstall(defaults: defaults) ? .separate : newInstallDefault
+    }
+
+    /// Whispur has run here before: a stored shortcut, or onboarding done
+    /// (finished or put off with "Finish later").
+    nonisolated static func isExistingInstall(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: "holdShortcut") != nil
             || defaults.object(forKey: "toggleShortcut") != nil
+            || defaults.object(forKey: shortcutStyleKey) != nil
             || defaults.bool(forKey: "whispur.onboarding.completed")
-        return isExistingUser ? .separate : newInstallDefault
+    }
+
+    nonisolated static let overlayStyleKey = "overlayStyle"
+
+    /// The overlay style to write on this launch, nil when one is stored.
+    /// Existing installs that never picked one keep standard, the old
+    /// default; a fresh install writes the new default straight away, so a
+    /// later launch (with onboarding now done) can't mistake it for an old
+    /// install.
+    nonisolated static func overlayStyleToPin(stored: String?, isExistingInstall: Bool) -> OverlayStyle? {
+        guard stored == nil else { return nil }
+        return isExistingInstall ? .standard : OverlayStyle.newInstallDefault
+    }
+
+    nonisolated static func pinOverlayStyleIfNeeded(defaults: UserDefaults = .standard) {
+        guard let style = overlayStyleToPin(
+            stored: defaults.string(forKey: overlayStyleKey),
+            isExistingInstall: isExistingInstall(defaults: defaults)
+        ) else { return }
+        defaults.set(style.rawValue, forKey: overlayStyleKey)
     }
 
     /// Fn unless the user picked another key. Double-press bindings can't

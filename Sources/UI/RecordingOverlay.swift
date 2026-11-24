@@ -9,6 +9,10 @@ enum OverlayStyle: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// What a fresh install starts with. Installs from before compact became
+    /// the default keep standard (see `AppState.pinOverlayStyleIfNeeded`).
+    static let newInstallDefault: OverlayStyle = .compact
+
     var displayName: String {
         switch self {
         case .standard: return "Standard"
