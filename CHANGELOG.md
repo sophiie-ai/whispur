@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.0](https://github.com/sophiie-ai/whispur/compare/v0.35.0...v0.36.0) (2026-11-24)
+
+
+### Features
+
+* **audio:** warn when mic audio breaks up and never paste it ([#148](https://github.com/sophiie-ai/whispur/issues/148)) ([9d36bfa](https://github.com/sophiie-ai/whispur/commit/9d36bfad2543de5f9528d7acd1834e546a3b0634))
+
+
+### Bug Fixes
+
+* **providers:** keep dictation working on slow and flaky networks ([#146](https://github.com/sophiie-ai/whispur/issues/146)) ([b742554](https://github.com/sophiie-ai/whispur/commit/b7425541493b09a35903f5c604e3e3d6224f00ec))
+
 ## [0.35.0](https://github.com/sophiie-ai/whispur/compare/v0.34.0...v0.35.0) (2026-11-15)
 
 
