@@ -91,9 +91,9 @@ Switch off "Clean up with AI" (Settings > Providers, or the menu bar) to paste e
 
 | Provider | Notes |
 | --- | --- |
-| Anthropic Claude | Claude Sonnet 4 by default |
-| OpenAI | GPT-4o mini by default, custom base URL supported |
-| Groq | Llama 3.3 70B by default |
+| Anthropic Claude | Claude Haiku 5.5 by default |
+| OpenAI | GPT-6 Luna by default, custom base URL supported |
+| Groq | gpt-oss-20b by default |
 | Cerebras | Qwen 3.8 27B by default |
 | AWS Bedrock | Claude via a Bedrock API key |
 
