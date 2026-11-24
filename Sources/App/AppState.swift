@@ -794,17 +794,16 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Registers Whispur with Accessibility (macOS shows its prompt once per
-    /// launch) and opens System Settings with the drag guide beside it.
+    /// Opens System Settings with the drag guide beside it. macOS's own
+    /// Accessibility alert is deliberately not shown: it asks the user to
+    /// open System Settings while the guide has already opened it, two
+    /// competing instructions for one step.
     func requestAccessibilityAccess() {
         guard !AXIsProcessTrusted() else {
             hotkeyManager.recheckAccessibility()
             return
         }
-        if !Self.didPromptAccessibility {
-            Self.didPromptAccessibility = true
-            hotkeyManager.requestAccessibility()
-        }
+        hotkeyManager.watchForAccessibilityGrant()
         refreshPermissionSnapshot()
         showPermissionGuide(.accessibility)
     }
@@ -828,8 +827,6 @@ final class AppState: ObservableObject {
             showPermissionGuide(.accessibility)
         }
     }
-
-    private static var didPromptAccessibility = false
 
     #if DEBUG
     /// A fixed microphone grant for renders in tests.

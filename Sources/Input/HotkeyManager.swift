@@ -329,10 +329,9 @@ final class HotkeyManager {
         }
     }
 
-    func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        // Re-arm the poll so we notice the grant quickly once the user responds.
+    /// Re-arms the grant poll so a grant made in System Settings is picked
+    /// up quickly.
+    func watchForAccessibilityGrant() {
         scheduleAccessibilityPollIfNeeded()
     }
 
