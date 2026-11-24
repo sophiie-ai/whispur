@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.37.0](https://github.com/sophiie-ai/whispur/compare/v0.36.0...v0.37.0) (2026-11-24)
+
+
+### Features
+
+* **site:** add a blog and comparison pages ([#150](https://github.com/sophiie-ai/whispur/issues/150)) ([5ca03a3](https://github.com/sophiie-ai/whispur/commit/5ca03a37621e6a8eddf7dcb52701b4ee3eefc746))
+* **site:** serve Markdown to agents and add about and contact pages ([#149](https://github.com/sophiie-ai/whispur/issues/149)) ([89cd5f6](https://github.com/sophiie-ai/whispur/commit/89cd5f6bafda01755eac3fc8d1d29fac9b6e22a7))
+* **site:** tighten the hero and say bring your own API keys ([#153](https://github.com/sophiie-ai/whispur/issues/153)) ([011e5f1](https://github.com/sophiie-ai/whispur/commit/011e5f14f0501b450859649077364b4cd7029df5))
+
+
+### Bug Fixes
+
+* **onboarding:** only say all set once the shortcut really works ([#154](https://github.com/sophiie-ai/whispur/issues/154)) ([049e2bd](https://github.com/sophiie-ai/whispur/commit/049e2bd113af7fbf3554784d625d3baa56de5877))
+
 ## [0.36.0](https://github.com/sophiie-ai/whispur/compare/v0.35.0...v0.36.0) (2026-11-24)
 
 
