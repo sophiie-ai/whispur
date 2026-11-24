@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.1](https://github.com/sophiie-ai/whispur/compare/v0.37.0...v0.37.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **onboarding:** show only the Accessibility guide, not the macOS alert too ([#155](https://github.com/sophiie-ai/whispur/issues/155)) ([3d5c84b](https://github.com/sophiie-ai/whispur/commit/3d5c84bcbeeb06ba5714a9223fc15037c1f4dfb8))
+* **site:** serve favicon.ico and refresh cached icons ([#156](https://github.com/sophiie-ai/whispur/issues/156)) ([ae7c2f6](https://github.com/sophiie-ai/whispur/commit/ae7c2f6a09ec28824bc998d334d6ce88d789daed))
+
 ## [0.37.0](https://github.com/sophiie-ai/whispur/compare/v0.36.0...v0.37.0) (2026-11-24)
 
 
