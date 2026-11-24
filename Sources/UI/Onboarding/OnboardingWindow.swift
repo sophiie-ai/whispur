@@ -70,6 +70,8 @@ struct OnboardingWindow: View {
     /// Granted, still finishing, on, or waiting on a restart.
     @State private var accessibility: AccessibilityStatus
     @State private var guidedPermission: GuidedPermission?
+    /// The event tap has heard a key: the shortcut demonstrably reaches Whispur.
+    @State private var shortcutHeard: Bool
     /// The "Try it" field and whether a real dictation has landed in it.
     @StateObject private var tryIt = TryItSession()
     /// This run's steps, fixed when the window opens.
@@ -109,6 +111,7 @@ struct OnboardingWindow: View {
         _step = State(initialValue: initialStep)
         _accessibility = State(initialValue: appState.hotkeyManager.accessibilityStatus)
         _guidedPermission = State(initialValue: appState.permissionGuide.activePermission)
+        _shortcutHeard = State(initialValue: appState.hotkeyManager.hasSeenTapEvent)
     }
 
     var body: some View {
@@ -142,6 +145,7 @@ struct OnboardingWindow: View {
             if granted { advance(afterGranting: .microphone) }
         }
         .onReceive(appState.permissionGuide.$activePermission) { guidedPermission = $0 }
+        .onReceive(appState.hotkeyManager.$hasSeenTapEvent.removeDuplicates()) { shortcutHeard = $0 }
         .onAppear {
             routeDictationIntoTryIt(step == .tryIt)
             // The model starts downloading as soon as setup opens, so it has
@@ -299,7 +303,6 @@ struct OnboardingWindow: View {
         case .languages: languagesScreen
         case .microphone: microphoneScreen
         case .accessibility: accessibilityScreen
-        case .shortcuts: shortcutsScreen
         case .tryIt: tryItScreen
         case .ready: readyScreen
         }
@@ -373,13 +376,7 @@ struct OnboardingWindow: View {
             case .on:
                 GrantedLabel(text: "Accessibility on")
             case .finishing:
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Turning on your shortcut\u{2026}")
-                        .font(SophiieTheme.Typography.label)
-                        .foregroundStyle(Palette.inkSecondary)
-                }
-                .frame(height: 32)
+                finishingLabel
             case .needsRestart:
                 restartButton
             case .off:
@@ -409,7 +406,7 @@ struct OnboardingWindow: View {
         case .on:
             return "Your shortcut works in every app, and text lands where you're typing."
         case .finishing:
-            return "Accessibility is on. Whispur is hooking up your shortcut."
+            return Self.finishingMessage
         case .needsRestart:
             return Self.restartMessage
         case .off:
@@ -421,7 +418,19 @@ struct OnboardingWindow: View {
     }
 
     static let restartTitle = "Whispur needs a quick restart to finish"
+    static let finishingMessage = "Accessibility is on. Whispur is still hooking up your shortcut."
     static let restartMessage = "macOS has switched Accessibility on, but Whispur only sees it after a restart. Setup picks up where you left off."
+
+    /// The spinner while a granted Accessibility waits on the event tap.
+    private var finishingLabel: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Turning on your shortcut\u{2026}")
+                .font(SophiieTheme.Typography.label)
+                .foregroundStyle(Palette.inkSecondary)
+        }
+        .frame(height: 32)
+    }
 
     /// Relaunches Whispur; onboarding reopens past the accessibility step.
     private var restartButton: some View {
@@ -431,53 +440,6 @@ struct OnboardingWindow: View {
         .buttonStyle(.sophiiePrimary)
         .controlSize(.large)
         .keyboardShortcut(.defaultAction)
-    }
-
-    private var shortcutsScreen: some View {
-        let selected = appState.currentShortcutChoice
-        return OnboardingScreen(
-            hero: { EmptyView() },
-            title: "Pick your shortcut",
-            message: shortcutMessage(selected)
-        ) {
-            VStack(spacing: 16) {
-                HStack(spacing: 12) {
-                    ForEach(OnboardingShortcutChoice.allCases) { choice in
-                        ShortcutChoiceCard(choice: choice, isSelected: selected == choice) {
-                            withSophiieAnimation { appState.applyShortcutChoice(choice) }
-                        }
-                    }
-                }
-
-                if selected?.usesFn == true {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Label(Self.globeKeyHint, systemImage: "globe")
-                            .font(SophiieTheme.Typography.caption)
-                            .foregroundStyle(Palette.inkSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Keyboard Settings", action: appState.openKeyboardSettings)
-                            .buttonStyle(.sophiieSecondary)
-                            .controlSize(.small)
-                    }
-                    .frame(maxWidth: 540)
-                    .transition(.opacity)
-                }
-
-                Button("More options in Settings") { openSettings(tab: .dictation) }
-                    .buttonStyle(.plain)
-                    .font(SophiieTheme.Typography.caption)
-                    .foregroundStyle(Palette.interactive)
-            }
-        }
-    }
-
-    static let globeKeyHint = "So quick Fn taps don't open the Emoji panel, set \"Press \u{1F310} key to\" to Do Nothing in System Settings → Keyboard."
-
-    private func shortcutMessage(_ selected: OnboardingShortcutChoice?) -> String {
-        if selected == nil {
-            return "Right now: \(appState.shortcutSummary). Pick one below to switch, or keep yours."
-        }
-        return "Choose the key you'll hold while you talk. You can change it any time."
     }
 
     // MARK: Try it
@@ -505,6 +467,7 @@ struct OnboardingWindow: View {
             microphone: appState.microphoneAccessGranted,
             accessibility: accessibility.isGranted,
             needsRestart: accessibility == .needsRestart,
+            finishing: accessibility == .finishing,
             hasShortcut: appState.hasAnyShortcut,
             speechConfigured: appState.isSelectedSTTConfigured
         )
@@ -521,7 +484,8 @@ struct OnboardingWindow: View {
         }
     }
 
-    static let tryItPhrase = "Hi, I'm testing Whispur"
+    /// No brand name: speech engines mishear it without a vocabulary entry.
+    static let tryItPhrase = "Hey, this is my first dictation"
 
     private func tryItMessage(_ blocker: TryItBlocker?) -> String {
         switch blocker {
@@ -531,8 +495,10 @@ struct OnboardingWindow: View {
             return "Whispur needs accessibility access before your shortcut works."
         case .restart:
             return "Accessibility is on, but your shortcut only works after Whispur restarts."
+        case .finishing:
+            return Self.finishingMessage
         case .shortcut:
-            return "There's no dictation shortcut yet. Pick one first."
+            return "There's no dictation shortcut yet. Pick one in Settings."
         case .speechProvider:
             return "\(appState.selectedSTT.displayName) needs an API key before it can transcribe."
         case nil:
@@ -552,57 +518,67 @@ struct OnboardingWindow: View {
     private func tryItBlockerAction(_ blocker: TryItBlocker) -> some View {
         if blocker == .restart {
             restartButton
+        } else if blocker == .finishing {
+            finishingLabel
         } else if let fix = blocker.step {
-            Button(fix == .shortcuts ? "Pick a Shortcut" : "Allow \(fix.title)") { go(to: fix) }
+            Button("Allow \(fix.title)") { go(to: fix) }
                 .buttonStyle(.sophiiePrimary)
                 .controlSize(.large)
-        } else {
-            Button("Open Providers") { openSettings(tab: .providers) }
+        } else if let tab = blocker.settingsTab {
+            Button(blocker == .shortcut ? "Pick a Shortcut in Settings" : "Open Providers") { openSettings(tab: tab) }
                 .buttonStyle(.sophiiePrimary)
                 .controlSize(.large)
         }
     }
 
-    /// Both permissions working and speech ready: the Ready screen's
-    /// "You're all set".
-    private var readyIsAllSet: Bool {
-        OnboardingFlow.firstMissingPermissionStep(
+    /// What the Ready screen says; "You're all set" only once the
+    /// shortcut is listening and has been heard (or Try it worked).
+    private var readiness: OnboardingReadiness {
+        OnboardingReadiness.resolve(
             microphone: appState.microphoneAccessGranted,
-            accessibility: accessibility.isGranted
-        ) == nil && accessibility != .needsRestart && appState.isSelectedSTTConfigured
+            accessibility: accessibility,
+            speechConfigured: appState.isSelectedSTTConfigured,
+            shortcutHeard: shortcutHeard || tryIt.succeeded
+        )
     }
 
+    private var readyIsAllSet: Bool { readiness == .allSet }
+
     private var readyScreen: some View {
-        let missing = OnboardingFlow.firstMissingPermissionStep(
-            microphone: appState.microphoneAccessGranted,
-            accessibility: accessibility.isGranted
-        )
-        let needsRestart = missing == nil && accessibility == .needsRestart
-        let speechReady = appState.isSelectedSTTConfigured
-        let allSet = readyIsAllSet
+        let readiness = readiness
         return OnboardingScreen(
             hero: {
-                if allSet {
+                switch readiness {
+                case .allSet, .untested:
                     OnboardingMenuBarPreview(caption: readyCaption)
                         .frame(height: 120)
-                } else {
-                    SymbolHero(symbol: needsRestart ? "arrow.clockwise" : OnboardingStep.ready.symbol, isDone: false)
+                case .needsRestart:
+                    SymbolHero(symbol: "arrow.clockwise", isDone: false)
+                default:
+                    SymbolHero(symbol: OnboardingStep.ready.symbol, isDone: false)
                 }
             },
-            title: allSet ? "You're all set" : (needsRestart ? Self.restartTitle : "Almost there"),
-            message: needsRestart ? Self.restartMessage : readyMessage(missing: missing, speechReady: speechReady)
+            title: readyTitle(readiness),
+            message: readyMessage(readiness)
         ) {
             VStack(spacing: 12) {
-                if let missing {
+                switch readiness {
+                case let .missingPermission(missing):
                     Button(missing == .microphone ? "Allow Microphone" : "Allow Accessibility") { go(to: missing) }
                         .buttonStyle(.sophiieSecondary)
                         .controlSize(.large)
-                } else if needsRestart {
+                case .needsRestart:
                     restartButton
-                } else if !speechReady {
+                case .finishing:
+                    finishingLabel
+                case .speechProvider:
                     Button("Add a Speech Provider Key") { openSettings(tab: .providers) }
                         .buttonStyle(.sophiieSecondary)
                         .controlSize(.large)
+                case .untested:
+                    untestedFixes
+                case .allSet:
+                    EmptyView()
                 }
                 parakeetDownloadLine
                 Button("Open Settings") { openSettings(tab: .getStarted) }
@@ -618,14 +594,55 @@ struct OnboardingWindow: View {
         appState.talkAnywhereHint
     }
 
-    private func readyMessage(missing: OnboardingStep?, speechReady: Bool) -> String {
-        if let missing {
+    private func readyTitle(_ readiness: OnboardingReadiness) -> String {
+        switch readiness {
+        case .allSet: return "You're all set"
+        case .needsRestart: return Self.restartTitle
+        case .untested: return "One last check"
+        case .missingPermission, .finishing, .speechProvider: return "Almost there"
+        }
+    }
+
+    private func readyMessage(_ readiness: OnboardingReadiness) -> String {
+        switch readiness {
+        case let .missingPermission(missing):
             return "Whispur needs \(missingPermissionName(missing)) before dictation works. You can also finish this later in Settings."
-        }
-        if !speechReady {
+        case .needsRestart:
+            return Self.restartMessage
+        case .finishing:
+            return Self.finishingMessage
+        case .speechProvider:
             return "\(appState.selectedSTT.displayName) needs an API key. Add one in Settings, or switch to on-device speech."
+        case .untested:
+            let key = appState.hasAnyShortcut ? appState.primaryShortcutTitle : "your shortcut"
+            var message = "Try \(key) once in any app to check Whispur hears it. If nothing happens, restart Whispur"
+            if shortcutUsesFn {
+                message += ", set \u{201C}Press \u{1F310} key to\u{201D} to Do Nothing in System Settings \u{2192} Keyboard"
+            }
+            return message + ", or remove Whispur from Accessibility and add it again."
+        case .allSet:
+            return "Whispur waits up in your menu bar. Click it any time for settings and your recent dictations."
         }
-        return "Whispur waits up in your menu bar. Click it any time for settings and your recent dictations."
+    }
+
+    /// Whether a shortcut in use involves Fn, so the Globe key setting matters.
+    private var shortcutUsesFn: Bool {
+        [appState.effectiveHoldShortcut, appState.toggleShortcut]
+            .contains { $0?.modifiers.contains(.function) == true }
+    }
+
+    /// The fixes for a shortcut that never reached Whispur, in the order
+    /// the message names them.
+    private var untestedFixes: some View {
+        HStack(spacing: 8) {
+            Button("Restart Whispur") { appState.restartWhispur(resumingOnboardingAt: .ready) }
+            if shortcutUsesFn {
+                Button("Keyboard Settings", action: appState.openKeyboardSettings)
+            }
+            Button("Accessibility Settings", action: appState.openAccessibilitySettings)
+        }
+        .buttonStyle(.sophiieSecondary)
+        .controlSize(.small)
     }
 
     private func missingPermissionName(_ step: OnboardingStep?) -> String {
@@ -753,61 +770,6 @@ private struct ProgressTrack: View {
             }
         }
         .frame(height: 4)
-    }
-}
-
-/// One preset on the Shortcuts screen: the key, its name and one line.
-private struct ShortcutChoiceCard: View {
-    private typealias Palette = SophiieTheme.Palette
-
-    let choice: OnboardingShortcutChoice
-    let isSelected: Bool
-    let select: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: select) {
-            VStack(spacing: 12) {
-                KeycapCombo(keys: choice.binding.keycapLabels)
-                    .frame(height: 30)
-                VStack(spacing: 4) {
-                    Text(choice.title)
-                        .font(SophiieTheme.Typography.label)
-                        .foregroundStyle(Palette.ink)
-                    Text(choice.detail)
-                        .font(SophiieTheme.Typography.caption)
-                        .foregroundStyle(Palette.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.vertical, 18)
-            .padding(.horizontal, 12)
-            .frame(width: 168, height: 132)
-            .background(
-                RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
-                    .fill(isSelected ? Palette.surfaceSelected : (isHovering ? Palette.surfaceSubtle : Palette.OnDark.raised.opacity(0.5)))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous)
-                    .strokeBorder(isSelected ? Palette.highlight : Palette.hairline, lineWidth: isSelected ? 2 : 1)
-            )
-            .overlay(alignment: .topTrailing) {
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Palette.highlight)
-                        .padding(8)
-                }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: SophiieTheme.Radius.card, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .sophiieAnimation(value: isSelected)
-        .sophiieAnimation(value: isHovering)
-        .accessibilityLabel("\(choice.title). \(choice.detail)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

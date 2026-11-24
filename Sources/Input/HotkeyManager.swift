@@ -131,6 +131,11 @@ final class HotkeyManager {
     @Published private(set) var isEventTapInstalled = false
     /// Accessibility is granted but the tap kept failing: a relaunch is the fix.
     @Published private(set) var needsRestartForAccessibility = false
+    /// The installed tap has delivered at least one key event. A tap that
+    /// macOS created can still never fire (a stale grant, another app's
+    /// tap ahead of ours), so only this proves the shortcut is heard.
+    /// Cleared whenever the tap is torn down.
+    @Published private(set) var hasSeenTapEvent = false
     @Published private(set) var isMonitoring = false
     @Published private(set) var eventCount = 0
     @Published private(set) var lastEventDescription = ""
@@ -156,6 +161,8 @@ final class HotkeyManager {
         var doublePress = DoublePressDetector(window: 0.4, maxTapDuration: 0.33)
         var doublePressDown = false
         var toggleSessionActive = false
+        /// The current tap has delivered a key event (see `hasSeenTapEvent`).
+        var tapEventSeen = false
         // Tap or hold. `tapOrHoldDown` tracks the binding's edge.
         var tapOrHold = TapOrHoldDetector(vetoWindow: 0.15, holdThreshold: 0.3)
         var tapOrHoldDown = false
@@ -179,6 +186,8 @@ final class HotkeyManager {
     /// so they let us still fire cancel even when the tap path misses.
     private var globalEscMonitor: Any?
     private var accessibilityTimer: Timer?
+    /// The slow check that keeps running after setup (see `AccessibilityHealthCheck`).
+    private var healthTimer: Timer?
     /// Fast retry after a failed tap install, and the failures so far.
     private var tapRetryTimer: Timer?
     private var tapInstallFailures = 0
@@ -193,12 +202,55 @@ final class HotkeyManager {
         started = true
         checkAccessibilityAndInstall()
         scheduleAccessibilityPollIfNeeded()
+        scheduleHealthCheck()
         installGlobalEscMonitor()
     }
 
+    private func scheduleHealthCheck() {
+        guard healthTimer == nil else { return }
+        healthTimer = Timer.scheduledTimer(withTimeInterval: AccessibilityHealthCheck.interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkHealth() }
+        }
+    }
+
+    /// Notices a revoked grant or a tap macOS switched off, which the
+    /// grant poll (stopped once the tap is in) and app activation miss.
+    private func checkHealth() {
+        guard started else { return }
+        let trusted = AXIsProcessTrusted()
+        var action = AccessibilityHealthCheck.action(
+            trusted: trusted,
+            tapExists: eventTap != nil,
+            tapEnabled: eventTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+            reenableTried: false
+        )
+        if action == .reenable, let tap = eventTap {
+            logger.info("Health check: event tap was disabled — re-enabling")
+            CGEvent.tapEnable(tap: tap, enable: true)
+            action = AccessibilityHealthCheck.action(
+                trusted: trusted,
+                tapExists: true,
+                tapEnabled: CGEvent.tapIsEnabled(tap: tap),
+                reenableTried: true
+            )
+        }
+        switch action {
+        case .none, .reenable:
+            return
+        case .reinstall:
+            logger.error("Health check: event tap stayed disabled — reinstalling")
+            teardownEventTap()
+            checkAccessibilityAndInstall()
+            scheduleAccessibilityPollIfNeeded()
+        case .install, .tearDown:
+            checkAccessibilityAndInstall()
+            scheduleAccessibilityPollIfNeeded()
+        }
+    }
+
     /// Poll for Accessibility permission changes only until it's granted and
-    /// the CGEvent tap is installed. Once monitoring is up, the timer stops —
-    /// nothing else flips the grant state at runtime in a way that matters here.
+    /// the CGEvent tap is installed. Once the tap is up this timer stops and
+    /// the slower health check (`checkHealth`) watches for it going away.
     private func scheduleAccessibilityPollIfNeeded() {
         guard accessibilityTimer == nil else { return }
         guard eventTap == nil else { return }
@@ -219,6 +271,8 @@ final class HotkeyManager {
         started = false
         accessibilityTimer?.invalidate()
         accessibilityTimer = nil
+        healthTimer?.invalidate()
+        healthTimer = nil
         tapRetryTimer?.invalidate()
         tapRetryTimer = nil
         teardownEventTap()
@@ -300,7 +354,13 @@ final class HotkeyManager {
             }
         } else if !trusted {
             resetTapFailures()
-            if eventTap == nil && localFlagsMonitor == nil { installLocalMonitors() }
+            // A revoked grant leaves a tap that no longer hears anything:
+            // drop it so the status reads off, and fall back to the monitors.
+            if eventTap != nil {
+                logger.info("Accessibility revoked — removing the event tap")
+                teardownEventTap()
+            }
+            if localFlagsMonitor == nil { installLocalMonitors() }
         }
 
         let tapInstalled = eventTap != nil
@@ -362,10 +422,11 @@ final class HotkeyManager {
 
     #if DEBUG
     /// A fixed Accessibility state for renders in tests.
-    func setAccessibilityForRendering(_ status: AccessibilityStatus) {
+    func setAccessibilityForRendering(_ status: AccessibilityStatus, tapHeardEvent: Bool = true) {
         isAccessibilityGranted = status.isGranted
         isEventTapInstalled = status == .on
         needsRestartForAccessibility = status == .needsRestart
+        hasSeenTapEvent = status == .on && tapHeardEvent
     }
     #endif
 
@@ -419,6 +480,8 @@ final class HotkeyManager {
         eventTap = nil
         runLoopSource = nil
         isEventTapInstalled = false
+        stateLock.withLock { $0.tapEventSeen = false }
+        hasSeenTapEvent = false
     }
 
     // MARK: - NSEvent Monitors (fallback when CGEventTap unavailable)
@@ -485,6 +548,7 @@ final class HotkeyManager {
             return Unmanaged.passUnretained(event)
 
         case .flagsChanged, .keyDown, .keyUp:
+            noteTapEvent()
             guard let nsEvent = NSEvent(cgEvent: event) else {
                 return Unmanaged.passUnretained(event)
             }
@@ -506,6 +570,19 @@ final class HotkeyManager {
 
         default:
             return Unmanaged.passUnretained(event)
+        }
+    }
+
+    /// Records the tap's first key event; later ones cost one lock.
+    private nonisolated func noteTapEvent() {
+        let first = stateLock.withLock { state -> Bool in
+            defer { state.tapEventSeen = true }
+            return !state.tapEventSeen
+        }
+        guard first else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.eventTap != nil else { return }
+            self.hasSeenTapEvent = true
         }
     }
 

@@ -52,3 +52,32 @@ enum AccessibilityRestartPolicy {
         trusted && !tapInstalled && !needsRestart
     }
 }
+
+/// What the slow health check does once setup is done. A tap can be
+/// installed and still stop working: macOS disables it (a timeout, secure
+/// input) or the user revokes the grant, and a menu-bar app rarely becomes
+/// active to notice. Pure, so every cell is unit tested.
+enum AccessibilityHealthCheck {
+    /// Gap between checks. Each one is two cheap system calls.
+    static let interval: TimeInterval = 45
+
+    enum Action: Equatable {
+        /// Nothing to do.
+        case none
+        /// Granted with no tap: install it (the install path owns retries).
+        case install
+        /// The grant is gone: drop the tap so the status reads off.
+        case tearDown
+        /// The tap exists but macOS switched it off: switch it back on.
+        case reenable
+        /// Switching it back on didn't take: build a fresh tap.
+        case reinstall
+    }
+
+    static func action(trusted: Bool, tapExists: Bool, tapEnabled: Bool, reenableTried: Bool) -> Action {
+        guard trusted else { return tapExists ? .tearDown : .none }
+        guard tapExists else { return .install }
+        if tapEnabled { return .none }
+        return reenableTried ? .reinstall : .reenable
+    }
+}

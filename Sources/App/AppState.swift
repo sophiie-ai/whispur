@@ -52,7 +52,7 @@ final class AppState: ObservableObject {
     @AppStorage("useRawToastEnabled") var useRawToastEnabled: Bool = true
     @AppStorage("soundEnabled") var soundEnabled: Bool = true
     @AppStorage("muteSystemAudioWhileRecording") var muteSystemAudioWhileRecording: Bool = false
-    @AppStorage("overlayStyle") var overlayStyle: OverlayStyle = .standard
+    @AppStorage(AppState.overlayStyleKey) var overlayStyle: OverlayStyle = OverlayStyle.newInstallDefault
     /// 0...100. How much to reduce the system output volume by while
     /// recording. 100 = full mute (the original behavior); lower values
     /// just duck playback so background audio is still audible. Only
@@ -141,6 +141,9 @@ final class AppState: ObservableObject {
         evalCases: MyEvalCaseStore? = nil,
         startsServices: Bool = true
     ) {
+        // First, while "has this install run before" is still answerable
+        // from the stored keys alone. Renders and tests never write it.
+        if startsServices { Self.pinOverlayStyleIfNeeded() }
         // Before anything reads the language setting.
         Self.migrateSpokenLanguagesIfNeeded()
         // Before anything reads the speech provider. Renders and tests
@@ -720,14 +723,74 @@ final class AppState: ObservableObject {
         case .authorized:
             refreshPermissionSnapshot()
         case .notDetermined:
+            // Float onboarding above other apps while the prompt is open:
+            // answering it hands focus back to whichever app was in front
+            // before, and activation on macOS 14 and later is cooperative, so
+            // Whispur cannot win that race by asking to activate.
+            setOnboardingFloating(true)
             Task {
                 _ = await AudioRecorder.requestMicrophoneAccess()
                 await MainActor.run {
                     self.refreshPermissionSnapshot()
+                    self.bringOnboardingToFront()
                 }
             }
         default:
             showPermissionGuide(.microphone)
+        }
+    }
+
+    /// After the microphone prompt: try to make onboarding key, and keep it
+    /// floating until Whispur really is the active app. macOS usually refuses
+    /// the activation here, and a window that stops floating while another
+    /// app is active sorts behind that app's windows. The user's next click
+    /// in onboarding activates Whispur, which ends the float.
+    private func bringOnboardingToFront() {
+        if let window = onboardingWindow() {
+            window.orderFrontRegardless()
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+        }
+        if NSApp.isActive {
+            setOnboardingFloating(false)
+            return
+        }
+        floatEndObserver.map(NotificationCenter.default.removeObserver)
+        floatEndObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.endOnboardingFloat() }
+        }
+    }
+
+    private func endOnboardingFloat() {
+        floatEndObserver.map(NotificationCenter.default.removeObserver)
+        floatEndObserver = nil
+        setOnboardingFloating(false)
+    }
+
+    private var floatEndObserver: NSObjectProtocol?
+
+    /// Never floats while a permission guide is up: the guide sits beside
+    /// System Settings on purpose and onboarding must not cover it.
+    private func setOnboardingFloating(_ floating: Bool) {
+        guard let window = onboardingWindow() else { return }
+        let level: NSWindow.Level = floating && permissionGuide.activePermission == nil ? .floating : .normal
+        guard window.level != level else { return }
+        window.level = level
+        if level == .floating { window.orderFrontRegardless() }
+    }
+
+    private func onboardingWindow() -> NSWindow? {
+        NSApp.windows.first { $0.identifier == OnboardingWindow.windowIdentifier && $0.isVisible }
+    }
+
+    /// System Settings → Keyboard, where "Press 🌐 key to" lives.
+    func openKeyboardSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -788,6 +851,7 @@ final class AppState: ObservableObject {
     /// the grant up straight away and comes back to the front, where
     /// onboarding moves on by itself.
     func showPermissionGuide(_ permission: GuidedPermission) {
+        endOnboardingFloat()
         permissionGuide.show(permission) { [weak self] outcome in
             guard let self else { return }
             self.hotkeyManager.recheckAccessibility()
@@ -948,7 +1012,14 @@ final class AppState: ObservableObject {
 
                 let isBusy = !self.pipeline.canStartRecording && !self.pipeline.canStopRecording
 
-                let action = self.shortcutSessionController.handle(event: event, isBusy: isBusy)
+                var action = self.shortcutSessionController.handle(event: event, isBusy: isBusy)
+                if case .start = action, Self.ignoresShortcutStart(
+                    accessibilityGranted: self.hotkeyManager.isAccessibilityGranted,
+                    onboardingCompleted: self.onboardingCompleted
+                ) {
+                    self.shortcutSessionController.reset()
+                    action = nil
+                }
                 switch action {
                 case .start(let mode):
                     self.startDictation(triggerMode: mode)
@@ -986,6 +1057,15 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Before Accessibility is granted, the fallback key monitors can still
+    /// see the shortcut. During first-run setup that press is ignored: the
+    /// user hasn't reached the step that explains it, and an error overlay
+    /// mid-onboarding only confuses. Afterwards the start goes through and
+    /// its error says what's missing.
+    nonisolated static func ignoresShortcutStart(accessibilityGranted: Bool, onboardingCompleted: Bool) -> Bool {
+        !accessibilityGranted && !onboardingCompleted
     }
 
     /// Mirror the controller's toggle state into the hotkey manager so a
@@ -1162,7 +1242,7 @@ final class AppState: ObservableObject {
         return ShortcutBinding(storageValue: storedValue) ?? fallback
     }
 
-    static let shortcutStyleKey = "shortcutStyle"
+    nonisolated static let shortcutStyleKey = "shortcutStyle"
     static let tapOrHoldShortcutKey = "tapOrHoldShortcut"
 
     /// A stored style wins. Without one, anyone who has used Whispur before
@@ -1176,10 +1256,36 @@ final class AppState: ObservableObject {
            let style = DictationShortcutStyle(rawValue: stored) {
             return style
         }
-        let isExistingUser = defaults.object(forKey: "holdShortcut") != nil
+        return isExistingInstall(defaults: defaults) ? .separate : newInstallDefault
+    }
+
+    /// Whispur has run here before: a stored shortcut, or onboarding done
+    /// (finished or put off with "Finish later").
+    nonisolated static func isExistingInstall(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: "holdShortcut") != nil
             || defaults.object(forKey: "toggleShortcut") != nil
+            || defaults.object(forKey: shortcutStyleKey) != nil
             || defaults.bool(forKey: "whispur.onboarding.completed")
-        return isExistingUser ? .separate : newInstallDefault
+    }
+
+    nonisolated static let overlayStyleKey = "overlayStyle"
+
+    /// The overlay style to write on this launch, nil when one is stored.
+    /// Existing installs that never picked one keep standard, the old
+    /// default; a fresh install writes the new default straight away, so a
+    /// later launch (with onboarding now done) can't mistake it for an old
+    /// install.
+    nonisolated static func overlayStyleToPin(stored: String?, isExistingInstall: Bool) -> OverlayStyle? {
+        guard stored == nil else { return nil }
+        return isExistingInstall ? .standard : OverlayStyle.newInstallDefault
+    }
+
+    nonisolated static func pinOverlayStyleIfNeeded(defaults: UserDefaults = .standard) {
+        guard let style = overlayStyleToPin(
+            stored: defaults.string(forKey: overlayStyleKey),
+            isExistingInstall: isExistingInstall(defaults: defaults)
+        ) else { return }
+        defaults.set(style.rawValue, forKey: overlayStyleKey)
     }
 
     /// Fn unless the user picked another key. Double-press bindings can't

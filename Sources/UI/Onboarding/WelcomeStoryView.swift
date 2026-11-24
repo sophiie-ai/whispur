@@ -1,97 +1,75 @@
 import SwiftUI
 
 /// The welcome screen's before-and-after, drawn from `WelcomeStoryTimeline`.
-/// Plays once on its own, offers a replay, and never holds anything up:
-/// Continue works the whole time. With Reduce Motion it shows the two
-/// finished composers side by side and doesn't animate.
+/// Cycles through the examples on its own, holding each finished scene a
+/// moment, and never holds anything up: Continue works the whole time. With
+/// Reduce Motion it shows the first example's finished composers side by
+/// side and doesn't animate.
 struct WelcomeStoryView: View {
     private typealias Palette = SophiieTheme.Palette
     private typealias Story = WelcomeStoryTimeline
 
-    /// A fixed moment to draw instead of playing, for renders.
+    /// A fixed moment of the first example to draw instead of playing, for renders.
     var fixedTime: TimeInterval?
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.onboardingRendersReducedMotion) private var rendersReducedMotion
     @State private var startedAt = Date()
-    @State private var finished = false
 
     private var reduceMotion: Bool { systemReduceMotion || rendersReducedMotion }
 
     var body: some View {
         Group {
             if let fixedTime {
-                scene(Story.frame(at: fixedTime))
+                scene(Story.examples[0], Story.examples[0].frame(at: fixedTime))
             } else if reduceMotion {
-                scene(Story.finalFrame)
+                scene(Story.examples[0], Story.examples[0].finalFrame)
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: finished)) { context in
-                    scene(Story.frame(at: context.date.timeIntervalSince(startedAt)))
-                }
-                .task(id: startedAt) {
-                    finished = false
-                    try? await Task.sleep(for: .seconds(Story.end + 0.2))
-                    finished = true
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                    let position = Story.position(at: context.date.timeIntervalSince(startedAt))
+                    let example = Story.examples[position.example]
+                    scene(example, example.frame(at: position.time))
                 }
             }
         }
     }
 
-    private func scene(_ frame: Story.Frame) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 14) {
-                StoryCard(
-                    title: "Without Whispur",
-                    elapsed: frame.handElapsed,
-                    isDone: frame.handDone,
-                    accent: Palette.OnDark.muted
-                ) {
-                    HandComposer(text: frame.handText, isDone: frame.handDone)
-                }
-                StoryCard(
-                    title: "With Whispur",
-                    elapsed: frame.voiceElapsed,
-                    isDone: frame.voicePhase == .done,
-                    accent: Palette.sky
-                ) {
-                    VoiceComposer(phase: frame.voicePhase, text: frame.voiceText)
-                }
+    private func scene(_ example: Story.Example, _ frame: Story.Frame) -> some View {
+        HStack(spacing: 14) {
+            StoryCard(
+                title: "Without Whispur",
+                question: example.question,
+                elapsed: frame.handElapsed,
+                isDone: frame.handDone,
+                accent: Palette.OnDark.muted
+            ) {
+                HandComposer(text: frame.handText, isDone: frame.handDone)
             }
-            // One spoken summary for the decorative scene; the replay button
-            // below stays its own VoiceOver element.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
-            )
-            replayButton
-                .opacity(showsReplay ? 1 : 0)
-                .accessibilityHidden(!showsReplay)
-                .animation(.easeOut(duration: 0.25), value: finished)
+            StoryCard(
+                title: "With Whispur",
+                question: example.question,
+                elapsed: frame.voiceElapsed,
+                isDone: frame.voicePhase == .done,
+                accent: Palette.sky
+            ) {
+                VoiceComposer(phase: frame.voicePhase, text: frame.voiceText)
+            }
         }
-    }
-
-    private var showsReplay: Bool { finished && fixedTime == nil && !reduceMotion }
-
-    private var replayButton: some View {
-        Button {
-            startedAt = Date()
-        } label: {
-            Label("Play again", systemImage: "arrow.counterclockwise")
-                .font(SophiieTheme.Typography.caption)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.OnDark.muted)
-        .disabled(!finished)
-        .accessibilityLabel("Play the comparison again")
+        // One spoken summary for the decorative scene.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Typing a reply by hand takes \(Story.clock(example.handDuration)). Saying it with Whispur takes \(Story.clock(example.voiceDuration))."
+        )
     }
 }
 
-/// One side of the comparison: a label, a running clock, the customer's
+/// One side of the comparison: a label, a running clock, the incoming
 /// message and the composer.
 private struct StoryCard<Composer: View>: View {
     private typealias Palette = SophiieTheme.Palette
 
     let title: String
+    let question: String
     let elapsed: TimeInterval
     let isDone: Bool
     let accent: Color
@@ -111,7 +89,7 @@ private struct StoryCard<Composer: View>: View {
                     .foregroundStyle(isDone ? accent : Palette.OnDark.muted)
             }
 
-            Text(WelcomeStoryTimeline.question)
+            Text(question)
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.OnDark.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)

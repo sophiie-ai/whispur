@@ -21,7 +21,7 @@ final class OnboardingFlowTests: XCTestCase {
 
     func testAGrantOnlyAdvancesItsOwnStep() {
         XCTAssertEqual(OnboardingFlow.stepAfterGrant(of: .microphone, showing: .microphone), .accessibility)
-        XCTAssertEqual(OnboardingFlow.stepAfterGrant(of: .accessibility, showing: .accessibility), .shortcuts)
+        XCTAssertEqual(OnboardingFlow.stepAfterGrant(of: .accessibility, showing: .accessibility), .tryIt)
         // A grant landing while another screen shows never moves the window.
         XCTAssertNil(OnboardingFlow.stepAfterGrant(of: .microphone, showing: .accessibility))
         XCTAssertNil(OnboardingFlow.stepAfterGrant(of: .accessibility, showing: .ready))
@@ -29,8 +29,9 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertNil(OnboardingFlow.stepAfterGrant(of: .accessibility, showing: .tryIt))
     }
 
-    func testTryItComesRightBeforeReady() {
-        XCTAssertEqual(OnboardingFlow.next(after: .shortcuts), .tryIt)
+    func testTryItFollowsAccessibilityAndComesRightBeforeReady() {
+        XCTAssertEqual(OnboardingFlow.next(after: .accessibility), .tryIt)
+        XCTAssertEqual(OnboardingFlow.previous(before: .tryIt), .accessibility)
         XCTAssertEqual(OnboardingFlow.next(after: .tryIt), .ready)
         XCTAssertEqual(OnboardingFlow.previous(before: .ready), .tryIt)
     }
@@ -43,8 +44,12 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertEqual(TryItBlocker.first(microphone: true, accessibility: true, hasShortcut: true, speechConfigured: false), .speechProvider)
         XCTAssertEqual(TryItBlocker.microphone.step, .microphone)
         XCTAssertEqual(TryItBlocker.accessibility.step, .accessibility)
-        XCTAssertEqual(TryItBlocker.shortcut.step, .shortcuts)
+        XCTAssertNil(TryItBlocker.shortcut.step)
         XCTAssertNil(TryItBlocker.speechProvider.step)
+        // A missing shortcut is fixed in Settings now that onboarding has no Shortcuts step.
+        XCTAssertEqual(TryItBlocker.shortcut.settingsTab, .dictation)
+        XCTAssertEqual(TryItBlocker.speechProvider.settingsTab, .providers)
+        XCTAssertNil(TryItBlocker.microphone.settingsTab)
     }
 
     @MainActor
@@ -53,11 +58,17 @@ final class OnboardingFlowTests: XCTestCase {
         session.receive("   ")
         XCTAssertFalse(session.succeeded)
         XCTAssertEqual(session.text, "")
-        session.receive(" Hi, I'm testing Whispur. ")
+        session.receive(" Hey, this is my first dictation. ")
         XCTAssertTrue(session.succeeded)
-        XCTAssertEqual(session.text, "Hi, I'm testing Whispur.")
+        XCTAssertEqual(session.text, "Hey, this is my first dictation.")
         session.receive("Again.")
-        XCTAssertEqual(session.text, "Hi, I'm testing Whispur. Again.")
+        XCTAssertEqual(session.text, "Hey, this is my first dictation. Again.")
+    }
+
+    @MainActor
+    func testTryItPhraseLeavesOutTheBrandName() {
+        XCTAssertEqual(OnboardingWindow.tryItPhrase, "Hey, this is my first dictation")
+        XCTAssertFalse(OnboardingWindow.tryItPhrase.localizedCaseInsensitiveContains("Whispur"))
     }
 
     func testStartUsingLandsOnDictationOnlyWhenAllSet() {
@@ -80,10 +91,42 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertNil(TryItBlocker.restart.step)
     }
 
+    func testAGrantStillFinishingBlocksTryIt() {
+        XCTAssertEqual(TryItBlocker.first(microphone: true, accessibility: true, finishing: true, hasShortcut: true, speechConfigured: true), .finishing)
+        XCTAssertEqual(TryItBlocker.first(microphone: true, accessibility: true, needsRestart: true, finishing: false, hasShortcut: true, speechConfigured: true), .restart)
+        XCTAssertEqual(TryItBlocker.first(microphone: false, accessibility: true, finishing: true, hasShortcut: true, speechConfigured: true), .microphone)
+        XCTAssertNil(TryItBlocker.finishing.step)
+        XCTAssertNil(TryItBlocker.finishing.settingsTab)
+    }
+
+    func testReadyOnlySaysAllSetOnceTheShortcutIsListeningAndHeard() {
+        func readiness(mic: Bool = true, _ status: AccessibilityStatus, speech: Bool = true, heard: Bool = true) -> OnboardingReadiness {
+            OnboardingReadiness.resolve(microphone: mic, accessibility: status, speechConfigured: speech, shortcutHeard: heard)
+        }
+        XCTAssertEqual(readiness(.on), .allSet)
+        // Granted but the tap isn't in: not ready, whatever else is true.
+        XCTAssertEqual(readiness(.finishing), .finishing)
+        XCTAssertEqual(readiness(.needsRestart), .needsRestart)
+        // A tap that has never heard a key doesn't get "You're all set".
+        XCTAssertEqual(readiness(.on, heard: false), .untested)
+        // Fix order: permissions, then the tap, then speech, then proof.
+        XCTAssertEqual(readiness(mic: false, .off, speech: false, heard: false), .missingPermission(.microphone))
+        XCTAssertEqual(readiness(.off), .missingPermission(.accessibility))
+        XCTAssertEqual(readiness(.finishing, speech: false), .finishing)
+        XCTAssertEqual(readiness(.on, speech: false, heard: false), .speechProvider)
+    }
+
+    func testFirstRunIgnoresShortcutStartsUntilAccessibilityIsGranted() {
+        XCTAssertTrue(AppState.ignoresShortcutStart(accessibilityGranted: false, onboardingCompleted: false))
+        XCTAssertFalse(AppState.ignoresShortcutStart(accessibilityGranted: true, onboardingCompleted: false))
+        // After setup a start goes through, and its error says what's missing.
+        XCTAssertFalse(AppState.ignoresShortcutStart(accessibilityGranted: false, onboardingCompleted: true))
+        XCTAssertFalse(AppState.ignoresShortcutStart(accessibilityGranted: true, onboardingCompleted: true))
+    }
+
     func testRestartResumesPastAccessibilityButNeverBackwards() {
-        XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .accessibility), .shortcuts)
-        XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .welcome), .shortcuts)
-        XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .shortcuts), .shortcuts)
+        XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .accessibility), .tryIt)
+        XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .welcome), .tryIt)
         XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .tryIt), .tryIt)
         XCTAssertEqual(OnboardingFlow.resumeStep(afterRestartFrom: .ready), .ready)
     }
@@ -94,14 +137,23 @@ final class OnboardingFlowTests: XCTestCase {
         // Everyday launch.
         XCTAssertNil(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: nil, replayRequested: false))
         // After "Restart Whispur", whether or not setup was finished before.
-        XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: false, resumeStepRaw: OnboardingStep.shortcuts.rawValue, replayRequested: false), .shortcuts)
+        XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: false, resumeStepRaw: OnboardingStep.accessibility.rawValue, replayRequested: false), .accessibility)
         XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: OnboardingStep.tryIt.rawValue, replayRequested: false), .tryIt)
+        // A resume stored on the removed Shortcuts screen lands on Try it.
+        XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: false, resumeStepRaw: 4, replayRequested: false), .tryIt)
+        XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: 4, replayRequested: false), .tryIt)
         // A stale or corrupt resume value falls back to the normal rule.
         XCTAssertNil(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: 99, replayRequested: false))
         XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: false, resumeStepRaw: -1, replayRequested: false), .welcome)
         // Replay always starts from the welcome screen.
         XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: nil, replayRequested: true), .welcome)
         XCTAssertEqual(OnboardingLaunch.initialStep(onboardingCompleted: true, resumeStepRaw: OnboardingStep.tryIt.rawValue, replayRequested: true), .welcome)
+    }
+
+    func testPersistedRawValuesNeverMove() {
+        // `whispur.onboarding.resumeStep` stores these.
+        XCTAssertEqual(OnboardingStep.allCases.map(\.rawValue), [0, 1, 2, 3, 5, 6])
+        XCTAssertNil(OnboardingStep(rawValue: OnboardingLaunch.retiredShortcutsRawValue))
     }
 
     func testReplayArgument() {

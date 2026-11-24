@@ -1,16 +1,19 @@
 import Foundation
 
 /// The onboarding screens, in order. One thing per screen.
+///
+/// Raw values are persisted (`OnboardingLaunch.resumeStepDefaultsKey`), so
+/// they never change. 4 was a Shortcuts screen, since removed: the default
+/// shortcut stays and Settings changes it.
 enum OnboardingStep: Int, CaseIterable, Identifiable {
-    case welcome
+    case welcome = 0
     /// "Which languages do you speak?", only for some users: see
     /// `OnboardingSpeechSetup.asksLanguages`.
-    case languages
-    case microphone
-    case accessibility
-    case shortcuts
-    case tryIt
-    case ready
+    case languages = 1
+    case microphone = 2
+    case accessibility = 3
+    case tryIt = 5
+    case ready = 6
 
     var id: Int { rawValue }
 
@@ -20,7 +23,6 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .languages: return "Languages"
         case .microphone: return "Microphone"
         case .accessibility: return "Accessibility"
-        case .shortcuts: return "Shortcuts"
         case .tryIt: return "Try it"
         case .ready: return "Ready"
         }
@@ -33,7 +35,6 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
         case .languages: return "character.bubble"
         case .microphone: return "mic.fill"
         case .accessibility: return "accessibility"
-        case .shortcuts: return "command"
         case .tryIt: return "text.cursor"
         case .ready: return "flag.checkered"
         }
@@ -160,6 +161,9 @@ enum OnboardingLaunch {
     /// `open -a Whispur --args --reset-onboarding` runs setup again from the
     /// welcome screen; settings and permissions stay as they are.
     static let replayArgument = "--reset-onboarding"
+    /// The removed Shortcuts screen's raw value. A resume stored by an
+    /// older build lands on the screen that followed it.
+    static let retiredShortcutsRawValue = 4
 
     static func isReplayRequested(arguments: [String]) -> Bool {
         arguments.contains(replayArgument)
@@ -167,6 +171,7 @@ enum OnboardingLaunch {
 
     static func initialStep(onboardingCompleted: Bool, resumeStepRaw: Int?, replayRequested: Bool) -> OnboardingStep? {
         if replayRequested { return .welcome }
+        if resumeStepRaw == retiredShortcutsRawValue { return .tryIt }
         if let resumeStepRaw, let step = OnboardingStep(rawValue: resumeStepRaw) { return step }
         return onboardingCompleted ? nil : .welcome
     }
@@ -178,16 +183,27 @@ enum TryItBlocker: Equatable {
     case accessibility
     /// Accessibility is granted but only takes effect after a restart.
     case restart
+    /// Accessibility is granted and the shortcut is still being hooked up.
+    case finishing
     case shortcut
     case speechProvider
 
-    /// The onboarding step that fixes it, nil when Settings does.
+    /// The onboarding step that fixes it, nil when Settings does (or, while
+    /// finishing, nothing but a moment's wait).
     var step: OnboardingStep? {
         switch self {
         case .microphone: return .microphone
         case .accessibility: return .accessibility
-        case .shortcut: return .shortcuts
-        case .restart, .speechProvider: return nil
+        case .restart, .finishing, .shortcut, .speechProvider: return nil
+        }
+    }
+
+    /// The Settings page that fixes it, when one does.
+    var settingsTab: SettingsTab? {
+        switch self {
+        case .shortcut: return .dictation
+        case .speechProvider: return .providers
+        case .microphone, .accessibility, .restart, .finishing: return nil
         }
     }
 
@@ -195,14 +211,48 @@ enum TryItBlocker: Equatable {
         microphone: Bool,
         accessibility: Bool,
         needsRestart: Bool = false,
+        finishing: Bool = false,
         hasShortcut: Bool,
         speechConfigured: Bool
     ) -> TryItBlocker? {
         if !microphone { return .microphone }
         if !accessibility { return .accessibility }
         if needsRestart { return .restart }
+        if finishing { return .finishing }
         if !hasShortcut { return .shortcut }
         if !speechConfigured { return .speechProvider }
         return nil
+    }
+}
+
+/// What the Ready screen says. "You're all set" only once the shortcut is
+/// really listening: the tap is in (`.on`, not just granted) and it has
+/// heard a key, or Try it already proved it end to end.
+enum OnboardingReadiness: Equatable {
+    case missingPermission(OnboardingStep)
+    case needsRestart
+    /// Granted; the tap isn't in yet.
+    case finishing
+    case speechProvider
+    /// Everything reports fine, but the shortcut has never reached Whispur.
+    case untested
+    case allSet
+
+    static func resolve(
+        microphone: Bool,
+        accessibility: AccessibilityStatus,
+        speechConfigured: Bool,
+        shortcutHeard: Bool
+    ) -> OnboardingReadiness {
+        if let missing = OnboardingFlow.firstMissingPermissionStep(microphone: microphone, accessibility: accessibility.isGranted) {
+            return .missingPermission(missing)
+        }
+        switch accessibility {
+        case .needsRestart: return .needsRestart
+        case .finishing: return .finishing
+        case .off, .on: break
+        }
+        if !speechConfigured { return .speechProvider }
+        return shortcutHeard ? .allSet : .untested
     }
 }
