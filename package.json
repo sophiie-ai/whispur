@@ -1,0 +1,6 @@
+{
+  "name": "whispur-site",
+  "private": true,
+  "type": "module",
+  "description": "Static site for whispur.app. No dependencies; type=module lets Vercel load the root middleware.js as ESM."
+}

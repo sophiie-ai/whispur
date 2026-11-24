@@ -4,11 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Whispur: free, open-source voice dictation app for Mac</title>
-  <meta name="description" content="Free, open-source voice dictation for Mac. Hold a shortcut, speak, and Whispur pastes clean text into any app. Apple speech, Whisper, Deepgram and more." />
+  <meta name="description" content="Free, open-source voice dictation for Mac. Hold a shortcut, speak, and Whispur pastes clean text into any app. On-device Parakeet and Apple speech, or Whisper, Deepgram, ElevenLabs and more." />
+  <meta name="keywords" content="Mac dictation app, voice to text for Mac, speech to text macOS, open source dictation, Whisper dictation Mac, Parakeet, Whispur, menu bar dictation, BYO API key speech to text" />
   <meta name="author" content="Sophiie AI" />
   <meta name="theme-color" content="#ffffff" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
   <link rel="canonical" href="https://whispur.app/" />
+  <link rel="alternate" type="text/markdown" href="/index.md" title="This page as Markdown" />
   <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
 
   <link rel="icon" type="image/png" href="/favicon.png" />
@@ -51,7 +53,34 @@
         "name": "Sophiie AI",
         "legalName": "Sophiie AI Pty Ltd",
         "url": "https://sophiie.ai",
-        "logo": "https://whispur.app/brand/sophiie.svg"
+        "logo": "https://whispur.app/brand/sophiie.svg",
+        "email": "__CONTACT_EMAIL__",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "__STREET__",
+          "addressLocality": "__LOCALITY__",
+          "addressRegion": "__REGION__",
+          "postalCode": "__POSTCODE__",
+          "addressCountry": "__COUNTRY__"
+        },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "email": "__CONTACT_EMAIL__",
+          "url": "https://whispur.app/contact",
+          "availableLanguage": ["en"],
+          "telephone": "__CONTACT_PHONE__"
+        },
+        "knowsAbout": [
+          "Voice dictation",
+          "Speech to text",
+          "macOS apps",
+          "On-device speech recognition",
+          "NVIDIA Parakeet",
+          "OpenAI Whisper",
+          "Large language models"
+        ],
+        "sameAs": ["https://github.com/sophiie-ai"]
       },
       {
         "@type": "WebSite",
@@ -69,6 +98,8 @@
         "url": "https://whispur.app/",
         "applicationCategory": "ProductivityApplication",
         "applicationSubCategory": "Dictation",
+        "softwareVersion": "0.36.0",
+        "keywords": "Mac dictation app, voice to text for Mac, speech to text macOS, open source dictation, Whisper dictation Mac, Parakeet, menu bar dictation, bring your own API key",
         "operatingSystem": "macOS 14 or later",
         "processorRequirements": "Apple silicon",
         "isAccessibleForFree": true,
@@ -88,14 +119,16 @@
           "https://whispur.app/screenshots/settings-providers.png"
         ],
         "featureList": [
-          "Hold-to-talk and toggle dictation shortcuts",
+          "Hold-to-talk and toggle dictation shortcuts (hold Fn; Command + Fn for hands-free)",
           "Pastes text into the active app and restores your clipboard",
-          "Speech to text with Apple speech recognition, OpenAI Whisper, Groq Whisper, Deepgram or ElevenLabs",
-          "Optional LLM cleanup with Anthropic Claude, OpenAI, Groq or AWS Bedrock",
+          "On-device speech to text with NVIDIA Parakeet or Apple speech recognition, no API key needed",
+          "Cloud speech to text with OpenAI (GPT Transcribe or Whisper), Groq Whisper, Deepgram Nova-3, ElevenLabs Scribe v3, Mistral Voxtral or Meta Muse",
+          "Optional realtime streaming transcription with ElevenLabs Scribe and Meta Muse",
+          "Optional LLM cleanup with Anthropic Claude, OpenAI, Groq, Cerebras or AWS Bedrock",
           "Editable cleanup prompt, custom vocabulary and custom model per cleanup provider",
-          "API keys stored in the macOS Keychain",
+          "API keys stored in the macOS Keychain; no account and no Whispur server",
           "Activity and request logs for every dictation and provider call",
-          "Automatic updates through Sparkle"
+          "Automatic updates through Sparkle with EdDSA-signed releases"
         ],
         "license": "https://github.com/sophiie-ai/whispur/blob/main/LICENSE",
         "codeRepository": "https://github.com/sophiie-ai/whispur",
@@ -110,7 +143,7 @@
           {
             "@type": "Question",
             "name": "Is Whispur really free?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Whispur is MIT licensed, with no account and no subscription. Apple speech recognition works without an API key. If you choose a cloud provider, that provider bills you directly for your own usage." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Whispur is MIT licensed, with no account and no subscription. Parakeet and Apple speech recognition work without an API key. If you choose a cloud provider, that provider bills you directly for your own usage." }
           },
           {
             "@type": "Question",
@@ -120,7 +153,7 @@
           {
             "@type": "Question",
             "name": "Which speech-to-text engines does Whispur support?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Apple speech recognition built into macOS, OpenAI Whisper, Groq Whisper Large v3, Deepgram Nova-3 and ElevenLabs Scribe v2. The OpenAI provider also accepts a custom OpenAI-compatible base URL." }
+            "acceptedAnswer": { "@type": "Answer", "text": "NVIDIA Parakeet running on your Mac, Apple speech recognition built into macOS, OpenAI GPT Transcribe, Groq Whisper Large v3, Deepgram Nova-3, ElevenLabs Scribe v3, Mistral Voxtral and Meta Muse. The OpenAI provider also accepts a custom OpenAI-compatible base URL." }
           },
           {
             "@type": "Question",
@@ -135,7 +168,7 @@
           {
             "@type": "Question",
             "name": "How does AI cleanup work?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Add an API key for Anthropic, OpenAI, Groq or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Add an API key for Anthropic, OpenAI, Groq, Cerebras or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead." }
           },
           {
             "@type": "Question",
@@ -251,15 +284,15 @@
           <li>
             <article class="card m3-lift">
               <div class="card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-              <h3>Five speech engines</h3>
-              <p>Apple speech recognition with no key needed, or OpenAI Whisper, Groq, Deepgram and ElevenLabs with your own API key.</p>
+              <h3>Eight speech engines</h3>
+              <p>NVIDIA Parakeet on your Mac or Apple speech recognition with no key needed, or OpenAI, Groq, Deepgram, ElevenLabs, Mistral and Meta Muse with your own API key.</p>
             </article>
           </li>
           <li>
             <article class="card m3-lift">
               <div class="card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5 13.8 8l4.7 1.2-3.7 3.1.4 4.8L12 14.6l-3.2 2.5.4-4.8-3.7-3.1L10.2 8 12 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
               <h3>Optional AI cleanup</h3>
-              <p>Run transcripts through Claude, OpenAI, Groq or AWS Bedrock to fix punctuation and misheard words. Edit the prompt and add your own vocabulary.</p>
+              <p>Run transcripts through Claude, OpenAI, Groq, Cerebras or AWS Bedrock to fix punctuation and misheard words. Edit the prompt and add your own vocabulary.</p>
             </article>
           </li>
           <li>
@@ -273,13 +306,13 @@
             <article class="card m3-lift">
               <div class="card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.8"/></svg></div>
               <h3>See every request</h3>
-              <p>The Activity tab shows raw and cleaned transcripts. The Requests tab lists every provider API call with its timing and any error.</p>
+              <p>The Activity tab shows raw and cleaned transcripts. A recording is kept only when a dictation fails or looks wrong, for 24 hours, so you can retry it. The Requests tab lists every provider API call with its timing and any error.</p>
             </article>
           </li>
         </ul>
         <ul class="also-list m3-reveal" aria-label="Also included">
           <li>Choose your microphone</li>
-          <li>Pick your dictation language</li>
+          <li>Pick the languages you speak</li>
           <li>Quiet system audio while recording</li>
           <li>Compact recording overlay</li>
           <li>Learn corrections from your edits (opt-in)</li>
@@ -294,17 +327,20 @@
         <div class="section-head m3-reveal">
           <p class="eyebrow">Providers</p>
           <h2 id="providers-title">Your choice of engine</h2>
-          <p>Start with Apple speech recognition and no API key, or add a key for a cloud provider when you want more accuracy or cleanup.</p>
+          <p>Start with no API key: on Apple silicon Whispur uses NVIDIA Parakeet on your Mac, downloading its model in the background on first launch while Apple speech recognition fills in. Add a key for a cloud provider when you want more accuracy or cleanup.</p>
         </div>
         <div class="card-grid card-grid--2 m3-reveal-children">
           <article class="card">
             <h3>Speech to text</h3>
             <ul class="provider-list">
-              <li><strong>Apple speech recognition</strong><span>Built into macOS, no key, default</span></li>
-              <li><strong>OpenAI Whisper</strong><span>whisper-1, or any OpenAI-compatible endpoint</span></li>
-              <li><strong>Groq</strong><span>Whisper Large v3</span></li>
+              <li><strong>Parakeet (on this Mac)</strong><span>NVIDIA Parakeet, no key, default on Apple silicon</span></li>
+              <li><strong>Apple speech recognition</strong><span>Built into macOS, no key, default on Intel Macs</span></li>
+              <li><strong>OpenAI</strong><span>gpt-transcribe or whisper-1, or any OpenAI-compatible endpoint</span></li>
+              <li><strong>Groq</strong><span>Whisper Large v3 or v3 Turbo</span></li>
               <li><strong>Deepgram</strong><span>Nova-3</span></li>
-              <li><strong>ElevenLabs</strong><span>Scribe v2</span></li>
+              <li><strong>ElevenLabs</strong><span>Scribe v3 or v2, optional live streaming</span></li>
+              <li><strong>Mistral</strong><span>Voxtral Mini or Small Transcribe 3</span></li>
+              <li><strong>Meta Muse</strong><span>Muse Voice Transcribe, optional live streaming</span></li>
             </ul>
           </article>
           <article class="card">
@@ -313,6 +349,7 @@
               <li><strong>Anthropic Claude</strong><span>Claude Sonnet 4 by default</span></li>
               <li><strong>OpenAI</strong><span>GPT-4o mini by default, custom base URL supported</span></li>
               <li><strong>Groq</strong><span>Llama 3.3 70B by default</span></li>
+              <li><strong>Cerebras</strong><span>Qwen 3.8 27B by default</span></li>
               <li><strong>AWS Bedrock</strong><span>Claude via a Bedrock API key</span></li>
             </ul>
             <p class="card__note muted">Every cleanup provider accepts a custom model name, so you can switch models without waiting for an update.</p>
@@ -397,7 +434,7 @@
         <div class="faq">
           <details>
             <summary>Is Whispur really free?</summary>
-            <div><p>Yes. Whispur is MIT licensed, with no account and no subscription. Apple speech recognition works without an API key. If you choose a cloud provider, that provider bills you directly for your own usage.</p></div>
+            <div><p>Yes. Whispur is MIT licensed, with no account and no subscription. Parakeet and Apple speech recognition work without an API key. If you choose a cloud provider, that provider bills you directly for your own usage.</p></div>
           </details>
           <details>
             <summary>Does Whispur see my audio or transcripts?</summary>
@@ -405,7 +442,7 @@
           </details>
           <details>
             <summary>Which speech-to-text engines does Whispur support?</summary>
-            <div><p>Apple speech recognition built into macOS, OpenAI Whisper, Groq Whisper Large v3, Deepgram Nova-3 and ElevenLabs Scribe v2. The OpenAI provider also accepts a custom OpenAI-compatible base URL.</p></div>
+            <div><p>NVIDIA Parakeet running on your Mac, Apple speech recognition built into macOS, OpenAI GPT Transcribe, Groq Whisper Large v3, Deepgram Nova-3, ElevenLabs Scribe v3, Mistral Voxtral and Meta Muse. The OpenAI provider also accepts a custom OpenAI-compatible base URL.</p></div>
           </details>
           <details>
             <summary>Which Macs are supported?</summary>
@@ -417,7 +454,7 @@
           </details>
           <details>
             <summary>How does AI cleanup work?</summary>
-            <div><p>Add an API key for Anthropic, OpenAI, Groq or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead.</p></div>
+            <div><p>Add an API key for Anthropic, OpenAI, Groq, Cerebras or AWS Bedrock and Whispur passes each transcript through that model before pasting, fixing punctuation, capitalization and misheard words. You can edit the cleanup prompt, add custom vocabulary and set a custom model. If cleanup fails, Whispur pastes the raw transcript instead.</p></div>
           </details>
           <details>
             <summary>How do updates work?</summary>
@@ -481,6 +518,8 @@
           <div class="footer-col">
             <h2>About</h2>
             <ul>
+              <li><a href="/about">About Whispur</a></li>
+              <li><a href="/contact">Contact</a></li>
               <li><a href="/privacy">Privacy</a></li>
               <li><a href="/llms.txt">llms.txt</a></li>
               <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
