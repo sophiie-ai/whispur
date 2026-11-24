@@ -4,9 +4,9 @@
 
 [Download Whispur for macOS](https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg) · [View the source on GitHub](https://github.com/sophiie-ai/whispur) · [Changelog](https://whispur.app/changelog)
 
-Free, MIT licensed · macOS 14 Sonoma or later · Apple silicon · Notarized by Apple
+Free, MIT licensed · Bring your own API keys · macOS 14 Sonoma or later · Apple silicon · Notarized by Apple
 
-> Whispur is a voice dictation app that lives in your Mac menu bar. Hold a shortcut, talk, and let go: your words are transcribed, tidied up and pasted into whatever app you are using. Free, MIT licensed, made by Sophiie AI (https://sophiie.ai).
+> Whispur is a voice dictation app that lives in your Mac menu bar. Hold a shortcut, talk, and let go: your words are transcribed, tidied up and pasted into whatever app you are using. It runs free on your Mac, or you can bring your own API keys for cloud speech and AI cleanup. No account, no subscription. Free, MIT licensed, made by Sophiie AI (https://sophiie.ai).
 
 - Website: https://whispur.app/
 - Download (latest DMG): https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg
