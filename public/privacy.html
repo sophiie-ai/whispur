@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://whispur.app/privacy" />
+  <link rel="alternate" type="text/markdown" href="/privacy.md" title="This page as Markdown" />
   <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -86,12 +87,14 @@
         <h2>Audio</h2>
         <p>When you hold your shortcut and talk, Whispur records to a temporary file on your Mac, converts it to 16 kHz mono audio for transcription, and deletes the temporary files once the dictation finishes. Recordings with no detectable speech are discarded without being sent anywhere.</p>
         <ul>
+          <li><strong>Parakeet (on this Mac):</strong> audio is transcribed by NVIDIA Parakeet running on your Mac. After the one-time model download from Hugging Face, recordings never leave the Mac.</li>
           <li><strong>Apple speech recognition:</strong> audio is handed to the speech recognition framework built into macOS. Whispur does not send it anywhere else. Depending on your Mac and language, macOS may process the request on the device or with Apple's speech service, under Apple's own privacy terms.</li>
-          <li><strong>Cloud providers</strong> (OpenAI, Groq, Deepgram, ElevenLabs, or an OpenAI-compatible endpoint you set): audio goes directly from your Mac to that provider using your API key. There is no Whispur server in between.</li>
+          <li><strong>Cloud providers</strong> (OpenAI, Groq, Deepgram, ElevenLabs, Mistral, Meta Muse, or an OpenAI-compatible endpoint you set): audio goes directly from your Mac to that provider using your API key. There is no Whispur server in between.</li>
         </ul>
+        <p>Recordings are not kept, with two exceptions: a dictation that failed, and one that looks wrong (for example long audio with very little text, or a speech provider that fell back). Those recordings stay on your Mac for 24 hours so you can retry them, readable only by your user and excluded from Time Machine and iCloud backups. If you turn on <strong>Keep my last few recordings on this Mac for debugging</strong> (off by default), Whispur keeps your last 5 recordings with the same protections and deletes each one after 24 hours. Recordings are never uploaded anywhere except to the speech provider you chose.</p>
 
         <h2>Transcripts</h2>
-        <p>Transcripts are pasted into the app you are using. If you configured a cleanup provider (Anthropic, OpenAI, Groq or AWS Bedrock), the transcript is sent directly to that provider first. Recent raw and cleaned transcripts are kept in a local Activity history on your Mac, which you can clear at any time in Settings.</p>
+        <p>Transcripts are pasted into the app you are using. If you configured a cleanup provider (Anthropic, OpenAI, Groq, Cerebras or AWS Bedrock), the transcript is sent directly to that provider first. Recent raw and cleaned transcripts are kept in a local Activity history on your Mac, which you can clear at any time in Settings.</p>
         <p>The optional <strong>learn from edits</strong> setting is off by default. When you turn it on, Whispur re-reads the text field it just pasted into, using macOS Accessibility, to spot words you corrected and suggest them as custom vocabulary. That comparison happens on your Mac.</p>
 
         <h2>API keys</h2>
@@ -113,7 +116,7 @@
         <h2>Contact</h2>
         <p>Questions? <a href="https://github.com/sophiie-ai/whispur/issues" rel="noopener">Open an issue on GitHub</a> or reach out through <a href="https://sophiie.ai" rel="noopener">sophiie.ai</a>.</p>
 
-        <p class="updated">Last updated: <time datetime="2026-10-31">31 October 2026</time></p>
+        <p class="updated">Last updated: <time datetime="2026-11-24">24 November 2026</time></p>
       </article>
     </div>
   </main>
@@ -152,6 +155,8 @@
           <div class="footer-col">
             <h2>About</h2>
             <ul>
+              <li><a href="/about">About Whispur</a></li>
+              <li><a href="/contact">Contact</a></li>
               <li><a href="/privacy">Privacy</a></li>
               <li><a href="/llms.txt">llms.txt</a></li>
               <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>

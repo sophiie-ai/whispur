@@ -39,7 +39,43 @@
     {
       "source": "/",
       "headers": [
-        { "key": "Link", "value": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\"" }
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</index.md>; rel=\"alternate\"; type=\"text/markdown\", </llms.txt>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/about",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</about.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/contact",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</contact.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/privacy",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</privacy.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/changelog",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</CHANGELOG.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/(index|about|contact|privacy|CHANGELOG).md",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
       ]
     },
     {
