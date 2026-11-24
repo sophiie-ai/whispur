@@ -14,6 +14,15 @@ const TWINS = {
 
 const ASSET_PREFIXES = ["/media/", "/screenshots/", "/fonts/", "/brand/", "/_vercel/"];
 
+// Forwarded on the twin sub-request so a protected preview authorises it the
+// same way it authorised the caller.
+const FORWARDED_HEADERS = [
+  "cookie",
+  "x-vercel-protection-bypass",
+  "x-vercel-set-bypass-cookie",
+  "x-vercel-trusted-oidc-idp-token",
+];
+
 const MARKDOWN_HEADERS = {
   "Content-Type": "text/markdown; charset=utf-8",
   Vary: "Accept",
@@ -77,16 +86,22 @@ export default async function middleware(request) {
 
   const twin = TWINS[pathname];
   if (twin) {
-    const upstream = await fetch(new URL(twin, request.url), {
-      headers: { Accept: "text/plain" },
-    });
-    if (upstream.ok) {
+    const headers = { Accept: "text/markdown, text/plain" };
+    for (const name of FORWARDED_HEADERS) {
+      const value = request.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    const upstream = await fetch(new URL(twin, request.url), { headers });
+    const type = (upstream.headers.get("content-type") || "").toLowerCase();
+    if (upstream.ok && (type.startsWith("text/markdown") || type.startsWith("text/plain"))) {
       const body = await upstream.text();
-      if (body.trim().length > 0) {
+      const start = body.trimStart();
+      if (start.length > 0 && !start.startsWith("<")) {
         return markdownResponse(request, body, 200, "public, max-age=0, s-maxage=3600, must-revalidate");
       }
     }
-    // Twin missing (e.g. CHANGELOG.md not copied at build): let the HTML through.
+    // Twin missing, or the sub-request got HTML back (e.g. a Deployment
+    // Protection page on a preview): never label HTML as Markdown.
     return;
   }
 
