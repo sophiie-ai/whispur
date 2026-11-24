@@ -118,11 +118,11 @@ final class WelcomeStoryTimelineTests: XCTestCase {
 
     func testTimesAreBelievableAndDifferBetweenExamples() {
         for example in Story.examples {
-            // About 40 wpm typing, about 150 wpm speaking.
-            XCTAssertGreaterThanOrEqual(example.handDuration, 5, example.reply)
-            XCTAssertLessThanOrEqual(example.handDuration, 26, example.reply)
-            XCTAssertGreaterThanOrEqual(example.voiceDuration, 2, example.reply)
-            XCTAssertLessThanOrEqual(example.voiceDuration, 8, example.reply)
+            // About 65 wpm typing, about 180 wpm speaking.
+            XCTAssertGreaterThanOrEqual(example.handDuration, 4, example.reply)
+            XCTAssertLessThanOrEqual(example.handDuration, 16, example.reply)
+            XCTAssertGreaterThanOrEqual(example.voiceDuration, 1.5, example.reply)
+            XCTAssertLessThanOrEqual(example.voiceDuration, 6, example.reply)
             XCTAssertGreaterThanOrEqual(example.handDuration, 2 * example.voiceDuration, example.reply)
             // Real time: the scene lasts exactly as long as the hand takes.
             XCTAssertEqual(example.end, Story.lead + example.handDuration, accuracy: 0.0001, example.reply)

@@ -42,16 +42,18 @@ enum WelcomeStoryTimeline {
 
     // MARK: Timing
 
-    /// Hand typing at about 40 wpm: 200 characters a minute.
-    static let secondsPerCharacter: TimeInterval = 0.30
-    /// A backspace is a repeated key, quicker than finding the next letter.
-    static let secondsPerBackspace: TimeInterval = 0.15
+    /// A confident typist at about 65 wpm, on average (the wobble averages 1).
+    static let secondsPerCharacter: TimeInterval = 0.18
+    /// A backspace is a quick repeated key.
+    static let secondsPerBackspace: TimeInterval = 0.08
     /// The beat between the last letter and hitting send.
-    static let finishBeat: TimeInterval = 0.4
-    /// Speaking at about 150 wpm.
-    static let wordsPerSecond: Double = 2.5
-    /// Transcription and cleanup after the speaker stops, before text lands.
-    static let landDuration: TimeInterval = 0.5
+    static let finishBeat: TimeInterval = 0.2
+    /// Speaking at a fast conversational pace, about 180 wpm.
+    static let wordsPerSecond: Double = 3
+    /// Transcription and cleanup after the speaker stops, before text lands:
+    /// a measured dictation took 106 ms in Parakeet plus 393 ms of LLM
+    /// cleanup, and Parakeet alone is quicker.
+    static let landDuration: TimeInterval = 0.4
     /// A beat before either side starts, so the scene reads first.
     static let lead: TimeInterval = 0.4
     /// How long a finished scene holds before the next example starts.
@@ -151,12 +153,12 @@ enum WelcomeStoryTimeline {
             typo: "Thrusday",
             script: [
                 .type("Sure, I can come by "),
-                .pause(0.6),
+                .pause(0.35),
                 .type("Thrusday"),
-                .pause(0.6),
+                .pause(0.35),
                 .back(6),
                 .type("ursday at 9"),
-                .pause(0.75),
+                .pause(0.45),
                 .type(" and bring a new washer."),
             ]
         ),
@@ -166,12 +168,12 @@ enum WelcomeStoryTimeline {
             typo: "pricnig",
             script: [
                 .type("Sending it now, "),
-                .pause(0.6),
+                .pause(0.35),
                 .type("pricnig"),
-                .pause(0.6),
+                .pause(0.35),
                 .back(3),
                 .type("ing slide"),
-                .pause(0.45),
+                .pause(0.3),
                 .type(" included."),
             ]
         ),
@@ -181,14 +183,14 @@ enum WelcomeStoryTimeline {
             typo: "Tuesdya",
             script: [
                 .type("Of course. "),
-                .pause(0.6),
+                .pause(0.35),
                 .type("Does Tuesdya"),
-                .pause(0.6),
+                .pause(0.35),
                 .back(2),
                 .type("ay at 2 work?"),
-                .pause(0.75),
-                .type(" I'll send"),
                 .pause(0.45),
+                .type(" I'll send"),
+                .pause(0.3),
                 .type(" a new invite."),
             ]
         ),
@@ -198,9 +200,9 @@ enum WelcomeStoryTimeline {
             typo: "Se you",
             script: [
                 .type("I'm in! "),
-                .pause(0.5),
+                .pause(0.3),
                 .type("Se you"),
-                .pause(0.6),
+                .pause(0.35),
                 .back(4),
                 .type("e you at 7."),
             ]
@@ -211,11 +213,11 @@ enum WelcomeStoryTimeline {
             typo: "tset",
             script: [
                 .type("Yes, it's live. "),
-                .pause(0.7),
+                .pause(0.4),
                 .type("Logins work again"),
-                .pause(0.6),
+                .pause(0.35),
                 .type(" and I added a tset"),
-                .pause(0.6),
+                .pause(0.35),
                 .back(3),
                 .type("est for it."),
             ]

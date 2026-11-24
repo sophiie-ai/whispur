@@ -99,7 +99,7 @@ final class PermissionGuideRenderTests: XCTestCase {
             let storyMoments: [(TimeInterval, String)] = [
                 (WelcomeStoryTimeline.lead + 1.0, "listening"),
                 (WelcomeStoryTimeline.lead + WelcomeStoryTimeline.examples[0].voiceDuration + 1.0, "voice-done"),
-                (WelcomeStoryTimeline.lead + 14.0, "typing"),
+                (WelcomeStoryTimeline.lead + 8.0, "typing"),
                 (WelcomeStoryTimeline.examples[0].end, "end"),
             ]
             for (time, name) in storyMoments {
