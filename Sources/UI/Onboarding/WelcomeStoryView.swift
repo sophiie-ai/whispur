@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// The welcome screen's before-and-after, drawn from `WelcomeStoryTimeline`.
-/// Loops on its own, holding the finished scene a moment between passes,
-/// and never holds anything up: Continue works the whole time. With Reduce
-/// Motion it shows the two finished composers side by side and doesn't
-/// animate.
+/// Cycles through the examples on its own, holding each finished scene a
+/// moment, and never holds anything up: Continue works the whole time. With
+/// Reduce Motion it shows the first example's finished composers side by
+/// side and doesn't animate.
 struct WelcomeStoryView: View {
     private typealias Palette = SophiieTheme.Palette
     private typealias Story = WelcomeStoryTimeline
 
-    /// A fixed moment to draw instead of playing, for renders.
+    /// A fixed moment of the first example to draw instead of playing, for renders.
     var fixedTime: TimeInterval?
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -21,21 +21,24 @@ struct WelcomeStoryView: View {
     var body: some View {
         Group {
             if let fixedTime {
-                scene(Story.frame(at: fixedTime))
+                scene(Story.examples[0], Story.examples[0].frame(at: fixedTime))
             } else if reduceMotion {
-                scene(Story.finalFrame)
+                scene(Story.examples[0], Story.examples[0].finalFrame)
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                    scene(Story.frame(at: Story.loopTime(context.date.timeIntervalSince(startedAt))))
+                    let position = Story.position(at: context.date.timeIntervalSince(startedAt))
+                    let example = Story.examples[position.example]
+                    scene(example, example.frame(at: position.time))
                 }
             }
         }
     }
 
-    private func scene(_ frame: Story.Frame) -> some View {
+    private func scene(_ example: Story.Example, _ frame: Story.Frame) -> some View {
         HStack(spacing: 14) {
             StoryCard(
                 title: "Without Whispur",
+                question: example.question,
                 elapsed: frame.handElapsed,
                 isDone: frame.handDone,
                 accent: Palette.OnDark.muted
@@ -44,6 +47,7 @@ struct WelcomeStoryView: View {
             }
             StoryCard(
                 title: "With Whispur",
+                question: example.question,
                 elapsed: frame.voiceElapsed,
                 isDone: frame.voicePhase == .done,
                 accent: Palette.sky
@@ -54,17 +58,18 @@ struct WelcomeStoryView: View {
         // One spoken summary for the decorative scene.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "Typing a reply by hand takes \(Story.clock(Story.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
+            "Typing a reply by hand takes \(Story.clock(example.handDuration)). Saying it with Whispur takes \(Story.clock(Story.voiceDuration))."
         )
     }
 }
 
-/// One side of the comparison: a label, a running clock, the customer's
+/// One side of the comparison: a label, a running clock, the incoming
 /// message and the composer.
 private struct StoryCard<Composer: View>: View {
     private typealias Palette = SophiieTheme.Palette
 
     let title: String
+    let question: String
     let elapsed: TimeInterval
     let isDone: Bool
     let accent: Color
@@ -84,7 +89,7 @@ private struct StoryCard<Composer: View>: View {
                     .foregroundStyle(isDone ? accent : Palette.OnDark.muted)
             }
 
-            Text(WelcomeStoryTimeline.question)
+            Text(question)
                 .font(.system(size: 11.5))
                 .foregroundStyle(Palette.OnDark.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)

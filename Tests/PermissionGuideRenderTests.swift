@@ -100,7 +100,7 @@ final class PermissionGuideRenderTests: XCTestCase {
                 (WelcomeStoryTimeline.lead + 0.6, "listening"),
                 (WelcomeStoryTimeline.lead + 1.8, "voice-done"),
                 (WelcomeStoryTimeline.lead + 4.0, "typing"),
-                (WelcomeStoryTimeline.end, "end"),
+                (WelcomeStoryTimeline.examples[0].end, "end"),
             ]
             for (time, name) in storyMoments {
                 try render(OnboardingWindow(appState: appState, initialStep: .welcome, storyTime: time) {}, scheme: scheme, size: onboardingSize,

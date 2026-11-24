@@ -99,80 +99,120 @@ final class OnboardingSpeechSetupTests: XCTestCase {
 final class WelcomeStoryTimelineTests: XCTestCase {
     typealias Story = WelcomeStoryTimeline
 
-    func testEventsAreInTimeOrder() {
-        let times = Story.events.map(\.at)
-        XCTAssertEqual(times, times.sorted())
-        XCTAssertGreaterThan(times.first ?? 0, 0)
+    func testThereAreFiveExamplesWithoutBrandNames() {
+        XCTAssertEqual(Story.examples.count, 5)
+        XCTAssertEqual(Set(Story.examples.map(\.reply)).count, 5)
+        for example in Story.examples {
+            XCTAssertFalse(example.question.localizedCaseInsensitiveContains("Whispur"), example.question)
+            XCTAssertFalse(example.reply.localizedCaseInsensitiveContains("Whispur"), example.reply)
+        }
     }
 
-    func testByHandTakesAboutSixAndAHalfSecondsByVoiceOneAndAHalf() {
-        XCTAssertEqual(Story.handDuration, 6.5, accuracy: 0.6)
+    func testEventsAreInTimeOrder() {
+        for example in Story.examples {
+            let times = example.events.map(\.at)
+            XCTAssertEqual(times, times.sorted(), example.reply)
+            XCTAssertGreaterThan(times.first ?? 0, 0, example.reply)
+        }
+    }
+
+    func testByHandTakesSixToSevenSecondsByVoiceOneAndAHalf() {
         XCTAssertEqual(Story.voiceDuration, 1.5, accuracy: 0.0001)
-        XCTAssertEqual(Story.end, Story.lead + Story.handDuration, accuracy: 0.0001)
+        for example in Story.examples {
+            XCTAssertGreaterThanOrEqual(example.handDuration, 5.8, example.reply)
+            XCTAssertLessThanOrEqual(example.handDuration, 7.2, example.reply)
+            XCTAssertEqual(example.end, Story.lead + example.handDuration, accuracy: 0.0001, example.reply)
+        }
     }
 
     func testBothSidesEndOnTheSameReply() {
-        let last = Story.finalFrame
-        XCTAssertEqual(last.handText, Story.reply)
-        XCTAssertTrue(last.handDone)
-        XCTAssertEqual(last.voicePhase, .done)
-        XCTAssertEqual(last.voiceText, Story.reply)
-        XCTAssertEqual(last.handElapsed, Story.handDuration, accuracy: 0.0001)
-        XCTAssertEqual(last.voiceElapsed, Story.voiceDuration, accuracy: 0.0001)
-        // Well past the end nothing changes.
-        XCTAssertEqual(Story.frame(at: Story.end + 30), last)
+        for example in Story.examples {
+            let last = example.finalFrame
+            XCTAssertEqual(last.handText, example.reply)
+            XCTAssertTrue(last.handDone)
+            XCTAssertEqual(last.voicePhase, .done)
+            XCTAssertEqual(last.voiceText, example.reply)
+            XCTAssertEqual(last.handElapsed, example.handDuration, accuracy: 0.0001)
+            XCTAssertEqual(last.voiceElapsed, Story.voiceDuration, accuracy: 0.0001)
+            // Well past the end nothing changes.
+            XCTAssertEqual(example.frame(at: example.end + 30), last)
+        }
     }
 
     func testTheTypingSlipsAndIsCorrected() {
-        let drafts = Story.events.compactMap { timed -> String? in
-            if case let .handTyped(text) = timed.event { return text }
-            return nil
-        }
-        XCTAssertTrue(drafts.contains("Sure, I can come by Thrusday"), "the typo is typed")
-        let typo = drafts.firstIndex(of: "Sure, I can come by Thrusday")!
-        let fixed = drafts.lastIndex(of: "Sure, I can come by Th")!
-        XCTAssertGreaterThan(fixed, typo, "then backspaced")
-        // Every step is one keystroke: one character more or one fewer.
-        for (a, b) in zip(drafts, drafts.dropFirst()) {
-            XCTAssertEqual(abs(a.count - b.count), 1)
+        for example in Story.examples {
+            let drafts = example.events.compactMap { timed -> String? in
+                if case let .handTyped(text) = timed.event { return text }
+                return nil
+            }
+            XCTAssertFalse(example.reply.contains(example.typo), "the typo is not in the reply")
+            guard let typo = drafts.firstIndex(where: { $0.hasSuffix(example.typo) }) else {
+                return XCTFail("\(example.typo) is never typed")
+            }
+            // Backspaced to a prefix of the reply, after the typo.
+            let fixed = drafts.lastIndex { example.reply.hasPrefix($0) && $0.count < drafts[typo].count }
+            XCTAssertNotNil(fixed)
+            XCTAssertGreaterThan(fixed ?? 0, typo, "then backspaced")
+            // Every step is one keystroke: one character more or one fewer.
+            for (a, b) in zip(drafts, drafts.dropFirst()) {
+                XCTAssertEqual(abs(a.count - b.count), 1)
+            }
         }
     }
 
     func testOpeningAndMidwayFrames() {
-        let opening = Story.frame(at: 0)
-        XCTAssertEqual(opening.handText, "")
-        XCTAssertEqual(opening.voicePhase, .waiting)
-        XCTAssertEqual(opening.handElapsed, 0)
+        for example in Story.examples {
+            let opening = example.frame(at: 0)
+            XCTAssertEqual(opening.handText, "")
+            XCTAssertEqual(opening.voicePhase, .waiting)
+            XCTAssertEqual(opening.handElapsed, 0)
 
-        // Mid-recording: voice listening, hand barely started.
-        let listening = Story.frame(at: Story.lead + 0.6)
-        XCTAssertEqual(listening.voicePhase, .listening)
-        XCTAssertEqual(listening.voiceText, "")
-        XCTAssertFalse(listening.handText.isEmpty)
+            // Mid-recording: voice listening, hand barely started.
+            let listening = example.frame(at: Story.lead + 0.6)
+            XCTAssertEqual(listening.voicePhase, .listening)
+            XCTAssertEqual(listening.voiceText, "")
+            XCTAssertFalse(listening.handText.isEmpty)
 
-        // Landing halfway.
-        let landing = Story.frame(at: Story.lead + Story.voiceListenDuration + Story.voiceLandDuration / 2)
-        guard case let .landing(progress) = landing.voicePhase else { return XCTFail("expected landing") }
-        XCTAssertEqual(progress, 0.5, accuracy: 0.01)
+            // Landing halfway.
+            let landing = example.frame(at: Story.lead + Story.voiceListenDuration + Story.voiceLandDuration / 2)
+            guard case let .landing(progress) = landing.voicePhase else { return XCTFail("expected landing") }
+            XCTAssertEqual(progress, 0.5, accuracy: 0.01)
 
-        // Voice done while the hand is still typing.
-        let voiceDone = Story.frame(at: Story.lead + Story.voiceDuration + 0.05)
-        XCTAssertEqual(voiceDone.voicePhase, .done)
-        XCTAssertFalse(voiceDone.handDone)
-        XCTAssertNotEqual(voiceDone.handText, Story.reply)
+            // Voice done while the hand is still typing.
+            let voiceDone = example.frame(at: Story.lead + Story.voiceDuration + 0.05)
+            XCTAssertEqual(voiceDone.voicePhase, .done)
+            XCTAssertFalse(voiceDone.handDone)
+            XCTAssertNotEqual(voiceDone.handText, example.reply)
+        }
     }
 
-    func testTheStoryLoopsAfterHoldingItsLastFrame() {
-        XCTAssertEqual(Story.loopDuration, Story.end + Story.loopHold, accuracy: 0.0001)
-        XCTAssertEqual(Story.loopTime(0), 0)
-        XCTAssertEqual(Story.loopTime(-1), 0)
-        XCTAssertEqual(Story.loopTime(1.2), 1.2, accuracy: 0.0001)
+    func testTheLoopPlaysEachExampleHoldsThenMovesOnAndWraps() {
+        let examples = Story.examples
+        XCTAssertEqual(Story.cycleDuration, examples.reduce(0) { $0 + $1.end + Story.hold }, accuracy: 0.0001)
+        XCTAssertTrue(Story.position(at: 0) == (0, 0))
+        XCTAssertTrue(Story.position(at: -1) == (0, 0))
+        // Within the first example.
+        XCTAssertEqual(Story.position(at: 1.2).example, 0)
+        XCTAssertEqual(Story.position(at: 1.2).time, 1.2, accuracy: 0.0001)
         // The hold shows the finished scene.
-        XCTAssertEqual(Story.frame(at: Story.loopTime(Story.end + Story.loopHold / 2)), Story.finalFrame)
-        // Then it starts over, and keeps doing so.
-        XCTAssertEqual(Story.loopTime(Story.loopDuration + 0.5), 0.5, accuracy: 0.0001)
-        XCTAssertEqual(Story.loopTime(Story.loopDuration * 7 + 1.25), 1.25, accuracy: 0.0001)
-        XCTAssertEqual(Story.frame(at: Story.loopTime(Story.loopDuration)), Story.frame(at: 0))
+        let held = Story.position(at: examples[0].end + Story.hold / 2)
+        XCTAssertEqual(held.example, 0)
+        XCTAssertEqual(examples[0].frame(at: held.time), examples[0].finalFrame)
+        // Each slot hands over to the next example at its start.
+        var start: TimeInterval = 0
+        for index in examples.indices {
+            let position = Story.position(at: start + 0.25)
+            XCTAssertEqual(position.example, index)
+            XCTAssertEqual(position.time, 0.25, accuracy: 0.0001)
+            start += examples[index].slot
+        }
+        // After the fifth, the first comes back, and keeps doing so.
+        XCTAssertEqual(Story.position(at: Story.cycleDuration - 0.01).example, examples.count - 1)
+        let wrapped = Story.position(at: Story.cycleDuration + 0.5)
+        XCTAssertEqual(wrapped.example, 0)
+        XCTAssertEqual(wrapped.time, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(Story.position(at: Story.cycleDuration * 7 + 1.25).example, 0)
+        XCTAssertEqual(Story.position(at: Story.cycleDuration * 7 + 1.25).time, 1.25, accuracy: 0.0001)
     }
 
     func testClockFormat() {
