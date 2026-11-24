@@ -116,13 +116,31 @@ final class WelcomeStoryTimelineTests: XCTestCase {
         }
     }
 
-    func testByHandTakesSixToSevenSecondsByVoiceOneAndAHalf() {
-        XCTAssertEqual(Story.voiceDuration, 1.5, accuracy: 0.0001)
+    func testRealTimesAreBelievableAndPlayBackAtOneSpeedUp() {
         for example in Story.examples {
-            XCTAssertGreaterThanOrEqual(example.handDuration, 5.8, example.reply)
-            XCTAssertLessThanOrEqual(example.handDuration, 7.2, example.reply)
+            // Real world: about 40 wpm typing, about 150 wpm speaking.
+            XCTAssertGreaterThanOrEqual(example.realHandDuration, 14, example.reply)
+            XCTAssertLessThanOrEqual(example.realHandDuration, 26, example.reply)
+            XCTAssertGreaterThanOrEqual(example.realVoiceDuration, 3, example.reply)
+            XCTAssertLessThanOrEqual(example.realVoiceDuration, 8, example.reply)
+            XCTAssertGreaterThanOrEqual(example.realHandDuration, 2.5 * example.realVoiceDuration, example.reply)
+            // One shared speed-up for both sides.
+            XCTAssertEqual(example.handDuration, example.realHandDuration / Story.speedUp, accuracy: 0.0001)
+            XCTAssertEqual(example.voiceDuration, example.realVoiceDuration / Story.speedUp, accuracy: 0.0001)
+            // The hand side plays for about 6 to 7 seconds.
+            XCTAssertGreaterThanOrEqual(example.handDuration, 5, example.reply)
+            XCTAssertLessThanOrEqual(example.handDuration, 8, example.reply)
             XCTAssertEqual(example.end, Story.lead + example.handDuration, accuracy: 0.0001, example.reply)
         }
+        // Derived from each reply, so the numbers differ between examples.
+        XCTAssertGreaterThan(Set(Story.examples.map { Story.clock($0.realHandDuration) }).count, 1)
+        XCTAssertGreaterThan(Set(Story.examples.map { Story.clock($0.realVoiceDuration) }).count, 1)
+    }
+
+    func testVoiceTimeComesFromTheWordCount() {
+        let example = Story.examples[0]
+        let words = Double(example.reply.split(separator: " ").count)
+        XCTAssertEqual(example.realVoiceDuration, words / Story.realWordsPerSecond + Story.realLandDuration, accuracy: 0.0001)
     }
 
     func testBothSidesEndOnTheSameReply() {
@@ -132,8 +150,9 @@ final class WelcomeStoryTimelineTests: XCTestCase {
             XCTAssertTrue(last.handDone)
             XCTAssertEqual(last.voicePhase, .done)
             XCTAssertEqual(last.voiceText, example.reply)
-            XCTAssertEqual(last.handElapsed, example.handDuration, accuracy: 0.0001)
-            XCTAssertEqual(last.voiceElapsed, Story.voiceDuration, accuracy: 0.0001)
+            // The clocks stop on the real times.
+            XCTAssertEqual(last.handElapsed, example.realHandDuration, accuracy: 0.0001)
+            XCTAssertEqual(last.voiceElapsed, example.realVoiceDuration, accuracy: 0.0001)
             // Well past the end nothing changes.
             XCTAssertEqual(example.frame(at: example.end + 30), last)
         }
@@ -166,6 +185,8 @@ final class WelcomeStoryTimelineTests: XCTestCase {
             XCTAssertEqual(opening.handText, "")
             XCTAssertEqual(opening.voicePhase, .waiting)
             XCTAssertEqual(opening.handElapsed, 0)
+            // Mid-scene the clocks run at the speed-up.
+            XCTAssertEqual(example.frame(at: Story.lead + 1).handElapsed, Story.speedUp, accuracy: 0.0001)
 
             // Mid-recording: voice listening, hand barely started.
             let listening = example.frame(at: Story.lead + 0.6)
@@ -174,12 +195,12 @@ final class WelcomeStoryTimelineTests: XCTestCase {
             XCTAssertFalse(listening.handText.isEmpty)
 
             // Landing halfway.
-            let landing = example.frame(at: Story.lead + Story.voiceListenDuration + Story.voiceLandDuration / 2)
+            let landing = example.frame(at: Story.lead + example.listenDuration + example.landDuration / 2)
             guard case let .landing(progress) = landing.voicePhase else { return XCTFail("expected landing") }
             XCTAssertEqual(progress, 0.5, accuracy: 0.01)
 
             // Voice done while the hand is still typing.
-            let voiceDone = example.frame(at: Story.lead + Story.voiceDuration + 0.05)
+            let voiceDone = example.frame(at: Story.lead + example.voiceDuration + 0.05)
             XCTAssertEqual(voiceDone.voicePhase, .done)
             XCTAssertFalse(voiceDone.handDone)
             XCTAssertNotEqual(voiceDone.handText, example.reply)
