@@ -26,6 +26,14 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     /// Fires once when the first non-silent buffer arrives.
     var onRecordingReady: (() -> Void)?
 
+    /// Fires on the main thread, at most once per recording, when the live
+    /// mic check (`MicHealthMonitor`) finds the audio broken.
+    var onMicHealthIssue: ((MicHealthIssue) -> Void)?
+
+    /// The current recording uses the Mac's built-in microphone. Set when
+    /// the engine starts.
+    var currentInputIsBuiltIn: Bool { inputIsBuiltIn.withLock { $0 } }
+
     /// Receives every captured buffer on the audio thread, for streaming.
     /// Set it before `startRecording` and clear it after `stopRecording`.
     ///
@@ -107,6 +115,21 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     private var metricDeviceName: String?
     private var metricTotalFrames: Int64 = 0
     private var bufferMetrics: [BufferMetric] = []
+    private var metricInputIsBluetooth: Bool?
+    private var metricStartedAfterDeviceUnavailable = false
+    /// Fed on the audio thread; read once the tap is removed, like
+    /// `bufferMetrics`.
+    private var micHealth = MicHealthMonitor()
+    private var micHealthReported = false
+    private let inputIsBuiltIn = OSAllocatedUnfairLock(initialState: false)
+    /// When the last engine start failed because the input device was
+    /// unavailable (CoreAudio '!dev', e.g. a Bluetooth headset switching
+    /// profile). The next start soon after is noted as a retry of it, for
+    /// diagnostics. Whispur does not retry by itself.
+    private var lastDeviceUnavailableStart: TimeInterval?
+    static let deviceUnavailableRetryWindow: TimeInterval = 60
+    /// `kAudioHardwareBadDeviceError`, '!dev'.
+    static let deviceUnavailableErrorCode = 560_227_702
 
     static func requestMicrophoneAccess() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -156,6 +179,10 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             tempFileURL = try startEngineForTesting()
             metricChannelCount = 0
             metricDeviceName = nil
+            metricInputIsBluetooth = nil
+            metricStartedAfterDeviceUnavailable = false
+            micHealth.reset(sampleRate: 0)
+            inputIsBuiltIn.withLock { $0 = false }
             audioRoute.withLockUnchecked { route in
                 route.held.removeAll()
                 route.holding = holdingAudio && route.handler == nil
@@ -197,6 +224,11 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         metricDeviceName = Self.currentDeviceName(of: inputNode)
         metricTotalFrames = 0
         bufferMetrics.removeAll(keepingCapacity: true)
+        let transport = Self.currentInputTransport(of: inputNode)
+        metricInputIsBluetooth = transport.isBluetooth
+        inputIsBuiltIn.withLock { $0 = transport.isBuiltIn }
+        micHealth.reset(sampleRate: inputFormat.sampleRate)
+        micHealthReported = false
         audioRoute.withLockUnchecked { route in
             route.held.removeAll()
             route.holding = holdingAudio && route.handler == nil
@@ -217,11 +249,21 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             audioEngine = nil
             audioFile = nil
             tempFileURL = nil
+            if (error as NSError).code == Self.deviceUnavailableErrorCode {
+                lastDeviceUnavailableStart = ProcessInfo.processInfo.systemUptime
+                logger.notice("Audio engine start failed: the input device is unavailable ('!dev')")
+            }
             throw AudioError.recordingFailed("Audio engine failed to start: \(error.localizedDescription)")
         }
 
         recordingFlag.withLock { $0 = true }
         let now = ProcessInfo.processInfo.systemUptime
+        if let failedAt = lastDeviceUnavailableStart {
+            metricStartedAfterDeviceUnavailable = now - failedAt <= Self.deviceUnavailableRetryWindow
+            lastDeviceUnavailableStart = nil
+        } else {
+            metricStartedAfterDeviceUnavailable = false
+        }
         logger.notice(
             """
             Recording started in \(Int((now - started) * 1000), privacy: .public) ms \
@@ -264,7 +306,10 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             totalFrames: metricTotalFrames,
             buffers: bufferMetrics,
             channelCount: metricChannelCount,
-            inputDeviceName: metricDeviceName
+            inputDeviceName: metricDeviceName,
+            micHealth: micHealth.report,
+            inputIsBluetooth: metricInputIsBluetooth,
+            startedAfterDeviceUnavailable: metricStartedAfterDeviceUnavailable
         )
 
         readyFired = false
@@ -337,6 +382,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         let frameCount = Int(buffer.frameLength)
         metricTotalFrames &+= Int64(frameCount)
         bufferMetrics.append(BufferMetric(frameCount: frameCount, rms: rms, peak: peak))
+        checkMicHealth(buffer)
 
         if !readyFired && rms > 0 {
             readyFired = true
@@ -389,6 +435,27 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Feeds the live mic check and reports its first flag once.
+    private func checkMicHealth(_ buffer: AVAudioPCMBuffer) {
+        let frameCount = Int(buffer.frameLength)
+        let uptime = Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1_000_000_000
+        let issue: MicHealthIssue?
+        if let channelData = buffer.floatChannelData {
+            issue = micHealth.process(UnsafeBufferPointer(start: channelData[0], count: frameCount), uptime: uptime)
+        } else if let channelData = buffer.int16ChannelData {
+            issue = micHealth.process(UnsafeBufferPointer(start: channelData[0], count: frameCount), uptime: uptime)
+        } else {
+            issue = nil
+        }
+        guard let issue, !micHealthReported else { return }
+        micHealthReported = true
+        let report = micHealth.report
+        logger.notice("Mic audio looks broken: \(issue.rawValue, privacy: .public) after \(report.flaggedAfterSeconds ?? 0, privacy: .public) s (rate ratio \(report.measuredRateRatio ?? 0, privacy: .public), dropouts \(report.dropoutCount, privacy: .public))")
+        DispatchQueue.main.async { [weak self] in
+            self?.onMicHealthIssue?(issue)
+        }
+    }
+
     /// RMS and peak of the first channel, both 0...1.
     private func levels(for buffer: AVAudioPCMBuffer) -> (rms: Float, peak: Float) {
         let frameCount = Int(buffer.frameLength)
@@ -419,8 +486,28 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         return (0, 0)
     }
 
+    /// Whether the input node records from a Bluetooth device or from the
+    /// built-in microphone. The system default input often shows up as an
+    /// aggregate (`CADefaultDeviceAggregate-…`); then the default input
+    /// device behind it decides. Nil Bluetooth when unknown.
+    private static func currentInputTransport(of inputNode: AVAudioInputNode) -> (isBluetooth: Bool?, isBuiltIn: Bool) {
+        guard let deviceID = currentDeviceID(of: inputNode) else { return (nil, false) }
+        var transport = AudioDevice.transportType(of: deviceID)
+        if transport == nil || transport == kAudioDeviceTransportTypeAggregate,
+           let defaultInput = AudioDevice.defaultInputDeviceID(),
+           let behind = AudioDevice.transportType(of: defaultInput) {
+            transport = behind
+        }
+        guard let transport else { return (nil, false) }
+        return (AudioDevice.isBluetooth(transport), transport == kAudioDeviceTransportTypeBuiltIn)
+    }
+
     /// The name of the device the input node records from, for diagnostics.
     private static func currentDeviceName(of inputNode: AVAudioInputNode) -> String? {
+        currentDeviceID(of: inputNode).flatMap(AudioDevice.name(of:))
+    }
+
+    private static func currentDeviceID(of inputNode: AVAudioInputNode) -> AudioDeviceID? {
         guard let audioUnit = inputNode.audioUnit else { return nil }
         var deviceID = AudioDeviceID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -433,7 +520,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             &size
         )
         guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
-        return AudioDevice.name(of: deviceID)
+        return deviceID
     }
 }
 
@@ -455,6 +542,13 @@ struct RecordingMetrics {
     var channelCount: Int = 0
     /// The input device's name, for diagnostics.
     var inputDeviceName: String?
+    /// What the live mic check found (`MicHealthMonitor`).
+    var micHealth = MicHealthReport()
+    /// Nil when unknown.
+    var inputIsBluetooth: Bool?
+    /// The engine started soon after a start failed because the device
+    /// was unavailable ('!dev').
+    var startedAfterDeviceUnavailable = false
 
     var totalDurationSeconds: Double {
         sampleRate > 0 ? Double(totalFrames) / sampleRate : 0

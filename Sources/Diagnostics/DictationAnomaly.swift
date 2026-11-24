@@ -21,6 +21,9 @@ enum DictationAnomaly {
         /// Long audio ended with no speech: the speech gate found none, the
         /// transcript was empty, or nothing was left after spoken edits.
         case noSpeech
+        /// The live mic check found the audio broken while recording
+        /// (`MicHealthMonitor`): sped up, slowed down, or full of dropouts.
+        case micAudioCorrupted
 
         var label: String {
             switch self {
@@ -29,6 +32,7 @@ enum DictationAnomaly {
             case .cleanupDiverged: "Cleanup changed most of the words"
             case .sttFellBack: "Speech provider fell back"
             case .noSpeech: "No speech"
+            case .micAudioCorrupted: "Mic audio was breaking up"
             }
         }
     }
@@ -53,6 +57,7 @@ enum DictationAnomaly {
     /// Cancelled dictations are never anomalous; no-speech ones are when the
     /// audio was at least `minSecondsForRate` long.
     static func reasons(for diagnostics: DictationDiagnostics) -> [Reason] {
+        let micAudioCorrupted = diagnostics.audio?.micHealthIssue != nil
         switch diagnostics.outcome {
         case .cancelled:
             return []
@@ -60,11 +65,11 @@ enum DictationAnomaly {
             guard let seconds = diagnostics.audio?.recordingSeconds, seconds >= minSecondsForRate else { return [] }
             return [.noSpeech]
         case .failed:
-            return [.failed]
+            return micAudioCorrupted ? [.failed, .micAudioCorrupted] : [.failed]
         case .success:
             break
         }
-        var reasons: [Reason] = []
+        var reasons: [Reason] = micAudioCorrupted ? [.micAudioCorrupted] : []
         if let audio = diagnostics.audio,
            audio.recordingSeconds >= minSecondsForRate,
            let cps = diagnostics.transcription?.charactersPerSecond,

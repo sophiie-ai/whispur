@@ -40,6 +40,17 @@ final class OverlayRenderTests: XCTestCase {
         try checkPanel(style: .compact, phase: .recording, name: "compact-live-long", live: long)
     }
 
+    /// The amber mic warning, with and without the switch, also beside
+    /// live words. The overlay grows a row for it.
+    func testMicWarningWhileRecording() throws {
+        let withSwitch = MicHealthWarning(issue: .dropouts, builtInMicrophoneUID: "BuiltInMicrophoneDevice")
+        let withoutSwitch = MicHealthWarning(issue: .rateMismatch, builtInMicrophoneUID: nil)
+        try checkPanel(style: .standard, phase: .recording, name: "standard-mic-warning", warning: withSwitch)
+        try checkPanel(style: .standard, phase: .recording, name: "standard-mic-warning-no-switch", warning: withoutSwitch)
+        try checkPanel(style: .standard, phase: .recording, name: "standard-mic-warning-live", live: "Can we push the design review", warning: withSwitch)
+        try checkPanel(style: .compact, phase: .recording, name: "compact-mic-warning", warning: withSwitch)
+    }
+
     func testLiveTranscriptTailKeepsTheNewestWholeWords() {
         XCTAssertEqual(LiveTranscriptTail.tail("  ship   it\nnow ", budget: 30).text, "ship it now")
         XCTAssertEqual(LiveTranscriptTail.tail("ship it now", budget: 30).truncated, false)
@@ -63,7 +74,13 @@ final class OverlayRenderTests: XCTestCase {
         panel.orderOut(nil)
     }
 
-    private func checkPanel(style: OverlayStyle, phase: PipelinePhase, name: String, live: String? = nil) throws {
+    private func checkPanel(
+        style: OverlayStyle,
+        phase: PipelinePhase,
+        name: String,
+        live: String? = nil,
+        warning: MicHealthWarning? = nil
+    ) throws {
         let pipeline = DictationPipeline(
             recorder: AudioRecorder(),
             registry: ProviderRegistry(httpClient: ProviderHTTPClient(requestLog: ProviderRequestLog(
@@ -81,6 +98,15 @@ final class OverlayRenderTests: XCTestCase {
         overlay.bind(to: pipeline, styleProvider: { style }, onStop: {}, onCancel: {})
         pipeline.setPhaseForRendering(phase, samples: Self.waveform, liveTranscript: live)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        if let warning {
+            let before = try XCTUnwrap(overlay.panelForTesting).frame.height
+            pipeline.setMicHealthWarningForRendering(warning)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            let after = try XCTUnwrap(overlay.panelForTesting).frame.height
+            if style == .standard {
+                XCTAssertGreaterThan(after, before, "\(name): the overlay makes room for the warning")
+            }
+        }
 
         let panel = try XCTUnwrap(overlay.panelForTesting)
         try checkRendered(panel: panel, name: name)
