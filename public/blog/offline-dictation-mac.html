@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Offline dictation on Mac with Parakeet | Whispur</title>
+  <meta name="description" content="Private, on-device dictation on a Mac with NVIDIA Parakeet and Apple speech recognition in Whispur: how it works, the model download, and Intel Macs." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://whispur.app/blog/offline-dictation-mac" />
+  <link rel="alternate" type="text/markdown" href="/blog/offline-dictation-mac.md" title="This page as Markdown" />
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Offline dictation on Mac with Parakeet | Whispur" />
+  <meta property="og:description" content="Private, on-device dictation on a Mac with NVIDIA Parakeet and Apple speech recognition in Whispur: how it works, the model download, and Intel Macs." />
+  <meta property="og:url" content="https://whispur.app/blog/offline-dictation-mac" />
+  <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Offline dictation on Mac with Parakeet | Whispur" />
+  <meta name="twitter:description" content="Private, on-device dictation on a Mac with NVIDIA Parakeet and Apple speech recognition in Whispur: how it works, the model download, and Intel Macs." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+
+  <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Offline dictation on a Mac: private, on-device speech to text",
+  "description": "Private, on-device dictation on a Mac with NVIDIA Parakeet and Apple speech recognition in Whispur: how it works, the model download, and Intel Macs.",
+  "datePublished": "2026-11-24",
+  "dateModified": "2026-11-24",
+  "author": {
+    "@type": "Organization",
+    "name": "The Whispur team",
+    "url": "https://whispur.app/about"
+  },
+  "publisher": {
+    "@id": "https://sophiie.ai/#organization"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://whispur.app/blog/offline-dictation-mac"
+  },
+  "image": "https://whispur.app/og-image.png",
+  "inLanguage": "en"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Whispur",
+      "item": "https://whispur.app/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://whispur.app/blog"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Offline dictation on a Mac: private, on-device speech to text",
+      "item": "https://whispur.app/blog/offline-dictation-mac"
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div class="site-header__brand">
+        <a class="brand" href="/" aria-label="Whispur home">
+          <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" />
+          <span class="brand__name">Whispur</span>
+        </a>
+        <a class="brand__by" href="https://sophiie.ai" rel="noopener">
+          <span>by</span>
+          <img src="/brand/sophiie.svg" alt="Sophiie" width="82" height="14" />
+        </a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <ul class="site-nav__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#providers">Providers</a></li>
+          <li><a href="/#install">Install</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/changelog">Changelog</a></li>
+          <li><a href="/blog" aria-current="page">Blog</a></li>
+        </ul>
+        <div class="site-nav__actions">
+          <a class="hp-btn hp-btn--secondary site-nav__github" href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a>
+          <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="container container--narrow">
+      <div class="doc-hero">
+        <p class="eyebrow"><a href="/blog">Blog</a></p>
+        <h1>Offline dictation on a Mac: private, on-device speech to text</h1>
+        <p class="byline">By the Whispur team at <a href="https://sophiie.ai" rel="noopener">Sophiie AI</a> · <time datetime="2026-11-24">24 November 2026</time></p>
+      </div>
+
+      <article class="prose article">
+<p>A dictation app hears everything you say. If you dictate client notes, medical details, legal drafts, passwords you shouldn't be saying out loud, or just your own half-formed thoughts, you may not want that audio sent to anyone's server. The good news is that a modern Mac can do the transcription itself.</p>
+<p>This guide explains how on-device dictation works in Whispur, a free and open-source dictation app for macOS. It covers the two local engines (NVIDIA Parakeet and Apple speech recognition), the one-time model download, the difference between Apple silicon and Intel Macs, and when it is worth switching to a cloud engine instead.</p>
+<h2 id="what-on-device-means-here">What "on-device" means here</h2>
+<p>When you dictate with a local engine in Whispur, this is what happens:</p>
+<ol>
+<li>You hold Fn (or press Command + Fn for hands-free recording) and speak.</li>
+<li>Whispur records to a temporary file and converts it to 16 kHz mono audio.</li>
+<li>The local engine turns that audio into text on your Mac.</li>
+<li>Whispur applies its text fixes, also on your Mac: filler words removed, spoken symbols such as "dash dash force" written as <code>--force</code>, and spoken edits such as "scratch that" and "new line".</li>
+<li>The text is pasted where your cursor is, and your clipboard is restored.</li>
+<li>The temporary recording is deleted.</li>
+</ol>
+<p>There is no Whispur account and no Whispur server, so there is nothing in the middle to send audio to. With Parakeet as the engine and AI cleanup switched off, Whispur makes no network request for a dictation at all.</p>
+<p>Two exceptions keep a recording on the Mac for a short time, and both stay local. If a dictation fails, or looks wrong (for example 10 seconds or more of audio that produced very little text), Whispur keeps that recording for 24 hours so you can play it or retry it from the Activity tab. It is stored in your user's Application Support folder, readable only by you and excluded from Time Machine and iCloud backups. You can also opt in to keeping your last 5 recordings for debugging. That setting is off by default.</p>
+<h2 id="engine-one-nvidia-parakeet">Engine one: NVIDIA Parakeet</h2>
+<p>On Apple silicon, Whispur's default local engine is NVIDIA Parakeet. Whispur runs the Parakeet model on the Mac's Neural Engine through the open-source FluidAudio library. It covers 25 European languages, and you need no API key.</p>
+<p>Parakeet is the default on Apple silicon for anyone who has not picked a provider and has no cloud speech key. You do not have to turn it on.</p>
+<h3 id="the-one-time-model-download">The one-time model download</h3>
+<p>Parakeet needs its model on your Mac before it can transcribe. The first time you launch Whispur on Apple silicon, the welcome window asks which languages you speak and starts the download in the background. It is a one-time download of about 630 MB from Hugging Face, saved to <code>~/Library/Application Support/Whispur/Models</code>. The model weights are licensed CC BY 4.0.</p>
+<p>A few details that matter in practice:</p>
+<ul>
+<li><strong>You can dictate during the download.</strong> Apple speech recognition fills in until Parakeet is ready, and Whispur switches to Parakeet by itself when the download finishes.</li>
+<li><strong>It waits for a suitable network.</strong> On a metered connection or with Low Data Mode on, the download waits rather than spending your data.</li>
+<li><strong>After that, no network is needed.</strong> Once the model is on your Mac, Parakeet transcribes without a connection. Recordings never leave the Mac.</li>
+</ul>
+<p>If you want to download the model by hand, or check on it, go to Settings &gt; Providers.</p>
+<h3 id="a-safety-net-for-cloud-users">A safety net for cloud users</h3>
+<p>Parakeet also helps if you use a cloud engine. Since version 0.36.0, when your cloud speech provider can't be reached after Whispur's own retries, and Parakeet's model is on your Mac and covers the languages you speak, Whispur transcribes that dictation with Parakeet instead. The Requests tab notes when this happens. So a flaky hotel Wi-Fi connection does not have to cost you a dictation.</p>
+<h2 id="engine-two-apple-speech-recognition">Engine two: Apple speech recognition</h2>
+<p>Whispur's second local engine is Apple's speech recognition framework, built into macOS. It needs no key and no download from Whispur. On macOS 26 and later, Whispur uses Apple's newer SpeechAnalyzer model, and falls back to the older recognizer on earlier systems, for languages the new model does not cover, and while Apple's on-device model is still downloading.</p>
+<p>Apple speech recognition is the default on Intel Macs, and the fallback on Apple silicon while Parakeet downloads. The first time you use it, macOS asks you to allow Speech Recognition access.</p>
+<p>One honest caveat: Apple decides where its speech framework runs. As Whispur's privacy page puts it, depending on the Mac and language, macOS may process audio on the device or with Apple's speech service. If you need a firm guarantee that audio stays on the Mac, Parakeet is the engine to use, because Whispur runs it itself.</p>
+<h2 id="apple-silicon-vs-intel">Apple silicon vs Intel</h2>
+<div class="article-table"><table>
+<thead><tr>
+<th scope="col"></th>
+<th scope="col">Apple silicon</th>
+<th scope="col">Intel</th>
+</tr></thead><tbody>
+<tr><th scope="row">Release DMG</th><td>Yes</td><td>No: the current release build runs on Apple silicon only</td></tr>
+<tr><th scope="row">Default local engine</th><td>NVIDIA Parakeet on the Neural Engine</td><td>Apple speech recognition</td></tr>
+<tr><th scope="row">Parakeet available</th><td>Yes</td><td>No</td></tr>
+<tr><th scope="row">Cloud engines with your key</th><td>Yes</td><td>Yes</td></tr>
+</tbody></table></div>
+<p>Whispur needs macOS 14 Sonoma or later. The DMG you download from GitHub is built for Apple silicon. If you have an Intel Mac, you can <a href="https://github.com/sophiie-ai/whispur#build-from-source" rel="noopener">build Whispur from source</a>, and it will use Apple speech recognition by default.</p>
+<h2 id="custom-vocabulary-on-local-engines">Custom vocabulary on local engines</h2>
+<p>Names, product terms and jargon are where any speech engine slips. Whispur's Dictionary (Settings &gt; Dictionary) lets you add those terms, and for each one, how it tends to get misheard.</p>
+<p>How the Dictionary reaches each local engine:</p>
+<ul>
+<li><strong>Apple speech recognition</strong> receives your terms as contextual hints, so it can lean toward them while it transcribes.</li>
+<li><strong>Parakeet</strong> does not receive the terms directly. The biasing method available for these models would need a second, English-only model and a second pass over the audio, so Whispur does not use it.</li>
+</ul>
+<p>With either engine, two things still help. First, a "heard as" spelling that is clearly a misspelling gets fixed in code on your Mac, with no AI involved. Second, if you turn on AI cleanup, your Dictionary terms go to the cleanup model too. Note that cleanup is a cloud step: it sends the transcript text, not the audio, to the provider you chose.</p>
+<h2 id="keep-it-fully-local">Keep it fully local</h2>
+<p>To make sure nothing leaves your Mac:</p>
+<ol>
+<li>In Settings &gt; Providers, choose Parakeet (on Apple silicon) as the speech engine, and make sure its model has finished downloading.</li>
+<li>Switch off "Clean up with AI" in Settings &gt; Providers or from the menu bar. Whispur then pastes exactly what the speech engine heard, with no cleanup request. Text fixes and spoken edits such as "scratch that" still apply.</li>
+<li>Check the Requests tab after a few dictations. It lists every provider call Whispur makes. Parakeet transcriptions are listed as running on this Mac.</li>
+</ol>
+<p>Whispur's source is MIT-licensed and public, so you do not have to take any of this on trust. The <a href="/privacy">privacy page</a> describes exactly what is stored and where, and the code on <a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a> shows it.</p>
+<h2 id="when-a-cloud-engine-is-worth-it">When a cloud engine is worth it</h2>
+<p>Local engines are private, free to run and work on a plane. Cloud engines are worth considering when:</p>
+<ul>
+<li><strong>You speak a language Parakeet does not cover.</strong> Parakeet covers 25 European languages. For other languages, a cloud engine or Apple speech recognition may be the better fit.</li>
+<li><strong>You use a lot of specialist terms.</strong> Several cloud engines accept your vocabulary directly: Deepgram Nova-3 and ElevenLabs Scribe take key terms, and OpenAI's gpt-transcribe takes keywords.</li>
+<li><strong>You want to see words as you speak.</strong> Live streaming, which shows the words heard so far in the recording overlay, is available with ElevenLabs Scribe and Meta Muse.</li>
+<li><strong>You are on an Intel Mac</strong> and want something other than Apple speech recognition.</li>
+</ul>
+<p>Cloud engines in Whispur use your own API key, and the provider bills you directly for what you use. Audio goes from your Mac straight to that provider. Our guide to <a href="/blog/whisper-vs-scribe-vs-nova-3">choosing a speech engine</a> compares them in detail.</p>
+<h2 id="how-this-compares-to-other-apps">How this compares to other apps</h2>
+<p>Several Mac dictation apps can work offline, including Superwhisper and MacWhisper with their local models. Wispr Flow's privacy page says its transcription always happens in the cloud. For a fuller picture, see our <a href="/blog/best-mac-dictation-apps">comparison of Mac dictation apps</a> and the <a href="/compare/apple-dictation">Whispur vs Apple Dictation</a> page.</p>
+<h2 id="try-it">Try it</h2>
+<p><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a>, drag it to Applications and open it. Allow Microphone and Accessibility access, pick your languages, and the Parakeet download starts on its own. Then hold Fn and talk. No account, no key, and no audio leaving your Mac.</p>
+      </article>
+
+      <div class="callout">
+        <p><strong>Try Whispur.</strong> Free and open source for macOS 14 or later. No account, no API key needed to start.</p>
+        <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a>
+      </div>
+    </div>
+  </main>
+
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="brand" href="/" aria-label="Whispur home">
+            <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" loading="lazy" />
+            <span class="brand__name">Whispur</span>
+          </a>
+          <p>Free, open-source voice dictation for macOS.</p>
+          <a class="sophiie-mark" href="https://sophiie.ai" rel="noopener">
+            <span>A product by</span>
+            <img src="/brand/sophiie.svg" alt="Sophiie" width="94" height="16" loading="lazy" />
+          </a>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div class="footer-col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a></li>
+              <li><a href="/changelog">Changelog</a></li>
+              <li><a href="/blog">Blog</a></li>
+              <li><a href="/compare">Compare</a></li>
+              <li><a href="/#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Open source</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">All releases</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li><a href="/about">About Whispur</a></li>
+              <li><a href="/contact">Contact</a></li>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__bottom">
+        <p>&copy; 2026 Sophiie AI Pty Ltd</p>
+        <p>Released under the MIT License.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>

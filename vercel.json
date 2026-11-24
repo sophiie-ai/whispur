@@ -72,6 +72,97 @@
       ]
     },
     {
+      "source": "/blog",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</blog.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/blog/best-mac-dictation-apps",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</blog/best-mac-dictation-apps.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/blog/offline-dictation-mac",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</blog/offline-dictation-mac.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/blog/whisper-vs-scribe-vs-nova-3",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</blog/whisper-vs-scribe-vs-nova-3.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/blog/dictating-code-and-prompts",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</blog/dictating-code-and-prompts.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare/wispr-flow",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare/wispr-flow.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare/superwhisper",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare/superwhisper.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare/macwhisper",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare/macwhisper.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare/apple-dictation",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare/apple-dictation.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/compare/granola",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Link", "value": "</compare/granola.md>; rel=\"alternate\"; type=\"text/markdown\"" }
+      ]
+    },
+    {
+      "source": "/(blog|compare).md",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
+      "source": "/(blog|compare)/(.*).md",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
       "source": "/(index|about|contact|privacy|CHANGELOG).md",
       "headers": [
         { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },

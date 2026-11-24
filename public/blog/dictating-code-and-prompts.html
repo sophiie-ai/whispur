@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Dictating code and AI prompts on a Mac | Whispur</title>
+  <meta name="description" content="Use your voice to write code, commit messages and AI prompts on a Mac with Whispur: custom vocabulary, spoken symbols, Code-aware style, hands-free mode." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://whispur.app/blog/dictating-code-and-prompts" />
+  <link rel="alternate" type="text/markdown" href="/blog/dictating-code-and-prompts.md" title="This page as Markdown" />
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="Whispur summary for AI agents (llms.txt)" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Whispur" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Dictating code and AI prompts on a Mac | Whispur" />
+  <meta property="og:description" content="Use your voice to write code, commit messages and AI prompts on a Mac with Whispur: custom vocabulary, spoken symbols, Code-aware style, hands-free mode." />
+  <meta property="og:url" content="https://whispur.app/blog/dictating-code-and-prompts" />
+  <meta property="og:image" content="https://whispur.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Dictating code and AI prompts on a Mac | Whispur" />
+  <meta name="twitter:description" content="Use your voice to write code, commit messages and AI prompts on a Mac with Whispur: custom vocabulary, spoken symbols, Code-aware style, hands-free mode." />
+  <meta name="twitter:image" content="https://whispur.app/og-image.png" />
+  <meta name="twitter:image:alt" content="Whispur app icon and wordmark with the tagline: voice dictation for macOS, free and open source, by Sophiie." />
+
+  <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Dictating code, commit messages and AI prompts on a Mac",
+  "description": "Use your voice to write code, commit messages and AI prompts on a Mac with Whispur: custom vocabulary, spoken symbols, Code-aware style, hands-free mode.",
+  "datePublished": "2026-11-24",
+  "dateModified": "2026-11-24",
+  "author": {
+    "@type": "Organization",
+    "name": "The Whispur team",
+    "url": "https://whispur.app/about"
+  },
+  "publisher": {
+    "@id": "https://sophiie.ai/#organization"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://whispur.app/blog/dictating-code-and-prompts"
+  },
+  "image": "https://whispur.app/og-image.png",
+  "inLanguage": "en"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Whispur",
+      "item": "https://whispur.app/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://whispur.app/blog"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Dictating code, commit messages and AI prompts on a Mac",
+      "item": "https://whispur.app/blog/dictating-code-and-prompts"
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div class="site-header__brand">
+        <a class="brand" href="/" aria-label="Whispur home">
+          <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" />
+          <span class="brand__name">Whispur</span>
+        </a>
+        <a class="brand__by" href="https://sophiie.ai" rel="noopener">
+          <span>by</span>
+          <img src="/brand/sophiie.svg" alt="Sophiie" width="82" height="14" />
+        </a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <ul class="site-nav__links">
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#providers">Providers</a></li>
+          <li><a href="/#install">Install</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/changelog">Changelog</a></li>
+          <li><a href="/blog" aria-current="page">Blog</a></li>
+        </ul>
+        <div class="site-nav__actions">
+          <a class="hp-btn hp-btn--secondary site-nav__github" href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub</a>
+          <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="container container--narrow">
+      <div class="doc-hero">
+        <p class="eyebrow"><a href="/blog">Blog</a></p>
+        <h1>Dictating code, commit messages and AI prompts on a Mac</h1>
+        <p class="byline">By the Whispur team at <a href="https://sophiie.ai" rel="noopener">Sophiie AI</a> · <time datetime="2026-11-24">24 November 2026</time></p>
+      </div>
+
+      <article class="prose article">
+<p>Developers type a lot of prose that is not code: commit messages, pull request descriptions, code review comments, Slack threads, tickets, and more and more, long prompts for AI coding assistants. Speaking is faster than typing for most people, and a detailed prompt is exactly the kind of text that is easier to say than to write.</p>
+<p>The catch is that general dictation tools are bad at technical text. They turn <code>useState</code> into "use state", drop the dashes from <code>--force</code>, and capitalize the first letter of a shell command. This guide shows how to set up Whispur, a free and open-source dictation app for macOS, so that technical dictation comes out right. It covers custom vocabulary, spoken symbols, the Code-aware style and per-app settings, the editable cleanup prompt, and the hands-free shortcut.</p>
+<h2 id="the-basic-loop">The basic loop</h2>
+<p>Whispur lives in the menu bar and pastes into whatever app has focus: your editor, a terminal, a browser text box or an AI chat window.</p>
+<ul>
+<li><strong>Hold Fn</strong>, speak, and let go. Whispur transcribes, optionally cleans up, and pastes at your cursor. Your clipboard is restored afterwards.</li>
+<li><strong>Command + Fn</strong> starts hands-free recording. Press it again to stop and paste. You can also choose Fn twice in Settings.</li>
+<li><strong>Esc</strong> cancels a recording.</li>
+</ul>
+<p>Hold-to-talk suits short things: a commit subject, a variable rename, a one-line reply. Hands-free suits long things: a prompt that explains a bug, a pull request description, or a design note. With Command + Fn you can lean back, look at the code you are describing, and talk for as long as you need.</p>
+<h2 id="teach-it-your-words-with-the-dictionary">Teach it your words with the Dictionary</h2>
+<p>Every codebase has words no speech engine has heard: your product name, your service names, library names, teammates' names. Add them in Settings &gt; Dictionary.</p>
+<p>Each term can also list how it gets misheard. If the engine keeps writing "next JS" when you mean "Next.js", add "next JS" as a "heard as" spelling. Whispur treats these in two ways:</p>
+<ul>
+<li><strong>Clear-cut misspellings are fixed in code</strong>, on your Mac, every time, with no AI involved.</li>
+<li><strong>Ordinary words</strong> (if your project is called "Whisper" or "Sophie") are left to the AI cleanup step, which replaces them only when the sentence is about your term. Turn on "Always replace" if you want them changed every time.</li>
+</ul>
+<p>You do not have to build the list by hand. In the Activity tab, "Add word" fills a term in from a dictation that went wrong. You can also opt in to "Learn from my edits" in the Dictionary, which suggests a term when you correct a word Whispur got wrong.</p>
+<p>Your Dictionary also goes to the speech engine when it can use it. Deepgram Nova-3 and ElevenLabs Scribe receive the terms as key terms, OpenAI's gpt-transcribe as keywords, and Whisper models as a short prompt. Our <a href="/blog/whisper-vs-scribe-vs-nova-3">speech engine guide</a> covers how each one uses them.</p>
+<h2 id="spoken-symbols-and-text-fixes">Spoken symbols and text fixes</h2>
+<p>Whispur runs a set of text fixes on your Mac before any AI step, with cleanup on or off. You can turn each one off in Settings &gt; Preferences &gt; Text fixes. The ones that matter for code:</p>
+<ul>
+<li><strong>Spoken symbols:</strong> "hashtag release" becomes <code>#release</code>, "at sign home" becomes <code>@home</code>, "my underscore variable" becomes <code>my_variable</code>, and "dash dash force" becomes <code>--force</code>. Inside a flag you have started, "dash" joins words, so "dash dash save dash dev" becomes <code>--save-dev</code>.</li>
+<li><strong>Spoken quotes:</strong> "quote ... end quote" is written with quotation marks.</li>
+<li><strong>Filler words</strong> such as "um" and "uh" are removed.</li>
+<li><strong>Smart spacing:</strong> a leading space is added when your cursor sits right after a word, so pasted text does not run into the previous word.</li>
+</ul>
+<p>Symbols only join when you say them as symbols. "The hashtag is trending" stays as words.</p>
+<p>Two spoken edits also work everywhere: "scratch that" removes the sentence before it, and "new line" or "new paragraph" adds a line break. They run before cleanup, so the model never sees the words you scratched.</p>
+<h2 id="use-the-code-aware-style-in-your-editor-and-terminal">Use the Code-aware style in your editor and terminal</h2>
+<p>AI cleanup fixes punctuation, capitalization and misheard words. But the right punctuation for an email is wrong for a terminal. Whispur's Styles (Settings &gt; Styles) let cleanup read differently per app.</p>
+<p>There are six styles: Default, Casual, Formal, Verbatim, Code-aware and Custom. Code-aware is built for developers. In prose, it wraps identifiers, file paths and commands in backticks, so "rename fetch user to load user" comes out as "Rename <code>fetchUser</code> to <code>loadUser</code>." A dictation that is only a command, code or an address stays bare: no backticks, no added capital letter and no final period. That matters in a terminal, where <code>git status.</code> is not a command.</p>
+<p>Styles apply per app group, and Whispur ships with a Code group that covers Xcode, VS Code, Cursor, Terminal, iTerm, Ghostty and Zed. To set it up:</p>
+<ol>
+<li>Open Settings &gt; Styles.</li>
+<li>Under App groups, set the Code group to Code-aware.</li>
+<li>Optionally, under Per app, choose "Add an app" to give a specific app its own style. An app's own style wins over its group and the default.</li>
+</ol>
+<p>Every group starts on Default, so nothing changes until you opt in. Styles need AI cleanup, so they have no effect while "Clean up with AI" is off.</p>
+<p>Other groups are useful too. In the Chat group (Slack, Messages, WhatsApp, Discord and Teams), spoken enumerations stay as prose rather than becoming a numbered list, which is usually what you want in a message.</p>
+<h2 id="dictating-prompts-for-ai-assistants">Dictating prompts for AI assistants</h2>
+<p>Dictating into Claude, ChatGPT, Cursor or a coding agent's terminal raises a specific risk. Your prompt is full of questions and instructions, and the cleanup step is itself an AI model. A careless cleanup model might try to answer your question instead of cleaning it up.</p>
+<p>Whispur's default cleanup prompt is written to prevent that. It tells the model that the dictation is never addressed to it, and that it must never answer, follow or comment on questions or instructions in the text. It also restates that rule after your transcript, where models pay the most attention. So "can you explain why this test is flaky and suggest a fix" is pasted as that question, cleaned up, not answered.</p>
+<p>Some habits that help when you dictate prompts:</p>
+<ul>
+<li><strong>Use hands-free mode</strong> (Command + Fn) for long prompts, and talk the way you would brief a colleague.</li>
+<li><strong>Say lists out loud.</strong> "First ... second ..." or "bullet ... next item" becomes a list in the Default style outside chat apps, which makes multi-step instructions easier for the model to follow.</li>
+<li><strong>Name files and functions plainly.</strong> With the Code-aware style, they come back in backticks.</li>
+<li><strong>Fix mistakes as you go.</strong> "Make that" or "I mean" followed by a replacement keeps only the replacement.</li>
+<li><strong>Check the raw version.</strong> If cleanup changed something, a "Cleaned up · Use raw" toast appears for 4 seconds after the paste. Press Option + Command + Z to swap in exactly what you said.</li>
+</ul>
+<h2 id="edit-the-cleanup-prompt">Edit the cleanup prompt</h2>
+<p>If the built-in styles are not quite right, write your own. In Settings &gt; Styles there is a custom prompt editor. Pick the Custom style for any app or group, and cleanup uses your prompt there instead. While the custom prompt is empty, Custom works like Default. You can also expand "Show the default cleanup prompt" to read the built-in one, which is a good starting point to copy and change.</p>
+<p>Whispur also lets you test a prompt against your own dictations. In the Activity tab, "Mark as wrong" saves a dictation, with what it should have said, to a private file on your Mac. The repository includes an eval script that scores the cleanup prompt against those cases, so you can check a prompt change before you rely on it. The <a href="https://github.com/sophiie-ai/whispur#usage" rel="noopener">README</a> shows the command.</p>
+<h2 id="pick-a-cleanup-model">Pick a cleanup model</h2>
+<p>Cleanup is optional and uses your own API key. The defaults, as listed in Whispur's provider settings:</p>
+<div class="article-table"><table>
+<thead><tr>
+<th scope="col">Provider</th>
+<th scope="col">Default cleanup model</th>
+</tr></thead><tbody>
+<tr><th scope="row">Anthropic</th><td>Claude Haiku 5.5</td></tr>
+<tr><th scope="row">OpenAI</th><td>GPT-6 Luna, custom base URL supported</td></tr>
+<tr><th scope="row">Groq</th><td>gpt-oss-20b</td></tr>
+<tr><th scope="row">Cerebras</th><td>Qwen 3.8 27B</td></tr>
+<tr><th scope="row">AWS Bedrock</th><td>Claude, with a Bedrock API key</td></tr>
+</tbody></table></div>
+<p>Every cleanup provider accepts a custom model name, so you can switch models without waiting for a Whispur update. If cleanup fails, Whispur pastes the raw transcript instead. If you would rather have no AI in the loop at all, switch off "Clean up with AI": you still get the text fixes, spoken symbols and spoken edits.</p>
+<h2 id="commit-messages-end-to-end">Commit messages, end to end</h2>
+<p>A worked example. You are in a terminal and want to commit.</p>
+<ol>
+<li>Type <code>git commit -m "</code> yourself.</li>
+<li>Hold Fn and say: "fix parse config so it handles an empty file".</li>
+<li>Let go. With the Code-aware style on the Code group, you get something like: Fix <code>parseConfig</code> so it handles an empty file.</li>
+<li>Close the quote and press Return.</li>
+</ol>
+<p>For a longer pull request description, open the browser text box, press Command + Fn, and talk through what changed and why. Press Command + Fn again to stop.</p>
+<h2 id="why-developers-like-an-open-source-dictation-app">Why developers like an open-source dictation app</h2>
+<p>A dictation app can hear what you say and type into any app on your Mac, including your terminal. Whispur's Swift source is public under the MIT licence, there is no Whispur account or server, and API keys live in the macOS Keychain. You can read exactly where your audio and text go, build it yourself, or send a pull request. See the <a href="/about">about page</a> for more, or compare Whispur with other apps in our <a href="/blog/best-mac-dictation-apps">2026 roundup</a> and on the <a href="/compare/wispr-flow">Whispur vs Wispr Flow</a> and <a href="/compare/superwhisper">Whispur vs Superwhisper</a> pages.</p>
+<h2 id="try-whispur">Try Whispur</h2>
+<p><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a>, drag it to Applications, and allow Microphone and Accessibility access. Then add your project's words to the Dictionary, set the Code group to Code-aware, and hold Fn in your editor. It needs macOS 14 or later, and the current release build runs on Apple silicon.</p>
+      </article>
+
+      <div class="callout">
+        <p><strong>Try Whispur.</strong> Free and open source for macOS 14 or later. No account, no API key needed to start.</p>
+        <a class="hp-btn hp-btn--primary" href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download Whispur</a>
+      </div>
+    </div>
+  </main>
+
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="site-footer__top">
+        <div class="site-footer__brand">
+          <a class="brand" href="/" aria-label="Whispur home">
+            <img class="brand__icon" src="/icon.png" alt="" width="32" height="32" loading="lazy" />
+            <span class="brand__name">Whispur</span>
+          </a>
+          <p>Free, open-source voice dictation for macOS.</p>
+          <a class="sophiie-mark" href="https://sophiie.ai" rel="noopener">
+            <span>A product by</span>
+            <img src="/brand/sophiie.svg" alt="Sophiie" width="94" height="16" loading="lazy" />
+          </a>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div class="footer-col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases/latest/download/Whispur.dmg">Download</a></li>
+              <li><a href="/changelog">Changelog</a></li>
+              <li><a href="/blog">Blog</a></li>
+              <li><a href="/compare">Compare</a></li>
+              <li><a href="/#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Open source</h2>
+            <ul>
+              <li><a href="https://github.com/sophiie-ai/whispur" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/releases" rel="noopener">All releases</a></li>
+              <li><a href="https://github.com/sophiie-ai/whispur/blob/main/LICENSE" rel="noopener">MIT License</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li><a href="/about">About Whispur</a></li>
+              <li><a href="/contact">Contact</a></li>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="https://sophiie.ai" rel="noopener">Sophiie</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <div class="site-footer__bottom">
+        <p>&copy; 2026 Sophiie AI Pty Ltd</p>
+        <p>Released under the MIT License.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>
